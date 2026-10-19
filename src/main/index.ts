@@ -98,6 +98,8 @@ function createWindow(): void {
   Menu.setApplicationMenu(null)
   win.once('ready-to-show', () => win?.show())
   win.on('focus', () => send(IPC.appFocus, true))
+  win.on('minimize', () => log.info('window', 'minimized'))
+  win.on('restore', () => log.info('window', 'restored'))
   win.on('blur', () => send(IPC.appFocus, false))
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   win.webContents.on('will-navigate', (e, url) => {
@@ -367,6 +369,7 @@ app.whenReady().then(async () => {
   registerIpc()
 
   library.on('snapshot', (s) => send(IPC.librarySnapshot, s))
+  library.on('gameStarted', (appId: number) => log.info('app', `game ${appId} started (per Steam registry)`))
   library.on('gameExited', (appId: number) => {
     log.info('app', `game ${appId} exited (per Steam registry)`)
     if (launchedAppId === appId && settings.get().restoreAfterGame) restoreWindow()

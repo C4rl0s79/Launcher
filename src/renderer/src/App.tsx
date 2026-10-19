@@ -38,10 +38,20 @@ export function App() {
   // when switching tabs, move focus into the newly visible screen
   useEffect(() => {
     if (!loaded || detailsId) return
-    const r = setTimeout(() => {
+    // Virtualised content (library grid) appears a moment after mount, so wait briefly for the
+    // screen's preferred target instead of landing on whatever happens to be rendered first.
+    let tries = 0
+    let r: ReturnType<typeof setTimeout>
+    const attempt = (): void => {
       const screen = document.querySelector<HTMLElement>(`[data-screen="${tab}"]`)
-      if (screen && !screen.contains(document.activeElement)) focusFirst(screen)
-    })
+      if (!screen || screen.contains(document.activeElement)) return
+      if (!screen.querySelector('[data-autofocus]') && tries++ < 10) {
+        r = setTimeout(attempt, 50)
+        return
+      }
+      focusFirst(screen)
+    }
+    r = setTimeout(attempt, 0)
     return () => clearTimeout(r)
   }, [tab, loaded, detailsId])
 

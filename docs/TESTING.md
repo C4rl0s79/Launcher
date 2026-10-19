@@ -2,7 +2,7 @@
 
 ## Automatyczne (`npm test`)
 
-71 testów (vitest), bez sieci i bez prawdziwego Steama (fixture'y w `tests/fixtures`):
+72 testy (vitest), bez sieci i bez prawdziwego Steama (fixture'y w `tests/fixtures`):
 
 - `tests/steam.test.ts` — parser VDF (zagnieżdżenia, escape, BOM, błędy), mapowanie StateFlags → stan,
   postęp tylko z prawdziwych liczników, filtr narzędzi, `libraryfolders.vdf` (nowy i stary format),
@@ -41,6 +41,11 @@ Aplikacja sterowana przez Chrome DevTools Protocol (`scripts/cdp.mjs`: zrzuty ek
 - [x] Klucze zapisane zaszyfrowane (DPAPI); brak jawnych kluczy w profilu, logach, `src/`, `out/`.
 - [x] Tryb demo — wyraźnie oznaczony.
 - [x] Wirtualizacja przy 1327 grach (~5 ms / krok nawigacji, ~50–70 plakatów w DOM).
+- [x] **Graj → powrót** (TIS-100, 19.10.2026): Enter na „Graj” → `steam://rungameid/370360` → gra uruchomiona po ~2 s,
+      Lumen zminimalizowany po 1,5 s i bez fokusu; po zamknięciu gry Steam wyzerował `RunningAppID`
+      i Lumen przywrócił okno z fokusem po ~3 s. Test wykrył i pozwolił naprawić błąd: skan wywołany przez
+      przepisanie manifestu „połykał” zmianę stanu gry, przez co okno nie wracało.
+      Uwaga: TIS-100 ignoruje WM_CLOSE, więc zamknięto ją wymuszenie; zwykłe wyjście z menu gry nie było testowane.
 - [~] Kontroler: Chromium wykrył „Xbox 360 Controller (XInput STANDARD GAMEPAD)” i interfejs przełączył się
       na glify pada (wejście z pada zostało obsłużone). Pełnej ścieżki padem nie przechodziłem — nie mam
       fizycznego dostępu do urządzenia.
@@ -49,10 +54,8 @@ Aplikacja sterowana przez Chrome DevTools Protocol (`scripts/cdp.mjs`: zrzuty ek
 
 Celowo **nie** wykonane automatycznie, bo uruchamiają grę lub okna Steam na Twoim komputerze:
 
-- [ ] **Graj**: w szczegółach zainstalowanej gry naciśnij „Graj” → gra startuje przez Steam,
-      Lumen minimalizuje się po ~1,5 s.
-- [ ] **Powrót po grze**: zamknij grę → po ≤3 s Lumen wraca na pierwszy plan (opcja eksperymentalna;
-      zanotuj gry, dla których nie działa — np. z zewnętrznym launcherem).
+- [ ] **Powrót po grze** dla innych gier, szczególnie z zewnętrznym launcherem / anticheatem
+      (opcja eksperymentalna — zanotuj, gdzie nie działa).
 - [ ] Podczas gry pad **nie** steruje Lumen (okno nie ma fokusu).
 - [ ] **Zainstaluj**: na niezainstalowanej grze (np. Biblioteka → filtr „Niezainstalowane”) → otwiera się okno
       instalacji Steam. Możesz je anulować — nic nie zostanie pobrane bez potwierdzenia w Steam.

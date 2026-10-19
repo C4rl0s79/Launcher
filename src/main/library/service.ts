@@ -138,7 +138,7 @@ export class LibraryService extends EventEmitter {
           showTools: settings.showTools
         })
 
-    this.lastRunning = reg.runningAppId || undefined
+    this.trackRunning(reg.runningAppId || undefined)
     this.snapshot = {
       games,
       steam: { status, installPath, libraryFolders, users, activeSteamId, runningAppId: reg.runningAppId || undefined },
@@ -208,6 +208,19 @@ export class LibraryService extends EventEmitter {
     return this.accountFetch
   }
 
+  /**
+   * Single place that turns RunningAppID changes into gameStarted/gameExited events.
+   * Both full scans (triggered e.g. by Steam rewriting a manifest when a game starts or
+   * exits) and the 3 s poll go through here, so no transition can be swallowed.
+   */
+  private trackRunning(running: number | undefined): void {
+    const prev = this.lastRunning
+    if (running === prev) return
+    this.lastRunning = running
+    if (prev) this.emit('gameExited', prev)
+    if (running) this.emit('gameStarted', running)
+  }
+
   /** Cheap periodic check of the running game & Steam process. */
   private async pollRuntime(): Promise<void> {
     try {
@@ -219,10 +232,7 @@ export class LibraryService extends EventEmitter {
           : 'notRunning'
         : 'notInstalled'
       if (running !== this.lastRunning || status !== this.snapshot.steam.status) {
-        const prev = this.lastRunning
-        this.lastRunning = running
-        if (prev && !running) this.emit('gameExited', prev)
-        if (running && running !== prev) this.emit('gameStarted', running)
+        this.trackRunning(running)
         this.snapshot = {
           ...this.snapshot,
           steam: { ...this.snapshot.steam, status, runningAppId: running },
