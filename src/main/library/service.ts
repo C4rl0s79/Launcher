@@ -93,12 +93,18 @@ export class LibraryService extends EventEmitter {
     const settings = this.settings.get()
     const warnings: string[] = []
     const reg = await readSteamRegistry()
+    // LUMEN_STEAM_PATH overrides detection (tests / portable Steam); "none" simulates a PC without Steam.
+    const override = process.env.LUMEN_STEAM_PATH
+    if (override) {
+      reg.steamPath = override === 'none' ? undefined : override
+      if (override === 'none') reg.activePid = undefined
+    }
     let installPath = reg.steamPath ? path.normalize(reg.steamPath) : undefined
     if (installPath && !(await pathExists(installPath))) {
       warnings.push(`Rejestr wskazuje Steam w „${installPath}”, ale katalog nie istnieje.`)
       installPath = undefined
     }
-    if (!installPath) {
+    if (!installPath && !override) {
       const fallback = 'C:\\Program Files (x86)\\Steam'
       if (await pathExists(path.join(fallback, 'steamapps'))) installPath = fallback
     }

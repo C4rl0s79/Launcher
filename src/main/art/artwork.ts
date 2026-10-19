@@ -41,7 +41,7 @@ export interface ArtDeps {
 }
 
 const STEAM_FILES: Partial<Record<ArtKind, string[]>> = {
-  grid: ['library_600x900_2x.jpg', 'library_600x900.jpg'],
+  grid: ['library_600x900_2x.jpg', 'library_600x900.jpg', 'library_capsule.jpg'],
   hero: ['library_hero.jpg'],
   logo: ['logo.png']
 }
