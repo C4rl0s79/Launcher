@@ -11,6 +11,8 @@ import { LibraryService } from './library/service'
 import { StoreMetadataProvider } from './steam/storeMeta'
 import { openSteam, openSteamUri, shortcutRunUri } from './steam/actions'
 import { pickBestMatch, SgdbAuthError, SgdbClient } from './art/sgdb'
+import { LaunchBoxService } from './launchbox/service'
+import { platformForTags } from './launchbox/match'
 import { ArtworkService } from './art/artwork'
 import { isPlayable } from './steam/manifests'
 import { steamId64ToAccountId } from './steam/local'
@@ -23,6 +25,8 @@ protocol.registerSchemesAsPrivileged([
 
 // Separate profile for tests/development: LUMEN_USER_DATA=<dir>
 if (process.env.LUMEN_USER_DATA) app.setPath('userData', path.resolve(process.env.LUMEN_USER_DATA))
+// Portable build: keep everything (settings, caches, LaunchBox DB) next to the .exe.
+else if (process.env.PORTABLE_EXECUTABLE_DIR) app.setPath('userData', path.join(process.env.PORTABLE_EXECUTABLE_DIR, 'LumenData'))
 
 if (!app.requestSingleInstanceLock()) {
   app.quit()
@@ -37,13 +41,16 @@ const paths = {
   account: path.join(userData, 'cache', 'account-library.json'),
   artCache: path.join(userData, 'cache', 'art'),
   metaCache: path.join(userData, 'cache', 'meta'),
-  customArt: path.join(userData, 'custom-art')
+  customArt: path.join(userData, 'custom-art'),
+  // not under cache/: rebuilding it means a ~110 MB download, so "clear cache" keeps it
+  launchbox: path.join(userData, 'launchbox')
 }
 
 const settings = new SettingsStore(paths.settings, paths.secrets)
 const prefs = new PrefsStore(paths.prefs)
 const library = new LibraryService(settings, paths.account)
 const meta = new StoreMetadataProvider(paths.metaCache, () => settings.get().language)
+const launchbox = new LaunchBoxService(paths.launchbox)
 const sgdb = new SgdbClient(() => settings.getSecret('sgdbApiKey'))
 const artwork = new ArtworkService({
   cacheDir: paths.artCache,
@@ -223,10 +230,24 @@ function registerIpc(): void {
   })
 
   handle(IPC.gameDetails, async (gameId: string, force?: boolean) => {
+    const game = findGame(gameId)
+    if (game?.shortcut) {
+      const st = await launchbox.status()
+      if (!st.ready) return { ok: false, error: 'Opisy gier spoza Steama wymagają bazy LaunchBox — pobierz ją w Ustawieniach.' }
+      const d = launchbox.details(game.name, platformForTags(game.shortcut.tags))
+      return d ? { ok: true, details: d, stale: false } : { ok: false, error: 'Nie znaleziono tej gry w bazie LaunchBox.' }
+    }
     const appId = steamAppIdOf(gameId)
     if (!appId) return { ok: false, error: 'Brak danych dla pozycji demonstracyjnej.' }
     return meta.get(appId, force)
   })
+
+  handle(IPC.launchboxStatus, () => launchbox.status())
+  handle(IPC.launchboxUpdate, () => {
+    void launchbox.update()
+    return launchbox.status()
+  })
+  handle(IPC.launchboxCancel, () => launchbox.cancel())
 
   handle(IPC.prefsGet, () => prefs.get())
   handle(IPC.prefsOp, async (op: string, ...args: unknown[]) => {
@@ -384,6 +405,7 @@ app.whenReady().then(async () => {
   registerArtProtocol()
   registerIpc()
 
+  launchbox.on('changed', () => void launchbox.status().then((st) => send(IPC.launchboxChanged, st)))
   library.on('snapshot', (s: LibrarySnapshot) => {
     send(IPC.librarySnapshot, s)
     // mirror Steam collections as read-only categories (skipped when they could not be read,

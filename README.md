@@ -11,6 +11,7 @@ akcją główną. Nie ma tu newsów, reklam ani aktywności znajomych.
 - **Grafiki** — SteamGridDB (opcjonalny klucz) albo oficjalne grafiki Steam; lokalny cache.
 - **Kolekcje Steam** — Twoje statyczne kolekcje ze Steama (tylko odczyt) można przypinać jako rzędy ekranu Start.
 - **Skróty spoza Steama** — gry dodane do Steama np. przez Steam ROM Manager (emulatory) są czytane z `shortcuts.vdf`, z grafikami z folderu `grid` Steama, i uruchamiane przez Steam.
+- **Opisy gier spoza Steama** — z bazy LaunchBox Games DB pobieranej przez program (Ustawienia → „Pobierz bazę LaunchBox”, ~110 MB, ok. 20–30 s); potem działa offline. Opisy są po angielsku (taka jest baza).
 - **Własne kategorie, ulubione, przypięcia** — zapisywane lokalnie (Ustawienia → Kategorie; gry przypisujesz w ekranie gry → „Kategorie”).
 
 ## Wymagania
@@ -82,10 +83,13 @@ Aby zobaczyć wszystkie posiadane gry:
 
 ### Gdzie są dane
 
-`%APPDATA%\Lumen\`:
+Wersja instalowana: `%APPDATA%\Lumen\`. **Wersja portable**: folder `LumenData\` obok `Lumen-…-portable.exe`
+(cały program razem z bazą LaunchBox można przenieść na inny dysk lub komputer; klucze API są szyfrowane
+dla konta Windows, więc na innym komputerze trzeba je wpisać ponownie).
 
 | Ścieżka | Zawartość | Kasowane przez „Wyczyść pamięć podręczną” |
 | --- | --- | --- |
+| `launchbox\launchbox.db` | baza LaunchBox Games DB (~180 MB) — opisy gier spoza Steama | nie |
 | `prefs.json` (+ `.bak`) | kategorie, przypięcia, ulubione, wybory grafik | nie |
 | `settings.json` | ustawienia | nie |
 | `secrets.json` | klucze API zaszyfrowane Windows DPAPI (`safeStorage`) | nie |

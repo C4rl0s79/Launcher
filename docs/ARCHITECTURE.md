@@ -138,3 +138,23 @@ Gry mają stabilny klucz `steam:<appid>` (lub `demo:<n>`). Tytuł nigdy nie jest
 `Game.source` i prefiks identyfikatora (`steam:`) wydzielają źródło; scalanie (`library/merge.ts`)
 i akcje (`main/index.ts` → `steam/actions.ts`) są jedynymi miejscami zależnymi od Steama. Nowe źródło
 wymaga własnego skanera + mapowania akcji. Celowo nie implementowano innych integracji.
+
+## Metadane gier spoza Steama — LaunchBox Games DB
+
+- Źródło: `https://gamesdb.launchbox-app.com/Metadata.zip` (cała baza w jednym pliku, ~110 MB, ~190 tys. gier).
+  Pobierane tylko na żądanie (Ustawienia → „Pobierz / Zaktualizuj bazę LaunchBox”). Program nie zależy od EmuStart.
+- `launchbox/service.ts` pobiera ZIP strumieniowo, a `launchbox/worker.ts` (wątek roboczy) wypakowuje `Metadata.xml`
+  (`yauzl`), parsuje go strumieniowo (`sax`) i zapisuje `launchbox/launchbox.db` przez wbudowane `node:sqlite`.
+  Nowa baza powstaje jako `.new` i dopiero po sukcesie zastępuje starą; ZIP jest usuwany. Na tym PC: ~22 s.
+- Schemat zgodny z bazą EmuStart (`games`, `names` z nazwami alternatywnymi, `meta`), bez grafik i setów MAME.
+- Dopasowanie (`launchbox/match.ts`, `launchbox/lookup.ts`) to port reguł EmuStart: platforma z tagu skrótu
+  (PS1/PS2/DC/GCN/Windows…), znormalizowany tytuł (bez tagów, przedimków, interpunkcji), zgodne numery części
+  („Part 3” ≠ „Part II”), podobieństwo bigramów ≥ 0,6. Dodatkowo części nazwy po „ - ” (np. „Seria - Tytuł”),
+  tylko przy dokładnym kluczu. Ekran gry pokazuje, z jakim wpisem LaunchBox dopasowano grę.
+- Opisy w LaunchBox są po angielsku. Bazy nie kasuje „Wyczyść pamięć podręczną” (jej odbudowa to pobranie 110 MB).
+
+## Tryb portable
+
+`Lumen-…-portable.exe` (electron-builder ustawia `PORTABLE_EXECUTABLE_DIR`) trzyma wszystkie dane w `LumenData\`
+obok pliku exe — ustawienia, kategorie, cache grafik i bazę LaunchBox. Sekrety są szyfrowane DPAPI dla bieżącego
+konta Windows; po przeniesieniu na inny komputer Lumen zgłasza w logu, że trzeba je wpisać ponownie.

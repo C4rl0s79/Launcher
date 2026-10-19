@@ -51,6 +51,12 @@ const api: LumenApi = {
     reset: (id, kind) => invoke(IPC.artReset, id, kind),
     onChanged: (cb) => subscribe(IPC.artChanged, cb)
   },
+  launchbox: {
+    status: () => invoke(IPC.launchboxStatus),
+    update: () => invoke(IPC.launchboxUpdate),
+    cancel: () => invoke(IPC.launchboxCancel),
+    onChange: (cb) => subscribe(IPC.launchboxChanged, cb)
+  },
   app: {
     toggleFullscreen: () => invoke(IPC.appFullscreen),
     isFullscreen: () => invoke(IPC.appIsFullscreen),

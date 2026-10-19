@@ -101,16 +101,32 @@ export interface LibrarySnapshot {
 export interface GameDetails {
   appId: number
   fetchedAt: number
-  source: 'steamStore'
+  source: 'steamStore' | 'launchbox'
   name?: string
   shortDescription?: string
   descriptionHtml?: string
+  /** plain-text description (LaunchBox) */
+  descriptionText?: string
   genres?: string[]
   releaseDate?: string
   comingSoon?: boolean
   developers?: string[]
   publishers?: string[]
   website?: string
+  players?: string
+  /** community rating 0–5 (LaunchBox) */
+  rating?: number
+  platform?: string
+  launchboxId?: number
+}
+
+export interface LaunchBoxStatus {
+  ready: boolean
+  updated?: string
+  games?: number
+  sizeBytes?: number
+  error?: string
+  job?: { phase: 'download' | 'build'; done: number; total: number }
 }
 
 export type DetailsResult =

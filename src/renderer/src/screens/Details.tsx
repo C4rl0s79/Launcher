@@ -32,7 +32,7 @@ export function DetailsScreen({ gameId }: { gameId: string }) {
   useEffect(() => {
     let alive = true
     // only Steam store apps have store metadata
-    if (!gameId.startsWith('steam:')) return
+    if (gameId.startsWith('demo:')) return
     void api()
       .game.details(gameId)
       .then((d) => alive && setDetails(d))
@@ -132,9 +132,21 @@ export function DetailsScreen({ gameId }: { gameId: string }) {
   }
 
   const d = details?.ok ? details.details : null
-  const paragraphs = d?.descriptionHtml ? htmlToParagraphs(d.descriptionHtml) : d?.shortDescription ? [d.shortDescription] : []
+  const paragraphs = d?.descriptionHtml
+    ? htmlToParagraphs(d.descriptionHtml)
+    : d?.descriptionText
+      ? d.descriptionText
+          .split(/\n+/)
+          .map((p) => p.trim())
+          .filter(Boolean)
+          .slice(0, 8)
+      : d?.shortDescription
+        ? [d.shortDescription]
+        : []
   const facts: [string, string | undefined][] = [
     ['Gatunki', d?.genres?.join(', ')],
+    ['Liczba graczy', d?.players],
+    ['Ocena społeczności', d?.rating ? `${d.rating.toFixed(1).replace('.', ',')} / 5` : undefined],
     ['Premiera', d?.releaseDate],
     ['Producent', d?.developers?.join(', ')],
     ['Wydawca', d?.publishers?.join(', ')],
@@ -254,8 +266,16 @@ export function DetailsScreen({ gameId }: { gameId: string }) {
             )}
           </div>
         )}
-        {details === null && game.source === 'steam' && <p className="details__loading">Wczytywanie informacji ze sklepu Steam…</p>}
-        {details && !details.ok && game.source === 'steam' && <p className="details__muted">{details.error}</p>}
+        {details === null && game.source !== 'demo' && (
+          <p className="details__loading">{game.shortcut ? 'Szukanie w bazie LaunchBox…' : 'Wczytywanie informacji ze sklepu Steam…'}</p>
+        )}
+        {details && !details.ok && game.source !== 'demo' && <p className="details__muted">{details.error}</p>}
+        {details?.ok && d?.source === 'launchbox' && (
+          <p className="details__muted">
+            Opis: LaunchBox Games DB{d.name && d.name !== game.name ? ` · dopasowano „${d.name}”` : ''}
+            {d.platform ? ` (${d.platform})` : ''}
+          </p>
+        )}
         {details?.ok && details.stale && <p className="details__muted">Informacje z pamięci podręcznej (brak połączenia ze sklepem).</p>}
       </div>
 

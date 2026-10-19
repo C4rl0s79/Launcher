@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import type { CacheStats, Category, SecretName, SettingsPatch } from '@shared/types'
+import type { CacheStats, Category, LaunchBoxStatus, SecretName, SettingsPatch } from '@shared/types'
 import { api, attempt, gamesForCategory, sortedCategories, useStore } from '../store'
 import { useActions } from '../nav/input'
 import { TextField } from '../components/TextField'
@@ -20,6 +20,7 @@ export function SettingsScreen({ active }: { active: boolean }) {
     <div className="settings" data-scroll="center">
       <SteamSection />
       <ArtSection />
+      <LaunchBoxSection />
       <CategoriesSection />
       <BehaviourSection />
       <DataSection />
@@ -185,6 +186,62 @@ function ArtSection() {
         value={settings.artPriority === 'sgdbFirst'}
         onChange={(v) => void patch({ artPriority: v ? 'sgdbFirst' : 'steamFirst' })}
       />
+    </Section>
+  )
+}
+
+function LaunchBoxSection() {
+  const [st, setSt] = useState<LaunchBoxStatus | null>(null)
+  useEffect(() => {
+    void api().launchbox.status().then(setSt)
+    return api().launchbox.onChange(setSt)
+  }, [])
+  const job = st?.job
+  const pct = job && job.total > 0 ? Math.floor((job.done / job.total) * 100) : null
+  return (
+    <Section
+      title="Opisy gier spoza Steama (LaunchBox)"
+      desc="Gry dodane do Steama jako skróty (np. emulatory) nie mają danych w sklepie Steam. Lumen może pobrać otwartą bazę LaunchBox Games DB (~110 MB, ok. 190 tys. gier) i dopasowywać opisy, gatunki, producentów i daty premiery lokalnie, bez sieci."
+    >
+      <dl className="facts facts--compact">
+        <div className="facts__row">
+          <dt>Baza</dt>
+          <dd>
+            {st?.ready
+              ? `${st.games?.toLocaleString('pl-PL')} gier · ${formatBytes(st.sizeBytes) ?? ''} · zaktualizowano ${st.updated ? new Date(st.updated).toLocaleDateString('pl-PL') : '?'}`
+              : 'nie pobrano'}
+          </dd>
+        </div>
+      </dl>
+      {job && (
+        <div className="download">
+          <div className="download__head">
+            <strong>{job.phase === 'download' ? 'Pobieranie Metadata.zip' : 'Budowanie bazy'}</strong>
+            <span>
+              {job.phase === 'download'
+                ? `${formatBytes(job.done) ?? '0 B'}${job.total ? ` z ${formatBytes(job.total)}` : ''}`
+                : `${job.done.toLocaleString('pl-PL')} gier`}
+            </span>
+          </div>
+          {pct !== null && (
+            <div className="download__bar">
+              <i style={{ width: `${pct}%` }} />
+            </div>
+          )}
+        </div>
+      )}
+      {st?.error && <p className="card__desc notice__warn">Ostatnia próba nie powiodła się: {st.error}</p>}
+      <div className="modal__row">
+        {job ? (
+          <button className="btn" data-nav onClick={() => void api().launchbox.cancel()}>
+            Przerwij
+          </button>
+        ) : (
+          <button className="btn btn--primary" data-nav onClick={() => void attempt(api().launchbox.update()).then((s) => s && setSt(s))}>
+            {st?.ready ? 'Zaktualizuj bazę LaunchBox' : 'Pobierz bazę LaunchBox'}
+          </button>
+        )}
+      </div>
     </Section>
   )
 }

@@ -5,6 +5,7 @@ import type {
   ArtOptionsResult,
   CacheStats,
   DetailsResult,
+  LaunchBoxStatus,
   LibrarySnapshot,
   Prefs,
   SecretName,
@@ -54,6 +55,12 @@ export interface LumenApi {
     reset(gameId: string, kind: ArtKind): Promise<Prefs>
     onChanged(cb: (gameId: string, rev: number) => void): () => void
   }
+  launchbox: {
+    status(): Promise<LaunchBoxStatus>
+    update(): Promise<LaunchBoxStatus>
+    cancel(): Promise<void>
+    onChange(cb: (s: LaunchBoxStatus) => void): () => void
+  }
   app: {
     toggleFullscreen(): Promise<boolean>
     isFullscreen(): Promise<boolean>
@@ -97,7 +104,11 @@ export const IPC = {
   appOpenLogs: 'app:openLogs',
   appOpenExternal: 'app:openExternal',
   appQuit: 'app:quit',
-  appFocus: 'app:focus'
+  appFocus: 'app:focus',
+  launchboxStatus: 'launchbox:status',
+  launchboxUpdate: 'launchbox:update',
+  launchboxCancel: 'launchbox:cancel',
+  launchboxChanged: 'launchbox:changed'
 } as const
 
 export const ART_SCHEME = 'lumen-art'

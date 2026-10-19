@@ -2,7 +2,7 @@
 
 ## Automatyczne (`npm test`)
 
-86 testów (vitest), bez sieci i bez prawdziwego Steama (fixture'y w `tests/fixtures`):
+92 testy (vitest), bez sieci i bez prawdziwego Steama (fixture'y w `tests/fixtures`):
 
 - `tests/steam.test.ts` — parser VDF (zagnieżdżenia, escape, BOM, błędy), mapowanie StateFlags → stan,
   postęp tylko z prawdziwych liczników, filtr narzędzi, `libraryfolders.vdf` (nowy i stary format),
@@ -17,6 +17,8 @@
   awaria sieci / zły klucz, czyszczenie cache.
 - `tests/collections.test.ts` — parser kolekcji Steam (statyczne, dynamiczne, usunięte, plik .modified), synchronizacja
   z kategoriami (zachowanie przypięć i kolejności, zmiany nazw, usunięte kolekcje, blokada edycji).
+- `tests/launchbox.test.ts` — normalizacja tytułów i numery części (reguły EmuStart), tagi → platformy LaunchBox,
+  strumieniowy parser Metadata.xml (CDATA, encje, nazwy alternatywne), budowa bazy SQLite i dopasowanie gier.
 - `tests/shortcuts.test.ts` — binarny VDF, skróty spoza Steama (klucze, ukryte, brak programu), id 64-bit do uruchomienia,
   grafiki z folderu `grid` Steama, wyszukiwanie SteamGridDB po nazwie dla skrótów.
 - `tests/library.test.ts` — wykrywanie startu i końca gry (regresja: zdarzenia „połykane” przez skan).
@@ -41,6 +43,11 @@ Aplikacja sterowana przez Chrome DevTools Protocol (`scripts/cdp.mjs`: zrzuty ek
 - [x] Skróty spoza Steama: 243 wczytane z `shortcuts.vdf`, 2 poprawnie oznaczone jako „brak programu” (folderów nie ma
       na dysku); kolekcja PS2 przypięta → rząd z plakatami 600×900 z folderu `grid`; szczegóły skrótu z tłem i logo.
       **Nie testowano uruchomienia skrótu** (uruchomiłoby emulator).
+- [x] LaunchBox: przycisk „Pobierz bazę LaunchBox” na czystym profilu → Metadata.zip pobrany i baza zbudowana
+      w ~22 s (189 711 gier, 178 MB, ZIP usunięty); opisy dla 235 z 243 skrótów (97%), 243 zapytania w ~140 ms.
+      Ekran szczegółów Dragon Quest VIII (PS2) pokazuje opis, gatunek, liczbę graczy, ocenę i premierę.
+- [x] Wersja portable uruchomiona z pustego folderu: dane w `LumenData\` obok exe; budowa bazy LaunchBox
+      w spakowanej aplikacji (worker w asar) działa (~26 s).
 - [x] Kolekcje Steam: 38 odczytanych (14 statycznych → kategorie, dynamiczne wymienione), przypięcie Resident Evil (15 gier)
       i Yakuza (12 gier) z klawiatury → rzędy na ekranie Start.
 - [x] Ulubione (F), przypisanie do kategorii, tworzenie / zmiana nazwy / przypięcie / przesunięcie kategorii,
