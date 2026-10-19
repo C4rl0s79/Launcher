@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events'
-import { watch, type FSWatcher } from 'node:fs'
+import { promises as fs, watch, type FSWatcher } from 'node:fs'
 import path from 'node:path'
 import type { AccountLibraryStatus, LibrarySnapshot, SteamClientStatus, SteamUser } from '@shared/types'
 import { log } from '../logger'
@@ -18,6 +18,7 @@ import {
 import { getOwnedGames, type OwnedGame } from '../steam/webApi'
 import { mergeLibrary, shortcutGames } from './merge'
 import { readShortcuts } from '../steam/shortcuts'
+import { FirstSeenStore } from './firstSeen'
 import { collectionsDir, readCollections } from '../steam/collections'
 import { demoGames } from './demo'
 
@@ -56,12 +57,16 @@ export class LibraryService extends EventEmitter {
   private lastRunning: number | undefined
   private lastHash = ''
 
+  private firstSeen: FirstSeenStore | null
+
   constructor(
     private readonly settings: SettingsStore,
-    accountCacheFile: string
+    accountCacheFile: string,
+    firstSeenFile?: string
   ) {
     super()
     this.accountCache = new JsonFile<AccountCache>(accountCacheFile, () => ({ fetchedAt: 0, private: false, games: [] }))
+    this.firstSeen = firstSeenFile ? new FirstSeenStore(firstSeenFile) : null
   }
 
   get current(): LibrarySnapshot {
@@ -139,9 +144,27 @@ export class LibraryService extends EventEmitter {
         pathExists(exe).then((ok) => ok && existingExes.add(exe))
       )
     )
+    // "added" date of a shortcut: creation time of its ROM (first quoted path in the launch
+    // options, as Steam ROM Manager writes it) or, failing that, of the program itself
+    const shortcutAdded = new Map<number, number>()
+    await Promise.all(
+      (shortcuts ?? []).map(async (s) => {
+        const rom = /"([A-Za-z]:[\\/][^"]+)"/.exec(s.launchOptions ?? '')?.[1]
+        for (const p of [rom, s.exe]) {
+          if (!p) continue
+          try {
+            const st = await fs.stat(p)
+            shortcutAdded.set(s.appId, Math.floor((st.birthtimeMs || st.mtimeMs) / 1000))
+            return
+          } catch {
+            /* try next */
+          }
+        }
+      })
+    )
 
     const useAccount = this.account && this.account.steamId === activeSteamId && !this.account.private
-    const games = settings.demoMode
+    let games = settings.demoMode
       ? demoGames()
       : mergeLibrary({
           manifests,
@@ -150,8 +173,17 @@ export class LibraryService extends EventEmitter {
           runningAppId: reg.runningAppId || undefined,
           showTools: settings.showTools
         })
-          .concat(shortcutGames(shortcuts ?? [], (exe) => existingExes.has(exe), reg.runningAppId || undefined))
+          .concat(
+            shortcutGames(shortcuts ?? [], (exe) => existingExes.has(exe), reg.runningAppId || undefined, (s) => shortcutAdded.get(s.appId))
+          )
           .sort((a, b) => a.sortName.localeCompare(b.sortName, 'pl'))
+
+    if (!settings.demoMode && this.firstSeen && installPath) {
+      games = await this.firstSeen.process(games, !!useAccount).catch((e) => {
+        log.warn('library', `first-seen tracking failed: ${(e as Error).message}`)
+        return games
+      })
+    }
 
     this.trackRunning(reg.runningAppId || undefined)
     this.snapshot = {

@@ -57,6 +57,8 @@ export async function readLibraryFolders(steamPath: string): Promise<string[]> {
 
 export interface ScannedManifest extends ManifestInfo {
   libraryPath: string
+  /** unix seconds; creation time of the manifest file */
+  addedAt?: number
 }
 
 export async function scanLibrary(libraryPath: string): Promise<ScannedManifest[]> {
@@ -70,10 +72,13 @@ export async function scanLibrary(libraryPath: string): Promise<ScannedManifest[
   }
   const files = entries.filter((f) => /^appmanifest_\d+\.acf$/i.test(f))
   const results = await Promise.all(
-    files.map(async (f) => {
+    files.map(async (f): Promise<ScannedManifest | null> => {
       try {
-        const m = parseManifest(await fs.readFile(path.join(dir, f), 'utf8'))
-        return m ? { ...m, libraryPath } : null
+        const file = path.join(dir, f)
+        const [text, st] = await Promise.all([fs.readFile(file, 'utf8'), fs.stat(file)])
+        const m = parseManifest(text)
+        // the manifest is created when the install starts → good proxy for "added to this PC"
+        return m ? { ...m, libraryPath, addedAt: Math.floor((st.birthtimeMs || st.mtimeMs) / 1000) } : null
       } catch (e) {
         log.warn('steam', `Bad manifest ${f}: ${(e as Error).message}`)
         return null

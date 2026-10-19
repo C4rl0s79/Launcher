@@ -1419,3 +1419,111 @@ p.card__desc[data-nav]:focus {
   content: "Steam · ";
   color: var(--text-3);
 }
+
+/* ===== v2 layout: groups as top-bar tabs, Steam-style grids everywhere ===== */
+.topbar {
+  gap: var(--gap);
+}
+.topbar .brand {
+  flex: 0 0 auto;
+}
+.tabs {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  padding: 4px 2px;
+  scroll-padding-inline: 40px;
+  mask-image: linear-gradient(90deg, transparent 0, #000 12px, #000 calc(100% - 24px), transparent 100%);
+}
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+.tab {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.tab--settings {
+  font-size: 1.15em;
+  padding-inline: 0.75em;
+}
+.topbar__status {
+  flex: 0 0 auto;
+  margin-left: 0;
+}
+
+/* group view */
+.group {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding-top: clamp(10px, 1.6vh, 24px);
+}
+.group__head {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  padding: 0 var(--pad-x) 12px;
+}
+.group__head h1 {
+  margin: 0;
+  font-size: clamp(24px, 2vw, 44px);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.group__count {
+  color: var(--text-3);
+}
+
+/* home sections */
+.home__sections {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 1vh var(--pad-x) 0;
+  scroll-padding: 6vh 0 14vh;
+  mask-image: linear-gradient(180deg, transparent 0, #000 3vh);
+}
+.home__sections .notice {
+  margin-inline: 0;
+}
+.section {
+  margin-bottom: clamp(20px, 3vh, 44px);
+}
+.section__title {
+  margin: 0 0 14px;
+  font-size: 1.15em;
+  font-weight: 750;
+}
+.section__empty {
+  margin: 0;
+  max-width: 70ch;
+  padding: 1em 1.3em;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  color: var(--text-3);
+}
+.grid-static {
+  display: grid;
+  padding-top: 8px;
+}
+.grid-static .poster,
+.grid .poster {
+  width: 100%;
+}
+
+/* titles under posters only for the focused one (the art carries the name) */
+.grid .poster__label,
+.grid-static .poster__label {
+  opacity: 0;
+}
+.grid .poster:focus .poster__label,
+.grid-static .poster:focus .poster__label,
+.grid .poster:hover .poster__label,
+.grid-static .poster:hover .poster__label {
+  opacity: 1;
+  color: var(--text);
+}

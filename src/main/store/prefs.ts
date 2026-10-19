@@ -5,29 +5,38 @@ import { JsonFile } from './jsonFile'
 // User library preferences: categories, favourites, artwork choices.
 // Pure functions below are unit-tested; PrefsStore adds persistence.
 
+/** Pinned categories are the group tabs in the top bar (Start always comes first). */
 export const SMART_CATEGORIES: Category[] = [
-  { id: 'smart:recent', name: 'Ostatnio grane', kind: 'smart', smart: 'recent', pinned: true, order: 0 },
+  { id: 'smart:all', name: 'Wszystkie gry', kind: 'smart', smart: 'all', pinned: true, order: 0 },
   { id: 'smart:installed', name: 'Zainstalowane', kind: 'smart', smart: 'installed', pinned: true, order: 1 },
   { id: 'smart:favorites', name: 'Ulubione', kind: 'smart', smart: 'favorites', pinned: true, order: 2 },
   { id: 'smart:notInstalled', name: 'Do zainstalowania', kind: 'smart', smart: 'notInstalled', pinned: false, order: 3 },
-  { id: 'smart:all', name: 'Wszystkie gry', kind: 'smart', smart: 'all', pinned: false, order: 4 }
+  { id: 'smart:recent', name: 'Ostatnio grane', kind: 'smart', smart: 'recent', pinned: false, order: 4 }
 ]
 
+export const PREFS_VERSION = 2
+
 export function defaultPrefs(): Prefs {
-  return { version: 1, categories: SMART_CATEGORIES.map((c) => ({ ...c })), gameCategories: {}, favorites: [], art: {} }
+  return { version: PREFS_VERSION, categories: SMART_CATEGORIES.map((c) => ({ ...c })), gameCategories: {}, favorites: [], art: {} }
 }
 
 export function migratePrefs(raw: unknown): Prefs {
   const base = defaultPrefs()
   if (!raw || typeof raw !== 'object') return base
   const r = raw as Partial<Prefs>
-  const categories = Array.isArray(r.categories) ? r.categories.filter(isCategory) : []
+  let categories = Array.isArray(r.categories) ? r.categories.filter(isCategory) : []
   // make sure every smart category exists exactly once (new ones may be added in updates)
   for (const smart of base.categories) {
     if (!categories.some((c) => c.id === smart.id)) categories.push({ ...smart, order: categories.length })
   }
+  if ((r.version ?? 1) < 2) {
+    // v2: home screen shows "recently played" itself; pinned categories became top-bar group tabs
+    categories = categories.map((c) =>
+      c.id === 'smart:recent' ? { ...c, pinned: false } : c.id === 'smart:all' ? { ...c, pinned: true, order: -1 } : c
+    )
+  }
   const prefs: Prefs = {
-    version: 1,
+    version: PREFS_VERSION,
     categories,
     gameCategories: isRecord(r.gameCategories) ? sanitizeGameCategories(r.gameCategories) : {},
     favorites: Array.isArray(r.favorites) ? r.favorites.filter((x) => typeof x === 'string') : [],

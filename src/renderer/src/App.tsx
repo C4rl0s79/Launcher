@@ -1,22 +1,33 @@
-import { useEffect, useRef } from 'react'
-import { api, useStore, type Tab } from './store'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { api, groupTab, sortedCategories, tabCategoryId, useStore, type Tab } from './store'
 import { installGamepad, installKeyboard, useActions } from './nav/input'
 import { focusFirst } from './nav/engine'
 import { TopBar } from './components/TopBar'
 import { HintsBar } from './components/Hints'
 import { Toasts } from './components/Toasts'
 import { HomeScreen } from './screens/Home'
-import { LibraryScreen } from './screens/Library'
+import { GroupScreen } from './screens/Group'
 import { SettingsScreen } from './screens/Settings'
 import { DetailsScreen } from './screens/Details'
 
-const TABS: Tab[] = ['home', 'library', 'settings']
+/** Start, the pinned groups (in their order), Settings. */
+export function useTabs(): Tab[] {
+  const prefs = useStore((s) => s.prefs)
+  return useMemo(
+    () => ['home', ...(prefs ? sortedCategories(prefs).filter((c) => c.pinned).map((c) => groupTab(c.id)) : []), 'settings'],
+    [prefs]
+  )
+}
 
 export function App() {
   const tab = useStore((s) => s.tab)
+  const prefs = useStore((s) => s.prefs)
   const detailsId = useStore((s) => s.detailsId)
   const loaded = useStore((s) => !!s.snapshot && !!s.prefs && !!s.settings)
+  const tabs = useTabs()
   const rootRef = useRef<HTMLDivElement>(null)
+  // group screens are mounted on first visit and then kept, so scroll position and focus survive tab switches
+  const [visited, setVisited] = useState<Set<string>>(() => new Set([tab]))
 
   useEffect(() => {
     const s = useStore.getState()
@@ -35,16 +46,29 @@ export function App() {
     return () => offs.forEach((off) => off())
   }, [])
 
+  // a tab that is no longer pinned (or a stale saved one) falls back to Start
+  useEffect(() => {
+    if (prefs && !tabs.includes(tab)) useStore.getState().setTab('home')
+  }, [prefs, tabs, tab])
+
+  useEffect(() => {
+    setVisited((v) => (v.has(tab) ? v : new Set(v).add(tab)))
+  }, [tab])
+
   // when switching tabs, move focus into the newly visible screen
   useEffect(() => {
     if (!loaded || detailsId) return
-    // Virtualised content (library grid) appears a moment after mount, so wait briefly for the
+    // Virtualised content (grids) appears a moment after mount, so wait briefly for the
     // screen's preferred target instead of landing on whatever happens to be rendered first.
     let tries = 0
     let r: ReturnType<typeof setTimeout>
     const attempt = (): void => {
-      const screen = document.querySelector<HTMLElement>(`[data-screen="${tab}"]`)
-      if (!screen || screen.contains(document.activeElement)) return
+      const screen = document.querySelector<HTMLElement>(`[data-screen="${CSS.escape(tab)}"]`)
+      if (!screen) {
+        if (tries++ < 10) r = setTimeout(attempt, 50)
+        return
+      }
+      if (screen.contains(document.activeElement)) return
       if (!screen.querySelector('[data-autofocus]') && tries++ < 10) {
         r = setTimeout(attempt, 50)
         return
@@ -57,8 +81,8 @@ export function App() {
 
   const switchTab = (delta: number): boolean => {
     const s = useStore.getState()
-    const i = TABS.indexOf(s.tab)
-    s.setTab(TABS[(i + delta + TABS.length) % TABS.length])
+    const i = Math.max(0, tabs.indexOf(s.tab))
+    s.setTab(tabs[(i + delta + tabs.length) % tabs.length])
     return true
   }
 
@@ -70,13 +94,20 @@ export function App() {
       return true
     },
     y: () => {
-      useStore.getState().setTab('library')
-      setTimeout(() => document.querySelector<HTMLInputElement>('[data-screen="library"] input[data-key="search"]')?.focus(), 0)
+      // search lives in group views; from Start/Settings jump to the first group
+      const s = useStore.getState()
+      const target = tabCategoryId(s.tab) ? s.tab : tabs.find((t) => tabCategoryId(t))
+      if (!target) return true
+      s.setTab(target)
+      setTimeout(
+        () => document.querySelector<HTMLInputElement>(`[data-screen="${CSS.escape(target)}"] input[data-key="search"]`)?.focus(),
+        0
+      )
       return true
     }
   })
 
-  if (!loaded) {
+  if (!loaded || !prefs) {
     return (
       <div className="boot">
         <div className="brand brand--big">lumen</div>
@@ -85,18 +116,27 @@ export function App() {
     )
   }
 
+  const categories = sortedCategories(prefs)
+
   return (
     <>
       <div className="app" ref={rootRef} data-layer inert={detailsId ? true : undefined}>
-        <TopBar />
+        <TopBar tabs={tabs} />
         <main className="screens">
-          {TABS.map((t) => (
-            <section key={t} className={`screen ${t === tab ? 'is-active' : ''}`} data-screen={t} inert={t !== tab ? true : undefined}>
-              {t === 'home' && <HomeScreen active={tab === 'home' && !detailsId} />}
-              {t === 'library' && <LibraryScreen active={tab === 'library' && !detailsId} />}
-              {t === 'settings' && <SettingsScreen active={tab === 'settings' && !detailsId} />}
-            </section>
-          ))}
+          {tabs
+            .filter((t) => t === tab || visited.has(t))
+            .map((t) => {
+              const catId = tabCategoryId(t)
+              const cat = catId ? categories.find((c) => c.id === catId) : undefined
+              const isActive = t === tab && !detailsId
+              return (
+                <section key={t} className={`screen ${t === tab ? 'is-active' : ''}`} data-screen={t} inert={t !== tab ? true : undefined}>
+                  {t === 'home' && <HomeScreen active={isActive} />}
+                  {t === 'settings' && <SettingsScreen active={isActive} />}
+                  {cat && <GroupScreen category={cat} active={isActive} />}
+                </section>
+              )
+            })}
         </main>
       </div>
       {detailsId && <DetailsScreen key={detailsId} gameId={detailsId} />}

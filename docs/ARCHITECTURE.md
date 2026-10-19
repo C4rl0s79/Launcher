@@ -127,7 +127,7 @@ Gry mają stabilny klucz `steam:<appid>` (lub `demo:<n>`). Tytuł nigdy nie jest
 
 - Siatka biblioteki jest wirtualizowana (w DOM ~50–70 plakatów niezależnie od rozmiaru biblioteki;
   zmierzono 1327 gier: ~5 ms na krok nawigacji).
-- Rzędy na ekranie Start mają limit 40 pozycji + kafel „Pokaż wszystkie”.
+- Ekran Start pokazuje po 2 pełne rzędy siatki („Ostatnio grane”, „Nowo dodane”); grupy mają wirtualizowaną siatkę.
 - Obrazy: `loading="lazy"`, rozdzielczości dopasowane do użycia (plakat 600×900, tło 1920×620),
   pobierane maks. 4 równolegle; zapytania SteamGridDB maks. 3 równolegle z back-offem po HTTP 429.
 - Wyniki (także braki) są zapamiętywane w `cache/art/index.json` — kolejne starty nie odpytują sieci.

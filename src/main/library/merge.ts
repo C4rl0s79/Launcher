@@ -93,7 +93,12 @@ export function mergeLibrary(input: MergeInput): Game[] {
  * Non-Steam shortcuts as library entries. `exeExists` decides whether the target program is
  * present; a missing one is shown as "broken" instead of pretending it can start.
  */
-export function shortcutGames(shortcuts: SteamShortcut[], exeExists: (exe: string) => boolean, runningAppId?: number): Game[] {
+export function shortcutGames(
+  shortcuts: SteamShortcut[],
+  exeExists: (exe: string) => boolean,
+  runningAppId?: number,
+  addedAtOf: (s: SteamShortcut) => number | undefined = () => undefined
+): Game[] {
   return shortcuts
     .filter((s) => !s.hidden)
     .map((s) => {
@@ -108,6 +113,7 @@ export function shortcutGames(shortcuts: SteamShortcut[], exeExists: (exe: strin
         installState: ok ? ('installed' as const) : ('broken' as const),
         installed: ok,
         lastPlayed: s.lastPlayed,
+        addedAt: addedAtOf(s),
         running: runningAppId !== undefined && runningAppId === s.appId ? true : undefined,
         shortcut: {
           exe: s.exe,

@@ -14,7 +14,7 @@ export function SettingsScreen({ active }: { active: boolean }) {
         return true
       }
     },
-    { enabled: active, hints: [{ action: 'confirm', label: 'Wybierz' }, { action: 'back', label: 'Start' }, { action: 'lb', label: 'Biblioteka' }] }
+    { enabled: active, hints: [{ action: 'confirm', label: 'Wybierz' }, { action: 'back', label: 'Start' }, { action: 'lb', label: 'Poprzednia zakładka' }] }
   )
   return (
     <div className="settings" data-scroll="center">
@@ -299,13 +299,13 @@ function CategoriesSection() {
 
   return (
     <Section
-      title="Kategorie i ekran Start"
-      desc="Przypięte kategorie to rzędy na ekranie Start (w tej kolejności). Kolekcje Steam są odczytywane z klienta Steam i aktualizują się same — Lumen ich nie zmienia. Własne kategorie przypisujesz w ekranie gry → „Kategorie”."
+      title="Grupy na górnym pasku"
+      desc="Przypięte grupy to zakładki na górnym pasku (w tej kolejności; LB/RB lub Q/E przełączają między nimi). Kolekcje Steam są odczytywane z klienta Steam i aktualizują się same — Lumen ich nie zmienia. Własne kategorie przypisujesz w ekranie gry → „Kategorie”."
     >
       <h3 className="cats__heading">Przypięte ({pinned.length})</h3>
       <div className="cats" data-nav-group="categories-pinned">
         {pinned.map((c, i) => row(c, i, pinned))}
-        {!pinned.length && <p className="card__desc">Nic nie jest przypięte — ekran Start będzie pusty.</p>}
+        {!pinned.length && <p className="card__desc">Nic nie jest przypięte — na pasku będą tylko Start i Ustawienia.</p>}
       </div>
       <h3 className="cats__heading">Pozostałe ({others.length})</h3>
       <div className="cats" data-nav-group="categories-other">

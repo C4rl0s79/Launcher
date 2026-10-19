@@ -47,7 +47,8 @@ if (cmd === 'eval') {
   const r = await send('Runtime.evaluate', { expression: args[0], awaitPromise: true, returnByValue: true })
   console.log(JSON.stringify(r.result?.result?.value ?? r.result, null, 2))
 } else if (cmd === 'shot') {
-  const r = await send('Page.captureScreenshot', { format: 'png' })
+  await send('Page.bringToFront')
+  const r = await send('Page.captureScreenshot', { format: args[0].endsWith('.jpg') ? 'jpeg' : 'png', quality: 85, optimizeForSpeed: true, captureBeyondViewport: false })
   const { writeFileSync } = await import('node:fs')
   writeFileSync(args[0], Buffer.from(r.result.data, 'base64'))
   console.log('saved', args[0])

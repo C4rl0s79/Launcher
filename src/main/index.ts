@@ -48,7 +48,7 @@ const paths = {
 
 const settings = new SettingsStore(paths.settings, paths.secrets)
 const prefs = new PrefsStore(paths.prefs)
-const library = new LibraryService(settings, paths.account)
+const library = new LibraryService(settings, paths.account, path.join(userData, 'first-seen.json'))
 const meta = new StoreMetadataProvider(paths.metaCache, () => settings.get().language)
 const launchbox = new LaunchBoxService(paths.launchbox)
 const sgdb = new SgdbClient(() => settings.getSecret('sgdbApiKey'))

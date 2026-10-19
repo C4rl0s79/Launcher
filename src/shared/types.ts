@@ -42,6 +42,8 @@ export interface Game {
   progress?: DownloadProgress
   /** unix seconds; from local Steam config or the Web API */
   lastPlayed?: number
+  /** unix seconds; when the game appeared on this PC (install manifest / ROM file creation) */
+  addedAt?: number
   /** minutes */
   playtimeMinutes?: number
   running?: boolean
@@ -167,7 +169,7 @@ export interface GameArtPrefs {
 }
 
 export interface Prefs {
-  version: 1
+  version: number
   categories: Category[]
   /** gameId -> custom category ids */
   gameCategories: Record<string, string[]>

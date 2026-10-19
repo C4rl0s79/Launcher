@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { Category, Game } from '@shared/types'
-import { api, attempt, gamesForCategory, sortedCategories, useStore } from '../store'
+import type { Game } from '@shared/types'
+import { api, attempt, useStore } from '../store'
 import { useActions } from '../nav/input'
-import { currentFocus } from '../nav/engine'
-import { Poster } from '../components/Poster'
 import { Art } from '../components/Art'
 import { LibraryNotice } from '../components/LibraryNotice'
-import { formatLastPlayed, formatPlaytime, gameCountLabel, STATE_LABEL } from '../lib/format'
+import { PosterGridRows, toggleFavoriteOfFocused } from '../components/PosterGrid'
+import { formatLastPlayed, formatPlaytime, STATE_LABEL } from '../lib/format'
+
+// Start: a featured game on top and two Steam-style poster grids — recently played and
+// recently added. Everything else lives in the group tabs of the top bar.
+
+const SECTION_ROWS = 2
 
 export function HomeScreen({ active }: { active: boolean }) {
   const snapshot = useStore((s) => s.snapshot)!
@@ -14,112 +18,86 @@ export function HomeScreen({ active }: { active: boolean }) {
   const openDetails = useStore((s) => s.openDetails)
   const [spot, setSpot] = useState<Game | null>(null)
 
-  const rows = useMemo(() => {
-    return sortedCategories(prefs)
-      .filter((c) => c.pinned)
-      .map((c) => ({ cat: c, games: gamesForCategory(c, snapshot.games, prefs, snapshot.collections) }))
-      .filter((r) => r.games.length || (snapshot.games.length > 0 && (r.cat.kind === 'custom' || r.cat.smart === 'favorites')))
-  }, [prefs, snapshot.games, snapshot.collections])
+  const recent = useMemo(
+    () =>
+      snapshot.games
+        .filter((g) => g.lastPlayed)
+        .sort((a, b) => (b.lastPlayed ?? 0) - (a.lastPlayed ?? 0))
+        .slice(0, 40),
+    [snapshot.games]
+  )
+  const added = useMemo(
+    () =>
+      snapshot.games
+        .filter((g) => g.addedAt)
+        .sort((a, b) => (b.addedAt ?? 0) - (a.addedAt ?? 0))
+        .slice(0, 40),
+    [snapshot.games]
+  )
 
   // keep the spotlight in sync with live data (install state, running…)
   const spotGame = spot ? (snapshot.games.find((g) => g.id === spot.id) ?? null) : null
-  const firstGame = rows.find((r) => r.games.length)?.games[0] ?? null
-  const shown = spotGame ?? firstGame
+  const shown = spotGame ?? recent[0] ?? added[0] ?? null
 
   const onFocusGame = useCallback((g: Game) => setSpot(g), [])
   const favs = useMemo(() => new Set(prefs.favorites), [prefs.favorites])
+  const open = useCallback((g: Game) => openDetails(g.id), [openDetails])
 
   useActions(
-    {
-      x: () => {
-        const id = currentFocus()?.dataset.key
-        if (!id || !snapshot.games.some((g) => g.id === id)) return false
-        void attempt(api().prefs.toggleFavorite(id)).then((p) =>
-          p && useStore.getState().toast(p.favorites.includes(id) ? 'Dodano do ulubionych' : 'Usunięto z ulubionych')
-        )
-        return true
-      }
-    },
+    { x: toggleFavoriteOfFocused },
     {
       enabled: active,
       hints: [
         { action: 'confirm', label: 'Otwórz' },
         { action: 'x', label: 'Ulubiona' },
         { action: 'y', label: 'Szukaj' },
-        { action: 'rb', label: 'Biblioteka' },
+        { action: 'rb', label: 'Grupy' },
         { action: 'menu', label: 'Ustawienia' }
       ]
     }
   )
 
-  const empty = snapshot.games.length === 0
-
   return (
     <div className="home">
       <Spotlight game={shown} />
-      <div className="home__rows" data-scroll="center">
+      <div className="home__sections" data-scroll="center">
         <LibraryNotice compact />
-        {empty && <EmptyLibrary />}
-        {rows.map(({ cat, games }, i) => (
-          <Row key={cat.id} cat={cat} games={games} favs={favs} first={i === 0} onOpen={(g) => openDetails(g.id)} onFocusGame={onFocusGame} />
-        ))}
+        {snapshot.games.length === 0 && <EmptyLibrary />}
+        {recent.length > 0 && (
+          <section className="section">
+            <h2 className="section__title">Ostatnio grane</h2>
+            <PosterGridRows games={recent} favs={favs} onOpen={open} onFocusGame={onFocusGame} navGroup="home-recent" rows={SECTION_ROWS} autofocusFirst />
+          </section>
+        )}
+        {snapshot.games.length > 0 && (
+          <section className="section">
+            <h2 className="section__title">Nowo dodane</h2>
+            {added.length > 0 ? (
+              <PosterGridRows
+                games={added}
+                favs={favs}
+                onOpen={open}
+                onFocusGame={onFocusGame}
+                navGroup="home-added"
+                rows={SECTION_ROWS}
+                autofocusFirst={recent.length === 0}
+              />
+            ) : (
+              <p className="section__empty">
+                Steam nie udostępnia dat zakupu, więc Lumen zapisuje, kiedy gra pierwszy raz pojawiła się w bibliotece. Gry dodane od
+                teraz będą widoczne tutaj.
+              </p>
+            )}
+          </section>
+        )}
         <div className="home__spacer" />
       </div>
     </div>
   )
 }
 
-/** Home rows are not virtualised, so keep them short; the library shows everything. */
-const ROW_LIMIT = 40
-
-function Row({
-  cat,
-  games,
-  favs,
-  first,
-  onOpen,
-  onFocusGame
-}: {
-  cat: Category
-  games: Game[]
-  favs: Set<string>
-  first: boolean
-  onOpen: (g: Game) => void
-  onFocusGame: (g: Game) => void
-}) {
-  return (
-    <section className="row" data-nav-group={`row-${cat.id}`}>
-      <header className="row__head">
-        <h2>{cat.name}</h2>
-        <span className="row__count">{gameCountLabel(games.length)}</span>
-      </header>
-      {games.length ? (
-        <div className="row__track">
-          {games.slice(0, ROW_LIMIT).map((g, i) => (
-            <Poster key={g.id} game={g} favorite={favs.has(g.id)} onOpen={onOpen} onFocusGame={onFocusGame} autofocus={first && i === 0} />
-          ))}
-          {games.length > ROW_LIMIT && (
-            <button className="poster poster--more" data-nav data-key={`more-${cat.id}`} onClick={() => useStore.getState().showInLibrary(cat.smart === 'all' ? null : cat.id)}>
-              <div className="poster__frame">
-                <span>Pokaż wszystkie</span>
-                <strong>{games.length}</strong>
-              </div>
-            </button>
-          )}
-        </div>
-      ) : (
-        <div className="row__empty">
-          {cat.smart === 'favorites'
-            ? 'Brak ulubionych. Naciśnij X (lub F) na plakacie, aby dodać grę.'
-            : 'Ta kategoria jest pusta. Przypisz gry w ekranie szczegółów gry → „Kategorie”.'}
-        </div>
-      )}
-    </section>
-  )
-}
-
 function Spotlight({ game }: { game: Game | null }) {
-  // debounce so fast scrolling through a row doesn't thrash big hero images
+  // debounce so fast movement through the grid doesn't thrash big hero images
   const [shown, setShown] = useState(game)
   useEffect(() => {
     const t = setTimeout(() => setShown(game), 160)
@@ -132,7 +110,8 @@ function Spotlight({ game }: { game: Game | null }) {
   const meta = [
     shown.running ? 'Uruchomiona' : STATE_LABEL[shown.installState],
     formatPlaytime(shown.playtimeMinutes) && `Czas gry: ${formatPlaytime(shown.playtimeMinutes)}`,
-    formatLastPlayed(shown.lastPlayed) && `Ostatnio: ${formatLastPlayed(shown.lastPlayed)}`
+    formatLastPlayed(shown.lastPlayed) && `Ostatnio: ${formatLastPlayed(shown.lastPlayed)}`,
+    shown.shortcut?.tags.length ? shown.shortcut.tags.join(', ') : undefined
   ].filter(Boolean)
 
   return (

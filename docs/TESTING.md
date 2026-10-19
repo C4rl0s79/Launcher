@@ -2,7 +2,7 @@
 
 ## Automatyczne (`npm test`)
 
-92 testy (vitest), bez sieci i bez prawdziwego Steama (fixture'y w `tests/fixtures`):
+97 testów (vitest), bez sieci i bez prawdziwego Steama (fixture'y w `tests/fixtures`):
 
 - `tests/steam.test.ts` — parser VDF (zagnieżdżenia, escape, BOM, błędy), mapowanie StateFlags → stan,
   postęp tylko z prawdziwych liczników, filtr narzędzi, `libraryfolders.vdf` (nowy i stary format),
@@ -21,6 +21,7 @@
   strumieniowy parser Metadata.xml (CDATA, encje, nazwy alternatywne), budowa bazy SQLite i dopasowanie gier.
 - `tests/shortcuts.test.ts` — binarny VDF, skróty spoza Steama (klucze, ukryte, brak programu), id 64-bit do uruchomienia,
   grafiki z folderu `grid` Steama, wyszukiwanie SteamGridDB po nazwie dla skrótów.
+- `tests/firstSeen.test.ts` — „Nowo dodane”: linia bazowa, nowe gry, reinstalacja nie zmienia daty, późniejsze dodanie klucza API.
 - `tests/library.test.ts` — wykrywanie startu i końca gry (regresja: zdarzenia „połykane” przez skan).
 - `tests/nav.test.ts` — geometria nawigacji (wiersze, końce wierszy, pasek narzędzi), mapowanie klawiatury
   (w tym pola tekstowe), mapowanie pada i martwa strefa gałki, URI `steam://`.
@@ -40,6 +41,9 @@ Aplikacja sterowana przez Chrome DevTools Protocol (`scripts/cdp.mjs`: zrzuty ek
 - [x] Akcja główna „Graj” dla zainstalowanej gry; fokus startowy na niej.
 - [x] Esc zamyka szczegóły i przywraca zaznaczenie na tym samym plakacie.
 - [x] Wyszukiwanie po nazwie, filtr, liczniki.
+- [x] Nowy układ (19.10.2026): górny pasek Start | Wszystkie gry | PS2 | Zainstalowane | Ulubione | Resident Evil | Yakuza | ⚙
+      (migracja starych przypięć), Start = siatki „Ostatnio grane” i „Nowo dodane” (2 rzędy), E/Q przełącza grupy,
+      grupa PS2 = pełna siatka 102 gier z wyszukiwaniem, filtrem i sortowaniem.
 - [x] Skróty spoza Steama: 243 wczytane z `shortcuts.vdf`, 2 poprawnie oznaczone jako „brak programu” (folderów nie ma
       na dysku); kolekcja PS2 przypięta → rząd z plakatami 600×900 z folderu `grid`; szczegóły skrótu z tłem i logo.
       **Nie testowano uruchomienia skrótu** (uruchomiłoby emulator).

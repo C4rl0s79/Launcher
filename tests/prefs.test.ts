@@ -30,11 +30,11 @@ describe('category operations', () => {
   it('moves pinned categories among pinned ones, skipping unpinned in between', () => {
     let p = ops.createCategory(defaultPrefs(), 'A', 'cat:a') // order after all smart ones
     p = ops.setPinned(p, 'cat:a', true)
-    // pinned order: recent, installed, favorites, A (unpinned notInstalled/all sit between favorites and A)
+    // pinned order: all, installed, favorites, A (unpinned notInstalled/recent sit between favorites and A)
     p = ops.moveCategory(p, 'cat:a', -1)
     const pinned = [...p.categories].filter((c) => c.pinned).sort((a, b) => a.order - b.order).map((c) => c.id)
-    expect(pinned).toEqual(['smart:recent', 'smart:installed', 'cat:a', 'smart:favorites'])
-    expect(ops.moveCategory(p, 'smart:recent', -1)).toBe(p) // already first
+    expect(pinned).toEqual(['smart:all', 'smart:installed', 'cat:a', 'smart:favorites'])
+    expect(ops.moveCategory(p, 'smart:all', -1)).toBe(p) // already first
   })
 
   it('rejects empty and duplicate names (case-insensitive, Polish locale)', () => {
@@ -75,6 +75,7 @@ describe('category operations', () => {
 describe('migration', () => {
   it('fills missing smart categories and discards garbage', () => {
     const p = migratePrefs({
+      version: 2,
       categories: [{ id: 'cat:x', name: 'X', kind: 'custom', pinned: true, order: 0 }, { bogus: true }],
       gameCategories: { 'steam:1': ['cat:x', 5] },
       favorites: ['steam:1', 7]
@@ -83,6 +84,23 @@ describe('migration', () => {
     expect(p.categories.filter((c) => c.kind === 'smart')).toHaveLength(5)
     expect(p.gameCategories).toEqual({ 'steam:1': ['cat:x'] })
     expect(p.favorites).toEqual(['steam:1'])
+  })
+
+  it('v1 → v2: "recently played" moves to Start, "all games" becomes the first group tab', () => {
+    const v1 = {
+      version: 1,
+      categories: [
+        { id: 'smart:recent', name: 'Ostatnio grane', kind: 'smart', smart: 'recent', pinned: true, order: 0 },
+        { id: 'steamcol:uc-a', name: 'Yakuza', kind: 'steam', steamCollectionId: 'uc-a', pinned: true, order: 1 },
+        { id: 'smart:all', name: 'Wszystkie gry', kind: 'smart', smart: 'all', pinned: false, order: 2 }
+      ]
+    }
+    const p = migratePrefs(v1)
+    expect(p.version).toBe(2)
+    const pinned = p.categories.filter((c) => c.pinned).sort((a, b) => a.order - b.order).map((c) => c.id)
+    expect(pinned).toEqual(['smart:all', 'steamcol:uc-a', 'smart:installed', 'smart:favorites']) // missing built-ins get their defaults
+    // a v2 file is left as the user arranged it
+    expect(migratePrefs({ ...p, categories: p.categories.map((c) => (c.id === 'smart:all' ? { ...c, pinned: false } : c)) }).categories.find((c) => c.id === 'smart:all')?.pinned).toBe(false)
   })
 
   it('returns defaults for non-objects', () => {

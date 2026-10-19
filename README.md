@@ -1,15 +1,18 @@
 # Lumen — launcher biblioteki Steam do obsługi z kanapy
 
 Lumen to lokalna aplikacja desktopowa (Windows) z przejrzystym, ciemnym interfejsem do przeglądania
-i uruchamiania gier Steam klawiaturą, myszą lub kontrolerem. Ekran główny składa się z przypiętych
-kategorii, biblioteka z siatki plakatów, a każda gra ma ekran szczegółów z jedną, jednoznaczną
-akcją główną. Nie ma tu newsów, reklam ani aktywności znajomych.
+i uruchamiania gier Steam klawiaturą, myszą lub kontrolerem. Górny pasek to **Start** (ostatnio grane
+i nowo dodane), **przypięte grupy** (np. Wszystkie gry, Zainstalowane, Ulubione, Twoje kolekcje Steam —
+LB/RB lub Q/E przełączają) i **Ustawienia**. Każda grupa to pełna siatka plakatów jak w bibliotece Steam,
+a każda gra ma ekran szczegółów z jedną, jednoznaczną akcją główną. Nie ma tu newsów, reklam ani
+aktywności znajomych.
 
 - **Nie wymaga logowania do Steam** ani hasła — czyta pliki klienta Steam na dysku (tylko odczyt).
 - **Uruchamianie i instalacja** są przekazywane do klienta Steam (`steam://rungameid/…`, `steam://install/…`).
 - **Pełna biblioteka konta** (także niezainstalowane gry) — opcjonalnie przez oficjalne Steam Web API z Twoim kluczem.
+- **Kolekcje Steam** — Twoje statyczne kolekcje ze Steama (tylko odczyt) można przypiąć jako grupy na górnym pasku.
+- **Nowo dodane** — Steam nie udostępnia daty zakupu (ani lokalnie, ani w Web API), więc Lumen zapisuje, kiedy gra pierwszy raz pojawiła się w bibliotece (`first-seen.json`, odporne na reinstalację); skróty z emulatorów mają datę pliku ROM.
 - **Grafiki** — SteamGridDB (opcjonalny klucz) albo oficjalne grafiki Steam; lokalny cache.
-- **Kolekcje Steam** — Twoje statyczne kolekcje ze Steama (tylko odczyt) można przypinać jako rzędy ekranu Start.
 - **Skróty spoza Steama** — gry dodane do Steama np. przez Steam ROM Manager (emulatory) są czytane z `shortcuts.vdf`, z grafikami z folderu `grid` Steama, i uruchamiane przez Steam.
 - **Opisy gier spoza Steama** — z bazy LaunchBox Games DB pobieranej przez program (Ustawienia → „Pobierz bazę LaunchBox”, ~110 MB, ok. 20–30 s); potem działa offline. Opisy są po angielsku (taka jest baza).
 - **Własne kategorie, ulubione, przypięcia** — zapisywane lokalnie (Ustawienia → Kategorie; gry przypisujesz w ekranie gry → „Kategorie”).
@@ -90,7 +93,8 @@ dla konta Windows, więc na innym komputerze trzeba je wpisać ponownie).
 | Ścieżka | Zawartość | Kasowane przez „Wyczyść pamięć podręczną” |
 | --- | --- | --- |
 | `launchbox\launchbox.db` | baza LaunchBox Games DB (~180 MB) — opisy gier spoza Steama | nie |
-| `prefs.json` (+ `.bak`) | kategorie, przypięcia, ulubione, wybory grafik | nie |
+| `prefs.json` (+ `.bak`) | grupy (kategorie) i ich przypięcia, ulubione, wybory grafik | nie |
+| `first-seen.json` | data pierwszego pojawienia się gier Steam (sekcja „Nowo dodane”) | nie |
 | `settings.json` | ustawienia | nie |
 | `secrets.json` | klucze API zaszyfrowane Windows DPAPI (`safeStorage`) | nie |
 | `custom-art\` | grafiki wybrane z własnych plików (kopie) | nie |

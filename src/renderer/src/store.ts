@@ -10,7 +10,10 @@ declare global {
 
 export const api = (): LumenApi => window.lumen
 
-export type Tab = 'home' | 'library' | 'settings'
+/** 'home', 'settings' or a group tab: `group:<categoryId>` */
+export type Tab = string
+export const groupTab = (categoryId: string): Tab => `group:${categoryId}`
+export const tabCategoryId = (tab: Tab): string | null => (tab.startsWith('group:') ? tab.slice(6) : null)
 export type InputMode = 'keyboard' | 'gamepad' | 'mouse'
 
 export interface Toast {
@@ -28,9 +31,6 @@ interface State {
   detailsId: string | null
   inputMode: InputMode
   toasts: Toast[]
-  /** set by "show all" tiles on the home screen; consumed by the library screen */
-  libraryRequest: { category: string | null; n: number } | null
-  showInLibrary(category: string | null): void
   setSnapshot(s: LibrarySnapshot): void
   setPrefs(p: Prefs): void
   setSettings(s: Settings): void
@@ -47,7 +47,8 @@ let toastId = 0
 const savedTab = (): Tab => {
   try {
     const t = localStorage.getItem('lumen.tab')
-    return t === 'library' || t === 'settings' ? t : 'home'
+    // a group tab is validated by the app once preferences are loaded
+    return t === 'settings' || t?.startsWith('group:') ? t : 'home'
   } catch {
     return 'home'
   }
@@ -62,11 +63,6 @@ export const useStore = create<State>((set) => ({
   detailsId: null,
   inputMode: 'keyboard',
   toasts: [],
-  libraryRequest: null,
-  showInLibrary: (category) => {
-    useStore.getState().setTab('library')
-    set((s) => ({ libraryRequest: { category, n: (s.libraryRequest?.n ?? 0) + 1 } }))
-  },
   setSnapshot: (snapshot) => set({ snapshot }),
   setPrefs: (prefs) => set({ prefs }),
   setSettings: (settings) => set({ settings }),
