@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { LumenApi } from '@shared/api'
-import type { Category, Game, LibrarySnapshot, Prefs, Settings } from '@shared/types'
+import type { Category, Game, LibrarySnapshot, Prefs, Settings, SteamCollection } from '@shared/types'
 
 declare global {
   interface Window {
@@ -103,7 +103,13 @@ export async function attempt<T>(p: Promise<T>): Promise<T | undefined> {
 
 // ---------- selectors ----------
 
-export function gamesForCategory(cat: Category, games: Game[], prefs: Prefs): Game[] {
+export function gamesForCategory(cat: Category, games: Game[], prefs: Prefs, collections: SteamCollection[] | null): Game[] {
+  if (cat.kind === 'steam') {
+    const col = collections?.find((c) => c.id === cat.steamCollectionId)
+    if (!col) return []
+    const ids = new Set(col.appIds)
+    return games.filter((g) => g.source === 'steam' && ids.has(g.appId))
+  }
   const favs = new Set(prefs.favorites)
   switch (cat.smart) {
     case 'recent':
@@ -122,6 +128,14 @@ export function gamesForCategory(cat: Category, games: Game[], prefs: Prefs): Ga
     default:
       return games.filter((g) => prefs.gameCategories[g.id]?.includes(cat.id))
   }
+}
+
+/** Steam collections (read-only) that contain this game. */
+export function steamCollectionsOf(game: Game, prefs: Prefs, collections: SteamCollection[] | null): Category[] {
+  if (game.source !== 'steam' || !collections) return []
+  return sortedCategories(prefs).filter(
+    (c) => c.kind === 'steam' && collections.find((col) => col.id === c.steamCollectionId)?.appIds.includes(game.appId)
+  )
 }
 
 export function sortedCategories(prefs: Prefs): Category[] {

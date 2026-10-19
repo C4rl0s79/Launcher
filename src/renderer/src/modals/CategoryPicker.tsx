@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { api, attempt, sortedCategories, useStore } from '../store'
+import { api, attempt, sortedCategories, steamCollectionsOf, useStore } from '../store'
 import { Modal } from '../components/Modal'
 import { TextField } from '../components/TextField'
 
@@ -7,6 +7,9 @@ export function CategoryPicker({ gameId, onClose }: { gameId: string; onClose: (
   const prefs = useStore((s) => s.prefs)!
   const [name, setName] = useState('')
   const custom = sortedCategories(prefs).filter((c) => c.kind === 'custom')
+  const game = useStore((s) => s.snapshot?.games.find((g) => g.id === gameId))
+  const collections = useStore((s) => s.snapshot?.collections ?? null)
+  const steamCols = game ? steamCollectionsOf(game, prefs, collections) : []
   const assigned = new Set(prefs.gameCategories[gameId] ?? [])
 
   const toggle = (id: string): void => {
@@ -28,7 +31,12 @@ export function CategoryPicker({ gameId, onClose }: { gameId: string; onClose: (
   return (
     <Modal title="Kategorie gry" onClose={onClose}>
       <div className="list">
-        {custom.length === 0 && <p className="details__muted">Nie masz jeszcze własnych kategorii. Utwórz pierwszą poniżej.</p>}
+        {steamCols.length > 0 && (
+          <p className="details__muted">
+            W kolekcjach Steam: {steamCols.map((c) => c.name).join(', ')} — te zmienia się w kliencie Steam.
+          </p>
+        )}
+        {custom.length === 0 && <p className="details__muted">Nie masz jeszcze własnych kategorii Lumen. Utwórz pierwszą poniżej.</p>}
         {custom.map((c, i) => (
           <button
             key={c.id}

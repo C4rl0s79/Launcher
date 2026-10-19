@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { ART_SCHEME, IPC } from '@shared/api'
-import type { ActionResult, ArtKind, ArtOption, Game, Prefs, SecretName, SettingsPatch, SgdbGame } from '@shared/types'
+import type { ActionResult, ArtKind, ArtOption, Game, LibrarySnapshot, Prefs, SecretName, SettingsPatch, SgdbGame } from '@shared/types'
 import { initLogger, log } from './logger'
 import { ops, PrefsError, PrefsStore } from './store/prefs'
 import { SettingsStore } from './store/settings'
@@ -368,7 +368,14 @@ app.whenReady().then(async () => {
   registerArtProtocol()
   registerIpc()
 
-  library.on('snapshot', (s) => send(IPC.librarySnapshot, s))
+  library.on('snapshot', (s: LibrarySnapshot) => {
+    send(IPC.librarySnapshot, s)
+    // mirror Steam collections as read-only categories (skipped when they could not be read,
+    // so a missing file never wipes the user's pins)
+    if (s.collections && prefs.get() !== ops.syncSteamCollections(prefs.get(), s.collections)) {
+      updatePrefs((p) => ops.syncSteamCollections(p, s.collections!)).catch((e) => log.error('prefs', 'collection sync failed', e))
+    }
+  })
   library.on('gameStarted', (appId: number) => log.info('app', `game ${appId} started (per Steam registry)`))
   library.on('gameExited', (appId: number) => {
     log.info('app', `game ${appId} exited (per Steam registry)`)

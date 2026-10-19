@@ -1408,3 +1408,14 @@ p.card__desc[data-nav]:focus {
   font-size: 2em;
   color: var(--text);
 }
+.cats__heading {
+  margin: 8px 0 0;
+  font-size: 0.82em;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+}
+.chip--steam::before {
+  content: "Steam · ";
+  color: var(--text-3);
+}

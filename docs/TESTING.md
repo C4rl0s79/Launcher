@@ -2,7 +2,7 @@
 
 ## Automatyczne (`npm test`)
 
-72 testy (vitest), bez sieci i bez prawdziwego Steama (fixture'y w `tests/fixtures`):
+79 testów (vitest), bez sieci i bez prawdziwego Steama (fixture'y w `tests/fixtures`):
 
 - `tests/steam.test.ts` — parser VDF (zagnieżdżenia, escape, BOM, błędy), mapowanie StateFlags → stan,
   postęp tylko z prawdziwych liczników, filtr narzędzi, `libraryfolders.vdf` (nowy i stary format),
@@ -15,6 +15,9 @@
   pobierania po restarcie), deduplikacja żądań, fallback wyszukiwania po nazwie, ręczne dopasowanie,
   zapamiętane braki, działanie bez klucza (grafiki lokalne Steam), CDN Steam, wybory użytkownika,
   awaria sieci / zły klucz, czyszczenie cache.
+- `tests/collections.test.ts` — parser kolekcji Steam (statyczne, dynamiczne, usunięte, plik .modified), synchronizacja
+  z kategoriami (zachowanie przypięć i kolejności, zmiany nazw, usunięte kolekcje, blokada edycji).
+- `tests/library.test.ts` — wykrywanie startu i końca gry (regresja: zdarzenia „połykane” przez skan).
 - `tests/nav.test.ts` — geometria nawigacji (wiersze, końce wierszy, pasek narzędzi), mapowanie klawiatury
   (w tym pola tekstowe), mapowanie pada i martwa strefa gałki, URI `steam://`.
 
@@ -33,6 +36,8 @@ Aplikacja sterowana przez Chrome DevTools Protocol (`scripts/cdp.mjs`: zrzuty ek
 - [x] Akcja główna „Graj” dla zainstalowanej gry; fokus startowy na niej.
 - [x] Esc zamyka szczegóły i przywraca zaznaczenie na tym samym plakacie.
 - [x] Wyszukiwanie po nazwie, filtr, liczniki.
+- [x] Kolekcje Steam: 38 odczytanych (14 statycznych → kategorie, dynamiczne wymienione), przypięcie Resident Evil (15 gier)
+      i Yakuza (12 gier) z klawiatury → rzędy na ekranie Start.
 - [x] Ulubione (F), przypisanie do kategorii, tworzenie / zmiana nazwy / przypięcie / przesunięcie kategorii,
       **trwałość po restarcie aplikacji**.
 - [x] Przejście klawiaturą przez cały ekran Ustawień (bez pułapek fokusu), modale wracają fokusem do przycisku.

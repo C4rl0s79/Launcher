@@ -87,8 +87,15 @@ Gry mają stabilny klucz `steam:<appid>` (lub `demo:<n>`). Tytuł nigdy nie jest
 
 ## Rzeczy świadomie NIE zrobione
 
-- **Brak modyfikacji plików/konfiguracji Steam.** Tylko odczyt. Kolekcje Steam nie są synchronizowane —
-  ich zapis (cloud-storage-namespace) jest nieudokumentowany i ryzykowny. Kategorie Lumen są lokalne.
+- **Brak modyfikacji plików/konfiguracji Steam.** Tylko odczyt. Kolekcje Steam są **czytane** z
+  `userdata/<accountid>/config/cloudstorage/cloud-storage-namespace-1.json` (+ `.modified.json`) i pokazywane
+  jako kategorie tylko do odczytu (można je przypinać i ustawiać kolejność w Lumen; zmiana nazwy / zawartości —
+  tylko w Steam). Zapis do tego pliku jest nieudokumentowany i ryzykowny, więc go nie robimy. Własne kategorie
+  Lumen są lokalne. Plik jest obserwowany — zmiany kolekcji w Steam pojawiają się bez restartu.
+- **Kolekcje dynamiczne Steam** (reguły filtrów: tagi, funkcje, obsługa kontrolera…) nie są odtwarzane — Steam
+  liczy je z własnych metadanych gier, których Lumen nie ma. Ich nazwy są wymienione w Ustawieniach.
+- **Skróty spoza Steama** (np. emulatory dodane do biblioteki Steam, `shortcuts.vdf`) nie są jeszcze obsługiwane —
+  kolekcje złożone wyłącznie z nich są oznaczone w Ustawieniach.
 - **Brak logowania do Steam / przechwytywania haseł.**
 - **Brak fikcyjnych pasków postępu.** Pasek jest pokazywany tylko wtedy, gdy manifest Steam zawiera
   liczniki `BytesDownloaded/BytesToDownload`; Steam zapisuje je z opóźnieniem, co jest opisane w UI.

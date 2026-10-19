@@ -27,6 +27,16 @@ describe('category operations', () => {
     expect(p.categories.map((c) => c.order)).toEqual(p.categories.map((_, i) => i))
   })
 
+  it('moves pinned categories among pinned ones, skipping unpinned in between', () => {
+    let p = ops.createCategory(defaultPrefs(), 'A', 'cat:a') // order after all smart ones
+    p = ops.setPinned(p, 'cat:a', true)
+    // pinned order: recent, installed, favorites, A (unpinned notInstalled/all sit between favorites and A)
+    p = ops.moveCategory(p, 'cat:a', -1)
+    const pinned = [...p.categories].filter((c) => c.pinned).sort((a, b) => a.order - b.order).map((c) => c.id)
+    expect(pinned).toEqual(['smart:recent', 'smart:installed', 'cat:a', 'smart:favorites'])
+    expect(ops.moveCategory(p, 'smart:recent', -1)).toBe(p) // already first
+  })
+
   it('rejects empty and duplicate names (case-insensitive, Polish locale)', () => {
     const p = ops.createCategory(defaultPrefs(), 'Łatwe', 'cat:a')
     expect(() => ops.createCategory(p, '   ')).toThrow(PrefsError)

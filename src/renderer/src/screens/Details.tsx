@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { DetailsResult, Game } from '@shared/types'
-import { api, attempt, useStore } from '../store'
+import { api, attempt, steamCollectionsOf, useStore } from '../store'
 import { useActions } from '../nav/input'
 import { focusEl, focusFirst } from '../nav/engine'
 import { Art } from '../components/Art'
@@ -20,6 +20,7 @@ export function DetailsScreen({ gameId }: { gameId: string }) {
   const game = useStore((s) => s.snapshot?.games.find((g) => g.id === gameId))
   const steamStatus = useStore((s) => s.snapshot?.steam.status)
   const prefs = useStore((s) => s.prefs)!
+  const collections = useStore((s) => s.snapshot?.collections ?? null)
   const close = (): void => useStore.getState().openDetails(null)
   const [details, setDetails] = useState<DetailsResult | null>(null)
   const [modal, setModal] = useState<'categories' | 'art' | null>(null)
@@ -144,6 +145,7 @@ export function DetailsScreen({ gameId }: { gameId: string }) {
     isFav && { label: '★ Ulubiona', tone: 'fav' }
   ].filter(Boolean) as { label: string; tone?: string }[]
   const myCats = prefs.categories.filter((c) => prefs.gameCategories[gameId]?.includes(c.id))
+  const steamCols = steamCollectionsOf(game, prefs, collections)
 
   return createPortal(
     <div className="details" data-layer ref={ref}>
@@ -210,10 +212,15 @@ export function DetailsScreen({ gameId }: { gameId: string }) {
           )}
         </div>
 
-        {myCats.length > 0 && (
+        {myCats.length + steamCols.length > 0 && (
           <div className="details__cats">
             {myCats.map((c) => (
               <span key={c.id} className="chip chip--outline">
+                {c.name}
+              </span>
+            ))}
+            {steamCols.map((c) => (
+              <span key={c.id} className="chip chip--outline chip--steam" title="Kolekcja Steam">
                 {c.name}
               </span>
             ))}

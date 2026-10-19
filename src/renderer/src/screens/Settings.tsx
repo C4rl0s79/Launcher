@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import type { CacheStats, Category, SecretName, SettingsPatch } from '@shared/types'
-import { api, attempt, sortedCategories, useStore } from '../store'
+import { api, attempt, gamesForCategory, sortedCategories, useStore } from '../store'
 import { useActions } from '../nav/input'
 import { TextField } from '../components/TextField'
 import { Modal } from '../components/Modal'
@@ -191,47 +191,83 @@ function ArtSection() {
 
 function CategoriesSection() {
   const prefs = useStore((s) => s.prefs)!
-  const games = useStore((s) => s.snapshot!.games)
+  const snapshot = useStore((s) => s.snapshot)!
   const [prompt, setPrompt] = useState<{ mode: 'new' } | { mode: 'rename'; cat: Category } | null>(null)
   const [confirm, setConfirm] = useState<Category | null>(null)
   const cats = sortedCategories(prefs)
   const pinned = cats.filter((c) => c.pinned)
-  const counts = (c: Category): number =>
-    c.kind === 'custom' ? games.filter((g) => prefs.gameCategories[g.id]?.includes(c.id)).length : -1
+  const others = cats.filter((c) => !c.pinned)
+  const kindLabel = (c: Category): string => {
+    if (c.kind === 'smart') return 'wbudowana'
+    const count = gamesForCategory(c, snapshot.games, prefs, snapshot.collections).length
+    if (c.kind !== 'steam') return `własna · ${gameCountLabel(count)}`
+    const total = snapshot.collections?.find((col) => col.id === c.steamCollectionId)?.appIds.length ?? 0
+    if (total === 0) return 'kolekcja Steam · pusta'
+    if (count === 0) return `kolekcja Steam · ${total} pozycji spoza Steam (skróty — jeszcze nieobsługiwane)`
+    return `kolekcja Steam · ${gameCountLabel(count)}`
+  }
+  const dynamic = (snapshot.collections ?? []).filter((c) => c.dynamic)
+
+  const row = (c: Category, i: number, list: Category[]) => (
+    <div key={c.id} className={`cats__row ${c.pinned ? 'is-pinned' : ''}`}>
+      <span className="cats__name">
+        {c.name}
+        <small>{kindLabel(c)}</small>
+      </span>
+      <button className={`btn btn--sm ${c.pinned ? 'btn--on' : ''}`} data-nav data-key={`pin-${c.id}`} onClick={() => void attempt(api().prefs.setPinned(c.id, !c.pinned))}>
+        {c.pinned ? 'Odepnij' : 'Przypnij'}
+      </button>
+      {c.pinned && (
+        <>
+          <button className="btn btn--sm" data-nav data-key={`up-${c.id}`} aria-label="W górę" disabled={i === 0} onClick={() => void attempt(api().prefs.moveCategory(c.id, -1))}>
+            ↑
+          </button>
+          <button className="btn btn--sm" data-nav data-key={`down-${c.id}`} aria-label="W dół" disabled={i === list.length - 1} onClick={() => void attempt(api().prefs.moveCategory(c.id, 1))}>
+            ↓
+          </button>
+        </>
+      )}
+      {c.kind === 'custom' && (
+        <>
+          <button className="btn btn--sm" data-nav onClick={() => setPrompt({ mode: 'rename', cat: c })}>
+            Zmień nazwę
+          </button>
+          <button className="btn btn--sm btn--danger" data-nav onClick={() => setConfirm(c)}>
+            Usuń
+          </button>
+        </>
+      )}
+    </div>
+  )
 
   return (
-    <Section title="Kategorie i ekran Start" desc="Przypięte kategorie pojawiają się jako rzędy na ekranie Start w podanej kolejności.">
-      <div className="cats" data-nav-group="categories">
-        {cats.map((c) => (
-          <div key={c.id} className={`cats__row ${c.pinned ? 'is-pinned' : ''}`}>
-            <span className="cats__name">
-              {c.name}
-              <small>{c.kind === 'smart' ? 'wbudowana' : gameCountLabel(counts(c))}</small>
-            </span>
-            <button className={`btn btn--sm ${c.pinned ? 'btn--on' : ''}`} data-nav data-key={`pin-${c.id}`} onClick={() => void attempt(api().prefs.setPinned(c.id, !c.pinned))}>
-              {c.pinned ? 'Przypięta' : 'Przypnij'}
-            </button>
-            <button className="btn btn--sm" data-nav data-key={`up-${c.id}`} aria-label="W górę" disabled={c.order === 0} onClick={() => void attempt(api().prefs.moveCategory(c.id, -1))}>
-              ↑
-            </button>
-            <button className="btn btn--sm" data-nav data-key={`down-${c.id}`} aria-label="W dół" disabled={c.order === cats.length - 1} onClick={() => void attempt(api().prefs.moveCategory(c.id, 1))}>
-              ↓
-            </button>
-            <button className="btn btn--sm" data-nav disabled={c.kind === 'smart'} onClick={() => setPrompt({ mode: 'rename', cat: c })}>
-              Zmień nazwę
-            </button>
-            <button className="btn btn--sm btn--danger" data-nav disabled={c.kind === 'smart'} onClick={() => setConfirm(c)}>
-              Usuń
-            </button>
-          </div>
-        ))}
+    <Section
+      title="Kategorie i ekran Start"
+      desc="Przypięte kategorie to rzędy na ekranie Start (w tej kolejności). Kolekcje Steam są odczytywane z klienta Steam i aktualizują się same — Lumen ich nie zmienia. Własne kategorie przypisujesz w ekranie gry → „Kategorie”."
+    >
+      <h3 className="cats__heading">Przypięte ({pinned.length})</h3>
+      <div className="cats" data-nav-group="categories-pinned">
+        {pinned.map((c, i) => row(c, i, pinned))}
+        {!pinned.length && <p className="card__desc">Nic nie jest przypięte — ekran Start będzie pusty.</p>}
+      </div>
+      <h3 className="cats__heading">Pozostałe ({others.length})</h3>
+      <div className="cats" data-nav-group="categories-other">
+        {others.map((c, i) => row(c, i, others))}
       </div>
       <div className="modal__row">
         <button className="btn btn--primary" data-nav onClick={() => setPrompt({ mode: 'new' })}>
           Nowa kategoria
         </button>
-        <span className="card__desc">Przypiętych: {pinned.length}</span>
       </div>
+      {snapshot.collections === null && !snapshot.demo && (
+        <p className="card__desc">Nie udało się odczytać kolekcji Steam (brak Steam lub konta na tym komputerze).</p>
+      )}
+      {dynamic.length > 0 && (
+        <p className="card__desc">
+          Kolekcje dynamiczne Steam nie są pokazywane, bo Steam wylicza je z własnych danych o grach, których Lumen nie ma:{' '}
+          {dynamic.map((c) => c.name).join(', ')}.
+        </p>
+      )}
       {prompt && (
         <NamePrompt
           title={prompt.mode === 'new' ? 'Nowa kategoria' : 'Zmień nazwę kategorii'}

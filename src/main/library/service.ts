@@ -17,6 +17,7 @@ import {
 } from '../steam/local'
 import { getOwnedGames, type OwnedGame } from '../steam/webApi'
 import { mergeLibrary } from './merge'
+import { collectionsDir, readCollections } from '../steam/collections'
 import { demoGames } from './demo'
 
 const ACCOUNT_TTL_MS = 6 * 3600 * 1000
@@ -37,6 +38,7 @@ export class LibraryService extends EventEmitter {
     games: [],
     steam: { status: 'unknown', libraryFolders: [], users: [] },
     account: { state: 'disabled', reason: 'noKey' },
+    collections: null,
     demo: false,
     scannedAt: 0,
     warnings: []
@@ -125,7 +127,10 @@ export class LibraryService extends EventEmitter {
       (reg.activeUserAccountId ? accountIdToSteamId64(reg.activeUserAccountId) : undefined) ??
       users[0]?.steamId64
     const accountId = activeSteamId ? steamId64ToAccountId(activeSteamId) : undefined
-    const localStats = installPath && accountId ? await readLocalPlayStats(installPath, accountId) : new Map()
+    const [localStats, collections] = await Promise.all([
+      installPath && accountId ? readLocalPlayStats(installPath, accountId) : Promise.resolve(new Map()),
+      installPath && accountId && !settings.demoMode ? readCollections(installPath, accountId) : Promise.resolve(null)
+    ])
 
     const useAccount = this.account && this.account.steamId === activeSteamId && !this.account.private
     const games = settings.demoMode
@@ -143,11 +148,12 @@ export class LibraryService extends EventEmitter {
       games,
       steam: { status, installPath, libraryFolders, users, activeSteamId, runningAppId: reg.runningAppId || undefined },
       account: this.computeAccountStatus(activeSteamId),
+      collections,
       demo: settings.demoMode,
       scannedAt: Date.now(),
       warnings
     }
-    this.watchFolders(libraryFolders)
+    this.watchFolders(libraryFolders, installPath && accountId ? collectionsDir(installPath, accountId) : undefined)
     this.emitIfChanged()
     log.info(
       'library',
@@ -248,8 +254,8 @@ export class LibraryService extends EventEmitter {
   }
 
   /** Watch steamapps folders so installs/updates started in Steam show up without a manual refresh. */
-  private watchFolders(folders: string[]): void {
-    const key = folders.join('|')
+  private watchFolders(folders: string[], collectionsDirectory?: string): void {
+    const key = [...folders, collectionsDirectory].join('|')
     if (key === this.watchedFolders) return
     this.watchedFolders = key
     this.watchers.forEach((w) => w.close())
@@ -265,6 +271,20 @@ export class LibraryService extends EventEmitter {
         this.watchers.push(w)
       } catch (e) {
         log.warn('library', `cannot watch ${f}: ${(e as Error).message}`)
+      }
+    }
+    if (collectionsDirectory) {
+      // Steam rewrites this file when collections change (also after syncing from another PC)
+      try {
+        const w = watch(collectionsDirectory, { persistent: false }, (_ev, file) => {
+          if (file && !/^cloud-storage-namespace-1/i.test(String(file))) return
+          clearTimeout(this.rescanTimer)
+          this.rescanTimer = setTimeout(() => void this.scan(), 800)
+        })
+        w.on('error', () => undefined)
+        this.watchers.push(w)
+      } catch {
+        /* collections are optional */
       }
     }
   }

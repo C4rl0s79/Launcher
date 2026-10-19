@@ -74,7 +74,7 @@ export function LibraryScreen({ active }: { active: boolean }) {
   const hasRecent = snapshot.games.some((g) => g.lastPlayed)
 
   const games = useMemo(() => {
-    let list = cat ? gamesForCategory(cat, snapshot.games, prefs) : snapshot.games
+    let list = cat ? gamesForCategory(cat, snapshot.games, prefs, snapshot.collections) : snapshot.games
     if (filter === 'installed') list = list.filter((g) => g.installed)
     if (filter === 'notInstalled') list = list.filter((g) => !g.installed)
     const q = norm(query.trim())
@@ -210,7 +210,7 @@ export function LibraryScreen({ active }: { active: boolean }) {
                   }}
                 >
                   {c.name}
-                  <span className="list__meta">{gameCountLabel(gamesForCategory(c, snapshot.games, prefs).length)}</span>
+                  <span className="list__meta">{gameCountLabel(gamesForCategory(c, snapshot.games, prefs, snapshot.collections).length)}</span>
                 </button>
               ))}
           </div>

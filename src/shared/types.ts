@@ -60,6 +60,16 @@ export type AccountLibraryStatus =
   | { state: 'private'; fetchedAt: number }
   | { state: 'error'; message: string; fetchedAt: number; cachedCount?: number }
 
+/** A Steam library collection (read-only, from the local Steam client data). */
+export interface SteamCollection {
+  id: string
+  name: string
+  /** explicit members (added minus removed); for dynamic collections only the manual additions */
+  appIds: number[]
+  dynamic: boolean
+  kind: 'user' | 'favorite' | 'hidden'
+}
+
 export interface LibrarySnapshot {
   games: Game[]
   steam: {
@@ -71,6 +81,8 @@ export interface LibrarySnapshot {
     runningAppId?: number
   }
   account: AccountLibraryStatus
+  /** null = Steam collections could not be read */
+  collections: SteamCollection[] | null
   demo: boolean
   scannedAt: number
   warnings: string[]
@@ -102,8 +114,10 @@ export type SmartCategoryType = 'recent' | 'installed' | 'favorites' | 'notInsta
 export interface Category {
   id: string
   name: string
-  kind: 'smart' | 'custom'
+  /** smart = built-in rule, custom = Lumen category, steam = mirror of a Steam collection (read-only) */
+  kind: 'smart' | 'custom' | 'steam'
   smart?: SmartCategoryType
+  steamCollectionId?: string
   pinned: boolean
   /** order among pinned categories on the home screen */
   order: number

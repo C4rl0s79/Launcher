@@ -17,9 +17,9 @@ export function HomeScreen({ active }: { active: boolean }) {
   const rows = useMemo(() => {
     return sortedCategories(prefs)
       .filter((c) => c.pinned)
-      .map((c) => ({ cat: c, games: gamesForCategory(c, snapshot.games, prefs) }))
+      .map((c) => ({ cat: c, games: gamesForCategory(c, snapshot.games, prefs, snapshot.collections) }))
       .filter((r) => r.games.length || (snapshot.games.length > 0 && (r.cat.kind === 'custom' || r.cat.smart === 'favorites')))
-  }, [prefs, snapshot.games])
+  }, [prefs, snapshot.games, snapshot.collections])
 
   // keep the spotlight in sync with live data (install state, running…)
   const spotGame = spot ? (snapshot.games.find((g) => g.id === spot.id) ?? null) : null

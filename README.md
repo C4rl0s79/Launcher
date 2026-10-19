@@ -9,7 +9,8 @@ akcją główną. Nie ma tu newsów, reklam ani aktywności znajomych.
 - **Uruchamianie i instalacja** są przekazywane do klienta Steam (`steam://rungameid/…`, `steam://install/…`).
 - **Pełna biblioteka konta** (także niezainstalowane gry) — opcjonalnie przez oficjalne Steam Web API z Twoim kluczem.
 - **Grafiki** — SteamGridDB (opcjonalny klucz) albo oficjalne grafiki Steam; lokalny cache.
-- **Własne kategorie, ulubione, przypięcia** — zapisywane lokalnie, niezależnie od kolekcji Steam.
+- **Kolekcje Steam** — Twoje statyczne kolekcje ze Steama (tylko odczyt) można przypinać jako rzędy ekranu Start.
+- **Własne kategorie, ulubione, przypięcia** — zapisywane lokalnie (Ustawienia → Kategorie; gry przypisujesz w ekranie gry → „Kategorie”).
 
 ## Wymagania
 
