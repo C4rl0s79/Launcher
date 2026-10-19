@@ -908,10 +908,13 @@ button {
 }
 .details__body {
   display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
-  gap: calc(var(--gap) * 2);
+  /* description takes the free width, facts sit in a column at the right edge */
+  grid-template-columns: minmax(0, 1fr) clamp(240px, 20vw, 420px);
+  gap: clamp(32px, 5vw, 120px);
   margin-top: 8vh;
-  max-width: 1500px;
+}
+.details__body > :only-child {
+  grid-column: 1 / -1;
 }
 .details__desc {
   color: var(--text-2);
@@ -922,7 +925,7 @@ button {
 }
 .details__desc p {
   margin: 0 0 0.9em;
-  max-width: 75ch;
+  max-width: 140ch;
 }
 .details__desc:focus {
   background: rgba(255, 255, 255, 0.05);
@@ -1526,4 +1529,14 @@ p.card__desc[data-nav]:focus {
 .grid-static .poster:hover .poster__label {
   opacity: 1;
   color: var(--text);
+}
+
+/* facts column on the right edge sits over the brightest part of hero art — give it a backing */
+.details__body .facts {
+  align-self: start;
+  padding: 1.1em 1.3em;
+  border-radius: var(--radius);
+  background: rgba(10, 12, 17, 0.62);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--line);
 }

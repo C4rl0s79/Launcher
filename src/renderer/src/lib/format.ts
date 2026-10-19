@@ -69,11 +69,15 @@ export function hueOf(s: string): number {
 }
 
 /** Plain text paragraphs from Steam's HTML description (never injected as HTML). */
-export function htmlToParagraphs(html: string, max = 6): string[] {
+export function htmlToParagraphs(html: string, max = 10): string[] {
   const doc = new DOMParser().parseFromString(html, 'text/html')
   doc.querySelectorAll('img, video, script, style').forEach((n) => n.remove())
   doc.querySelectorAll('br').forEach((n) => n.replaceWith('\n'))
-  doc.querySelectorAll('p, h1, h2, h3, li, div').forEach((n) => n.append('\n'))
+  // break before *and* after blocks, otherwise "…events.<h2>Content Description</h2>" glues together
+  doc.querySelectorAll('p, h1, h2, h3, h4, h5, li, div, ul, ol').forEach((n) => {
+    n.before('\n')
+    n.append('\n')
+  })
   return (doc.body.textContent ?? '')
     .split(/\n+/)
     .map((x) => x.replace(/\s+/g, ' ').trim())
