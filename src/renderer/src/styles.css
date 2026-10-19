@@ -1393,3 +1393,18 @@ p.card__desc[data-nav]:focus {
     transition-duration: 0.001ms !important;
   }
 }
+
+.poster--more .poster__frame {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-2);
+  font-weight: 700;
+}
+.poster--more strong {
+  font-size: 2em;
+  color: var(--text);
+}

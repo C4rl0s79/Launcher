@@ -69,6 +69,9 @@ export function HomeScreen({ active }: { active: boolean }) {
   )
 }
 
+/** Home rows are not virtualised, so keep them short; the library shows everything. */
+const ROW_LIMIT = 40
+
 function Row({
   cat,
   games,
@@ -92,9 +95,17 @@ function Row({
       </header>
       {games.length ? (
         <div className="row__track">
-          {games.map((g, i) => (
+          {games.slice(0, ROW_LIMIT).map((g, i) => (
             <Poster key={g.id} game={g} favorite={favs.has(g.id)} onOpen={onOpen} onFocusGame={onFocusGame} autofocus={first && i === 0} />
           ))}
+          {games.length > ROW_LIMIT && (
+            <button className="poster poster--more" data-nav data-key={`more-${cat.id}`} onClick={() => useStore.getState().showInLibrary(cat.smart === 'all' ? null : cat.id)}>
+              <div className="poster__frame">
+                <span>Pokaż wszystkie</span>
+                <strong>{games.length}</strong>
+              </div>
+            </button>
+          )}
         </div>
       ) : (
         <div className="row__empty">

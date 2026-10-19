@@ -41,6 +41,7 @@ export interface LumenApi {
     get(): Promise<Settings>
     patch(p: SettingsPatch): Promise<Settings>
     setSecret(name: SecretName, value: string | null): Promise<Settings>
+    onChange(cb: (s: Settings) => void): () => void
   }
   art: {
     url(gameId: string, kind: ArtKind, rev?: number): string
@@ -80,6 +81,7 @@ export const IPC = {
   settingsGet: 'settings:get',
   settingsPatch: 'settings:patch',
   settingsSecret: 'settings:secret',
+  settingsChanged: 'settings:changed',
   artOptions: 'art:options',
   artSearch: 'art:search',
   artSetMatch: 'art:setMatch',

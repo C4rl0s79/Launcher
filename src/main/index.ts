@@ -246,6 +246,7 @@ function registerIpc(): void {
       await library.scan()
       if (before.steamIdOverride !== after.steamIdOverride) void library.refreshAccount(true)
     }
+    send(IPC.settingsChanged, after)
     return after
   })
   handle(IPC.settingsSecret, async (name: SecretName, value: string | null) => {
@@ -256,6 +257,7 @@ function registerIpc(): void {
       // previous "not found" results may have been caused by a missing key
       for (const g of library.current.games) bumpArt(g.id)
     }
+    send(IPC.settingsChanged, settings.get())
     return settings.get()
   })
 

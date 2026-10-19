@@ -51,6 +51,14 @@ export function LibraryScreen({ active }: { active: boolean }) {
   const [category, setCategory] = useState<string | null>(initial.category)
   const [pickCat, setPickCat] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
+  const request = useStore((s) => s.libraryRequest)
+
+  useEffect(() => {
+    if (!request) return
+    setCategory(request.category)
+    setFilter('all')
+    setQuery('')
+  }, [request])
 
   useEffect(() => {
     try {

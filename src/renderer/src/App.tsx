@@ -27,6 +27,7 @@ export function App() {
     const offs = [
       a.library.onSnapshot(s.setSnapshot),
       a.prefs.onChange(s.setPrefs),
+      a.settings.onChange(s.setSettings),
       a.art.onChanged(s.bumpArt),
       installKeyboard(),
       installGamepad()

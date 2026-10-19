@@ -28,6 +28,9 @@ interface State {
   detailsId: string | null
   inputMode: InputMode
   toasts: Toast[]
+  /** set by "show all" tiles on the home screen; consumed by the library screen */
+  libraryRequest: { category: string | null; n: number } | null
+  showInLibrary(category: string | null): void
   setSnapshot(s: LibrarySnapshot): void
   setPrefs(p: Prefs): void
   setSettings(s: Settings): void
@@ -59,6 +62,11 @@ export const useStore = create<State>((set) => ({
   detailsId: null,
   inputMode: 'keyboard',
   toasts: [],
+  libraryRequest: null,
+  showInLibrary: (category) => {
+    useStore.getState().setTab('library')
+    set((s) => ({ libraryRequest: { category, n: (s.libraryRequest?.n ?? 0) + 1 } }))
+  },
   setSnapshot: (snapshot) => set({ snapshot }),
   setPrefs: (prefs) => set({ prefs }),
   setSettings: (settings) => set({ settings }),

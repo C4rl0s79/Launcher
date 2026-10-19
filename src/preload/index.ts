@@ -37,7 +37,8 @@ const api: LumenApi = {
   settings: {
     get: () => invoke(IPC.settingsGet),
     patch: (p) => invoke(IPC.settingsPatch, p),
-    setSecret: (name, value) => invoke(IPC.settingsSecret, name, value)
+    setSecret: (name, value) => invoke(IPC.settingsSecret, name, value),
+    onChange: (cb) => subscribe(IPC.settingsChanged, cb)
   },
   art: {
     url: (gameId, kind, rev = 0) => `${ART_SCHEME}://img/${encodeURIComponent(gameId)}/${kind}?r=${rev}`,
