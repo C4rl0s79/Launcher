@@ -11,3 +11,4 @@ data/
 secrets.json
 .vite/
 coverage/
+LumenData/
