@@ -14,6 +14,8 @@ export class NetworkError extends Error {}
 
 /** fetch() with a hard timeout; network failures are normalised into NetworkError. */
 export async function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs = 15000): Promise<Response> {
+  // LUMEN_OFFLINE=1 simulates a dead network (manual testing of offline behaviour)
+  if (process.env.LUMEN_OFFLINE === '1') throw new NetworkError(`Network error (simulated offline) for ${redact(url)}`)
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), timeoutMs)
   try {
