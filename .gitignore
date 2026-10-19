@@ -1,0 +1,13 @@
+node_modules/
+out/
+dist/
+release/
+*.log
+.env
+.env.*
+# local runtime data, caches, secrets (the app stores them in %APPDATA%, never here)
+cache/
+data/
+secrets.json
+.vite/
+coverage/

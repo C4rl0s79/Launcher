@@ -1,0 +1,12 @@
+"AppState"
+{
+	"appid"		"1245620"
+	"name"		"ELDEN RING"
+	"StateFlags"		"1026"
+	"installdir"		"ELDEN RING"
+	"SizeOnDisk"		"0"
+	"BytesToDownload"		"50000000000"
+	"BytesDownloaded"		"12500000000"
+	"BytesToStage"		"50000000000"
+	"BytesStaged"		"12000000000"
+}
