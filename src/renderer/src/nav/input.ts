@@ -99,6 +99,11 @@ export function dispatch(action: Action, source: InputMode): void {
     case 'right':
       move(action)
       return
+    case 'lt':
+    case 'rt':
+      // page jump: several rows at once
+      for (let i = 0; i < 3; i++) if (!move(action === 'lt' ? 'up' : 'down', false)) break
+      return
     case 'confirm': {
       const el = currentFocus()
       if (!el) return
