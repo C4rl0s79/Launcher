@@ -19,6 +19,7 @@ export function LibraryNotice({ compact }: { compact?: boolean }) {
   }
 
   const local = games.filter((g) => g.provenance.includes('localManifest')).length
+  const shortcuts = games.filter((g) => g.source === 'shortcut').length
   let accountText: string
   switch (account.state) {
     case 'ok':
@@ -43,7 +44,14 @@ export function LibraryNotice({ compact }: { compact?: boolean }) {
   return (
     <div className={`notice ${compact ? 'notice--compact' : ''}`}>
       <span>
-        Na dysku: <strong>{gameCountLabel(local)}</strong> · {accountText}
+        Na dysku: <strong>{gameCountLabel(local)}</strong>
+        {shortcuts > 0 && (
+          <>
+            {' '}
+            · skróty spoza Steam: <strong>{shortcuts}</strong>
+          </>
+        )}{' '}
+        · {accountText}
       </span>
       {warnings.map((w) => (
         <span key={w} className="notice__warn">

@@ -36,6 +36,8 @@ export interface ArtDeps {
   sgdb: SgdbClient
   priority: () => ArtSourcePriority
   prefsFor: (gameId: string) => GameArtPrefs | undefined
+  /** userdata/<accountId>/config/grid of the active Steam account */
+  userGridDir?: () => string | undefined
   /** injectable for tests */
   fetchBytes?: (url: string) => Promise<{ bytes: Buffer; contentType?: string } | null>
 }
@@ -113,12 +115,16 @@ export class ArtworkService {
     }
   }
 
-  /** Main entry used by the image protocol. Returns an absolute file path or null. */
-  async resolve(gameId: string, appId: number | undefined, kind: ArtKind, name?: string): Promise<string | null> {
+  /**
+   * Main entry used by the image protocol. Returns an absolute file path or null.
+   * `appId` is the Steam store app id (undefined for non-Steam shortcuts); `gridId` is the id
+   * Steam uses for custom artwork in userdata/<id>/config/grid (app id or shortcut id).
+   */
+  async resolve(gameId: string, appId: number | undefined, kind: ArtKind, name?: string, gridId: number | undefined = appId): Promise<string | null> {
     const key = `${gameId}|${kind}`
     const existing = this.inflight.get(key)
     if (existing) return existing
-    const p = this.resolveInner(gameId, appId, kind, name)
+    const p = this.resolveInner(gameId, appId, kind, name, gridId)
       .catch((e) => {
         log.warn('art', `resolve ${key} failed: ${(e as Error).message}`)
         return null
@@ -128,7 +134,13 @@ export class ArtworkService {
     return p
   }
 
-  private async resolveInner(gameId: string, appId: number | undefined, kind: ArtKind, name?: string): Promise<string | null> {
+  private async resolveInner(
+    gameId: string,
+    appId: number | undefined,
+    kind: ArtKind,
+    name: string | undefined,
+    gridId: number | undefined
+  ): Promise<string | null> {
     await this.ensureLoaded()
     const prefs = this.deps.prefsFor(gameId)
     const choice: ArtChoice | undefined = prefs?.[kind]
@@ -137,11 +149,17 @@ export class ArtworkService {
       if (choice.type === 'none') return null
       if (choice.type === 'file') return (await exists(choice.file)) ? choice.file : null
       if (choice.type === 'sgdb') return this.cachedDownload(`${gameId}|${kind}|sgdb-${choice.imageId}`, choice.url, gameId, kind)
-      if (choice.type === 'steam') return appId ? this.fromSteam(gameId, appId, kind) : null
+      if (choice.type === 'steam') return (gridId && (await this.fromUserGrid(gridId, kind))) || (appId ? this.fromSteam(gameId, appId, kind) : null)
     }
 
-    if (!appId) return null
+    // Artwork the user set in Steam (or a tool like Steam ROM Manager wrote) beats automatic picks.
+    if (gridId) {
+      const custom = await this.fromUserGrid(gridId, kind)
+      if (custom) return custom
+    }
+
     const sgdb = (): Promise<string | null> => this.fromSgdbAuto(gameId, appId, kind, name, prefs?.sgdbGameId)
+    if (!appId) return sgdb()
     const steam = (): Promise<string | null> => this.fromSteam(gameId, appId, kind)
     const chain = this.deps.priority() === 'steamFirst' ? [steam, sgdb] : [sgdb, steam]
     for (const step of chain) {
@@ -152,6 +170,45 @@ export class ArtworkService {
   }
 
   // ---------- Steam sources ----------
+
+  /**
+   * Custom artwork in userdata/<accountId>/config/grid, named by Steam's convention:
+   * <id>p.* (portrait poster), <id>_hero.*, <id>_logo.*, <id>_icon.* / <id>.ico. Read-only.
+   */
+  private async fromUserGrid(gridId: number, kind: ArtKind): Promise<string | null> {
+    const files = await this.userGridFiles()
+    if (!files) return null
+    const stems: Record<ArtKind, string[]> = {
+      grid: [`${gridId}p`],
+      hero: [`${gridId}_hero`],
+      logo: [`${gridId}_logo`],
+      icon: [`${gridId}_icon`, `${gridId}`]
+    }
+    const exts = kind === 'icon' ? ['.png', '.ico', '.jpg', '.webp'] : ['.png', '.jpg', '.jpeg', '.webp']
+    for (const stem of stems[kind]) for (const ext of exts) {
+      const hit = files.get(stem + ext)
+      if (hit) return hit
+    }
+    return null
+  }
+
+  private gridListing: { at: number; dir: string; files: Map<string, string> | null } | undefined
+
+  /** Directory listing cached for a few seconds (the folder can hold thousands of files). */
+  private async userGridFiles(): Promise<Map<string, string> | null> {
+    const dir = this.deps.userGridDir?.()
+    if (!dir) return null
+    const now = Date.now()
+    if (this.gridListing && this.gridListing.dir === dir && now - this.gridListing.at < 10000) return this.gridListing.files
+    let files: Map<string, string> | null = null
+    try {
+      files = new Map((await fs.readdir(dir)).map((f) => [f.toLowerCase(), path.join(dir, f)]))
+    } catch {
+      files = null
+    }
+    this.gridListing = { at: now, dir, files }
+    return files
+  }
 
   private async fromSteam(gameId: string, appId: number, kind: ArtKind): Promise<string | null> {
     const names = STEAM_FILES[kind]
@@ -188,21 +245,25 @@ export class ArtworkService {
 
   private async fromSgdbAuto(
     gameId: string,
-    appId: number,
+    appId: number | undefined,
     kind: ArtKind,
     name: string | undefined,
     manualGameId: number | undefined
   ): Promise<string | null> {
     if (!this.deps.sgdb.enabled) return null
+    if (!appId && !manualGameId && !name) return null
     const key = `${gameId}|${kind}|sgdb-auto${manualGameId ? `-${manualGameId}` : ''}`
     const entry = this.index.entries[key]
     if (entry?.file && (await exists(entry.file))) return entry.file
     if (entry?.missUntil && entry.missUntil > Date.now()) return null
 
     try {
+      // non-Steam shortcuts (no app id) go straight to the title search below
       let options = manualGameId
         ? await this.deps.sgdb.images(kind, { gameId: manualGameId })
-        : await this.deps.sgdb.images(kind, { steamAppId: appId })
+        : appId
+          ? await this.deps.sgdb.images(kind, { steamAppId: appId })
+          : []
       if (!options.length && !manualGameId && name) {
         // fallback: match by title
         const matchId = await this.autoMatch(gameId, name)

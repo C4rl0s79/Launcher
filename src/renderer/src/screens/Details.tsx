@@ -31,6 +31,8 @@ export function DetailsScreen({ gameId }: { gameId: string }) {
 
   useEffect(() => {
     let alive = true
+    // only Steam store apps have store metadata
+    if (!gameId.startsWith('steam:')) return
     void api()
       .game.details(gameId)
       .then((d) => alive && setDetails(d))
@@ -105,6 +107,8 @@ export function DetailsScreen({ gameId }: { gameId: string }) {
       case 'uninstalling':
         return { label: 'Odinstalowywanie…', disabled: true }
       case 'broken':
+        if (game.shortcut)
+          return { label: 'Brak programu', disabled: true, note: `Nie znaleziono pliku: ${game.shortcut.exe}` }
         return {
           label: 'Otwórz w Steam',
           run: wrap(() => api().game.openInSteam(gameId, 'details')),
@@ -135,7 +139,9 @@ export function DetailsScreen({ gameId }: { gameId: string }) {
     ['Producent', d?.developers?.join(', ')],
     ['Wydawca', d?.publishers?.join(', ')],
     ['Rozmiar na dysku', game.installed ? formatBytes(game.sizeOnDisk) : undefined],
-    ['Biblioteka', game.installed ? game.libraryPath : undefined]
+    ['Biblioteka', game.installed ? game.libraryPath : undefined],
+    ['Platforma', game.shortcut?.tags.join(', ') || undefined],
+    ['Źródło', game.shortcut ? 'Skrót spoza Steam (uruchamiany przez Steam)' : undefined]
   ]
   const presentFacts = facts.filter((f): f is [string, string] => !!f[1])
   const chips = [

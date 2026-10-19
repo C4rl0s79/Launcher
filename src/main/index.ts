@@ -9,10 +9,11 @@ import { ops, PrefsError, PrefsStore } from './store/prefs'
 import { SettingsStore } from './store/settings'
 import { LibraryService } from './library/service'
 import { StoreMetadataProvider } from './steam/storeMeta'
-import { openSteam } from './steam/actions'
-import { SgdbAuthError, SgdbClient } from './art/sgdb'
+import { openSteam, openSteamUri, shortcutRunUri } from './steam/actions'
+import { pickBestMatch, SgdbAuthError, SgdbClient } from './art/sgdb'
 import { ArtworkService } from './art/artwork'
 import { isPlayable } from './steam/manifests'
+import { steamId64ToAccountId } from './steam/local'
 
 const ART_KINDS: ArtKind[] = ['grid', 'hero', 'logo', 'icon']
 
@@ -49,7 +50,12 @@ const artwork = new ArtworkService({
   steamPath: () => library.steamPath,
   sgdb,
   priority: () => settings.get().artPriority,
-  prefsFor: (id) => prefs.get().art[id]
+  prefsFor: (id) => prefs.get().art[id],
+  userGridDir: () => {
+    const { installPath, activeSteamId } = library.current.steam
+    const accountId = activeSteamId ? steamId64ToAccountId(activeSteamId) : undefined
+    return installPath && accountId ? path.join(installPath, 'userdata', String(accountId), 'config', 'grid') : undefined
+  }
 })
 
 let win: BrowserWindow | null = null
@@ -132,7 +138,10 @@ function registerArtProtocol(): void {
       const gameId = decodeURIComponent(rawId ?? '')
       if (!ART_KINDS.includes(kind as ArtKind)) return new Response('bad kind', { status: 400 })
       const game = findGame(gameId)
-      const file = await artwork.resolve(gameId, game?.appId || steamAppIdOf(gameId), kind as ArtKind, game?.name)
+      const shortcutId = /^shortcut:(\d+)$/.exec(gameId)
+      const file = shortcutId
+        ? await artwork.resolve(gameId, undefined, kind as ArtKind, game?.name, Number(shortcutId[1]))
+        : await artwork.resolve(gameId, game?.appId || steamAppIdOf(gameId), kind as ArtKind, game?.name)
       if (!file) return new Response('not found', { status: 404 })
       const res = await net.fetch(pathToFileURL(file).toString())
       const headers = new Headers(res.headers)
@@ -183,8 +192,10 @@ function registerIpc(): void {
     if (!game) return fail('Nie znaleziono gry w bibliotece.')
     if (game.source === 'demo') return fail('To jest gra demonstracyjna — nie można jej uruchomić.')
     if (library.current.steam.status === 'notInstalled') return fail('Nie znaleziono klienta Steam na tym komputerze.')
-    if (!isPlayable(game.installState)) return fail('Gra nie jest gotowa do uruchomienia.')
-    await openSteam('run', game.appId)
+    if (!isPlayable(game.installState))
+      return fail(game.source === 'shortcut' ? 'Nie znaleziono programu tego skrótu na dysku.' : 'Gra nie jest gotowa do uruchomienia.')
+    if (game.shortcut) await openSteamUri(shortcutRunUri(game.shortcut.gameId64))
+    else await openSteam('run', game.appId)
     launchedAppId = game.appId
     const steamRunning = library.current.steam.status === 'running'
     if (settings.get().afterLaunch === 'minimize') setTimeout(() => win?.minimize(), steamRunning ? 1500 : 4000)
@@ -194,7 +205,7 @@ function registerIpc(): void {
   handle(IPC.gameInstall, async (gameId: string): Promise<ActionResult> => {
     const game = findGame(gameId)
     if (!game) return fail('Nie znaleziono gry w bibliotece.')
-    if (game.source === 'demo') return fail('To jest gra demonstracyjna — nie można jej zainstalować.')
+    if (game.source !== 'steam') return fail('Tej pozycji nie instaluje się przez Steam.')
     if (library.current.steam.status === 'notInstalled') return fail('Nie znaleziono klienta Steam na tym komputerze.')
     await openSteam('install', game.appId)
     return { ok: true, message: 'Steam otworzy okno instalacji — potwierdź tam lokalizację.' }
@@ -206,7 +217,7 @@ function registerIpc(): void {
       await openSteam('downloads')
       return { ok: true }
     }
-    if (!game || game.source === 'demo') return fail('Ta pozycja nie jest grą Steam.')
+    if (!game || game.source !== 'steam') return fail('Ta pozycja nie jest grą ze sklepu Steam.')
     await openSteam(view, game.appId)
     return { ok: true }
   })
@@ -275,7 +286,12 @@ function registerIpc(): void {
           options: await sgdb.images(kind, { gameId: manual.sgdbGameId })
         }
       }
-      if (!appId) return { ok: true, options: [] }
+      if (!appId) {
+        // non-Steam shortcut: match by title (the user can correct it with "Zmień dopasowanie")
+        const name = findGame(gameId)?.name
+        const match = name ? pickBestMatch(name, await sgdb.search(name)) : undefined
+        return { ok: true, sgdbGame: match, options: match ? await sgdb.images(kind, { gameId: match.id }) : [] }
+      }
       const [game, options] = await Promise.all([sgdb.gameBySteamId(appId), sgdb.images(kind, { steamAppId: appId })])
       return { ok: true, sgdbGame: game, options }
     } catch (e) {

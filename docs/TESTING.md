@@ -2,7 +2,7 @@
 
 ## Automatyczne (`npm test`)
 
-79 testów (vitest), bez sieci i bez prawdziwego Steama (fixture'y w `tests/fixtures`):
+86 testów (vitest), bez sieci i bez prawdziwego Steama (fixture'y w `tests/fixtures`):
 
 - `tests/steam.test.ts` — parser VDF (zagnieżdżenia, escape, BOM, błędy), mapowanie StateFlags → stan,
   postęp tylko z prawdziwych liczników, filtr narzędzi, `libraryfolders.vdf` (nowy i stary format),
@@ -17,6 +17,8 @@
   awaria sieci / zły klucz, czyszczenie cache.
 - `tests/collections.test.ts` — parser kolekcji Steam (statyczne, dynamiczne, usunięte, plik .modified), synchronizacja
   z kategoriami (zachowanie przypięć i kolejności, zmiany nazw, usunięte kolekcje, blokada edycji).
+- `tests/shortcuts.test.ts` — binarny VDF, skróty spoza Steama (klucze, ukryte, brak programu), id 64-bit do uruchomienia,
+  grafiki z folderu `grid` Steama, wyszukiwanie SteamGridDB po nazwie dla skrótów.
 - `tests/library.test.ts` — wykrywanie startu i końca gry (regresja: zdarzenia „połykane” przez skan).
 - `tests/nav.test.ts` — geometria nawigacji (wiersze, końce wierszy, pasek narzędzi), mapowanie klawiatury
   (w tym pola tekstowe), mapowanie pada i martwa strefa gałki, URI `steam://`.
@@ -36,6 +38,9 @@ Aplikacja sterowana przez Chrome DevTools Protocol (`scripts/cdp.mjs`: zrzuty ek
 - [x] Akcja główna „Graj” dla zainstalowanej gry; fokus startowy na niej.
 - [x] Esc zamyka szczegóły i przywraca zaznaczenie na tym samym plakacie.
 - [x] Wyszukiwanie po nazwie, filtr, liczniki.
+- [x] Skróty spoza Steama: 243 wczytane z `shortcuts.vdf`, 2 poprawnie oznaczone jako „brak programu” (folderów nie ma
+      na dysku); kolekcja PS2 przypięta → rząd z plakatami 600×900 z folderu `grid`; szczegóły skrótu z tłem i logo.
+      **Nie testowano uruchomienia skrótu** (uruchomiłoby emulator).
 - [x] Kolekcje Steam: 38 odczytanych (14 statycznych → kategorie, dynamiczne wymienione), przypięcie Resident Evil (15 gier)
       i Yakuza (12 gier) z klawiatury → rzędy na ekranie Start.
 - [x] Ulubione (F), przypisanie do kategorii, tworzenie / zmiana nazwy / przypięcie / przesunięcie kategorii,

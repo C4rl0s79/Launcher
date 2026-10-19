@@ -16,7 +16,8 @@ import {
   steamId64ToAccountId
 } from '../steam/local'
 import { getOwnedGames, type OwnedGame } from '../steam/webApi'
-import { mergeLibrary } from './merge'
+import { mergeLibrary, shortcutGames } from './merge'
+import { readShortcuts } from '../steam/shortcuts'
 import { collectionsDir, readCollections } from '../steam/collections'
 import { demoGames } from './demo'
 
@@ -127,10 +128,17 @@ export class LibraryService extends EventEmitter {
       (reg.activeUserAccountId ? accountIdToSteamId64(reg.activeUserAccountId) : undefined) ??
       users[0]?.steamId64
     const accountId = activeSteamId ? steamId64ToAccountId(activeSteamId) : undefined
-    const [localStats, collections] = await Promise.all([
+    const [localStats, collections, shortcuts] = await Promise.all([
       installPath && accountId ? readLocalPlayStats(installPath, accountId) : Promise.resolve(new Map()),
-      installPath && accountId && !settings.demoMode ? readCollections(installPath, accountId) : Promise.resolve(null)
+      installPath && accountId && !settings.demoMode ? readCollections(installPath, accountId) : Promise.resolve(null),
+      installPath && accountId && !settings.demoMode ? readShortcuts(installPath, accountId) : Promise.resolve(null)
     ])
+    const existingExes = new Set<string>()
+    await Promise.all(
+      [...new Set((shortcuts ?? []).map((s) => s.exe).filter(Boolean))].map((exe) =>
+        pathExists(exe).then((ok) => ok && existingExes.add(exe))
+      )
+    )
 
     const useAccount = this.account && this.account.steamId === activeSteamId && !this.account.private
     const games = settings.demoMode
@@ -142,6 +150,8 @@ export class LibraryService extends EventEmitter {
           runningAppId: reg.runningAppId || undefined,
           showTools: settings.showTools
         })
+          .concat(shortcutGames(shortcuts ?? [], (exe) => existingExes.has(exe), reg.runningAppId || undefined))
+          .sort((a, b) => a.sortName.localeCompare(b.sortName, 'pl'))
 
     this.trackRunning(reg.runningAppId || undefined)
     this.snapshot = {
@@ -274,17 +284,24 @@ export class LibraryService extends EventEmitter {
       }
     }
     if (collectionsDirectory) {
-      // Steam rewrites this file when collections change (also after syncing from another PC)
-      try {
-        const w = watch(collectionsDirectory, { persistent: false }, (_ev, file) => {
-          if (file && !/^cloud-storage-namespace-1/i.test(String(file))) return
-          clearTimeout(this.rescanTimer)
-          this.rescanTimer = setTimeout(() => void this.scan(), 800)
-        })
-        w.on('error', () => undefined)
-        this.watchers.push(w)
-      } catch {
-        /* collections are optional */
+      // Steam rewrites these when collections change (also after syncing from another PC) and
+      // tools like Steam ROM Manager rewrite shortcuts.vdf one level up.
+      const targets: [string, RegExp][] = [
+        [collectionsDirectory, /^cloud-storage-namespace-1/i],
+        [path.dirname(collectionsDirectory), /^shortcuts\.vdf$/i]
+      ]
+      for (const [dir, pattern] of targets) {
+        try {
+          const w = watch(dir, { persistent: false }, (_ev, file) => {
+            if (file && !pattern.test(String(file))) return
+            clearTimeout(this.rescanTimer)
+            this.rescanTimer = setTimeout(() => void this.scan(), 800)
+          })
+          w.on('error', () => undefined)
+          this.watchers.push(w)
+        } catch {
+          /* optional */
+        }
       }
     }
   }

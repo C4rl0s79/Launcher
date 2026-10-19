@@ -203,7 +203,7 @@ function CategoriesSection() {
     if (c.kind !== 'steam') return `własna · ${gameCountLabel(count)}`
     const total = snapshot.collections?.find((col) => col.id === c.steamCollectionId)?.appIds.length ?? 0
     if (total === 0) return 'kolekcja Steam · pusta'
-    if (count === 0) return `kolekcja Steam · ${total} pozycji spoza Steam (skróty — jeszcze nieobsługiwane)`
+    if (count === 0) return `kolekcja Steam · ${total} pozycji, żadna nie jest w bibliotece`
     return `kolekcja Steam · ${gameCountLabel(count)}`
   }
   const dynamic = (snapshot.collections ?? []).filter((c) => c.dynamic)

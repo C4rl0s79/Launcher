@@ -10,6 +10,7 @@ akcją główną. Nie ma tu newsów, reklam ani aktywności znajomych.
 - **Pełna biblioteka konta** (także niezainstalowane gry) — opcjonalnie przez oficjalne Steam Web API z Twoim kluczem.
 - **Grafiki** — SteamGridDB (opcjonalny klucz) albo oficjalne grafiki Steam; lokalny cache.
 - **Kolekcje Steam** — Twoje statyczne kolekcje ze Steama (tylko odczyt) można przypinać jako rzędy ekranu Start.
+- **Skróty spoza Steama** — gry dodane do Steama np. przez Steam ROM Manager (emulatory) są czytane z `shortcuts.vdf`, z grafikami z folderu `grid` Steama, i uruchamiane przez Steam.
 - **Własne kategorie, ulubione, przypięcia** — zapisywane lokalnie (Ustawienia → Kategorie; gry przypisujesz w ekranie gry → „Kategorie”).
 
 ## Wymagania

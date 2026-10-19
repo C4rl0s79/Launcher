@@ -31,6 +31,17 @@ export function steamUri(action: SteamUriAction, appId?: number): string {
   }
 }
 
+/** Launch a non-Steam shortcut through Steam by its 64-bit game id. */
+export function shortcutRunUri(gameId64: string): string {
+  if (!/^\d{10,20}$/.test(gameId64)) throw new Error('Nieprawidłowy identyfikator skrótu.')
+  return `steam://rungameid/${gameId64}`
+}
+
+export async function openSteamUri(uri: string): Promise<void> {
+  log.info('steam', `open ${uri}`)
+  await shell.openExternal(uri)
+}
+
 export async function openSteam(action: SteamUriAction, appId?: number): Promise<void> {
   const uri = steamUri(action, appId)
   log.info('steam', `open ${uri}`)

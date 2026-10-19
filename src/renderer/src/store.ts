@@ -108,7 +108,7 @@ export function gamesForCategory(cat: Category, games: Game[], prefs: Prefs, col
     const col = collections?.find((c) => c.id === cat.steamCollectionId)
     if (!col) return []
     const ids = new Set(col.appIds)
-    return games.filter((g) => g.source === 'steam' && ids.has(g.appId))
+    return games.filter((g) => (g.source === 'steam' || g.source === 'shortcut') && ids.has(g.appId))
   }
   const favs = new Set(prefs.favorites)
   switch (cat.smart) {
@@ -132,7 +132,7 @@ export function gamesForCategory(cat: Category, games: Game[], prefs: Prefs, col
 
 /** Steam collections (read-only) that contain this game. */
 export function steamCollectionsOf(game: Game, prefs: Prefs, collections: SteamCollection[] | null): Category[] {
-  if (game.source !== 'steam' || !collections) return []
+  if (game.source === 'demo' || !collections) return []
   return sortedCategories(prefs).filter(
     (c) => c.kind === 'steam' && collections.find((col) => col.id === c.steamCollectionId)?.appIds.includes(game.appId)
   )

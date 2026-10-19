@@ -1,7 +1,8 @@
 // Types shared between the main process, preload bridge and renderer.
 // Game identity is always the stable `id` ("steam:<appid>"), never the title.
 
-export type GameSource = 'steam' | 'demo'
+/** steam = Steam app; shortcut = non-Steam game added to Steam (shortcuts.vdf); demo = fake data */
+export type GameSource = 'steam' | 'shortcut' | 'demo'
 
 /** Install state derived from Steam's appmanifest StateFlags (see main/steam/manifests.ts). */
 export type InstallState =
@@ -23,7 +24,7 @@ export interface DownloadProgress {
 }
 
 /** Where we learned about this game. Local-only detection is NOT the full owned library. */
-export type Provenance = 'localManifest' | 'accountApi' | 'demo'
+export type Provenance = 'localManifest' | 'accountApi' | 'steamShortcut' | 'demo'
 
 export interface Game {
   id: string
@@ -44,6 +45,15 @@ export interface Game {
   /** minutes */
   playtimeMinutes?: number
   running?: boolean
+  /** only for non-Steam shortcuts */
+  shortcut?: {
+    exe: string
+    launchOptions?: string
+    /** Steam tags set on the shortcut, e.g. "PS2" (the generic "Non-Steam" tag is dropped) */
+    tags: string[]
+    /** id for steam://rungameid */
+    gameId64: string
+  }
 }
 
 export type SteamClientStatus = 'running' | 'notRunning' | 'notInstalled' | 'unknown'

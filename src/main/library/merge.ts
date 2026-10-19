@@ -2,6 +2,7 @@ import type { Game } from '@shared/types'
 import { isToolApp, manifestProgress, mapInstallState } from '../steam/manifests'
 import type { ScannedManifest, LocalPlayStats } from '../steam/local'
 import type { OwnedGame } from '../steam/webApi'
+import { shortcutGameId64, type SteamShortcut } from '../steam/shortcuts'
 
 export function sortKey(name: string): string {
   return name
@@ -86,4 +87,34 @@ export function mergeLibrary(input: MergeInput): Game[] {
   }
 
   return [...games.values()].sort((a, b) => a.sortName.localeCompare(b.sortName, 'pl'))
+}
+
+/**
+ * Non-Steam shortcuts as library entries. `exeExists` decides whether the target program is
+ * present; a missing one is shown as "broken" instead of pretending it can start.
+ */
+export function shortcutGames(shortcuts: SteamShortcut[], exeExists: (exe: string) => boolean, runningAppId?: number): Game[] {
+  return shortcuts
+    .filter((s) => !s.hidden)
+    .map((s) => {
+      const ok = !s.exe || exeExists(s.exe)
+      return {
+        id: `shortcut:${s.appId}`,
+        source: 'shortcut' as const,
+        appId: s.appId,
+        name: s.name,
+        sortName: sortKey(s.name),
+        provenance: ['steamShortcut' as const],
+        installState: ok ? ('installed' as const) : ('broken' as const),
+        installed: ok,
+        lastPlayed: s.lastPlayed,
+        running: runningAppId !== undefined && runningAppId === s.appId ? true : undefined,
+        shortcut: {
+          exe: s.exe,
+          launchOptions: s.launchOptions,
+          tags: s.tags.filter((t) => t.toLowerCase() !== 'non-steam'),
+          gameId64: shortcutGameId64(s.appId)
+        }
+      }
+    })
 }

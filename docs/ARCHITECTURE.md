@@ -94,8 +94,20 @@ Gry mają stabilny klucz `steam:<appid>` (lub `demo:<n>`). Tytuł nigdy nie jest
   Lumen są lokalne. Plik jest obserwowany — zmiany kolekcji w Steam pojawiają się bez restartu.
 - **Kolekcje dynamiczne Steam** (reguły filtrów: tagi, funkcje, obsługa kontrolera…) nie są odtwarzane — Steam
   liczy je z własnych metadanych gier, których Lumen nie ma. Ich nazwy są wymienione w Ustawieniach.
-- **Skróty spoza Steama** (np. emulatory dodane do biblioteki Steam, `shortcuts.vdf`) nie są jeszcze obsługiwane —
-  kolekcje złożone wyłącznie z nich są oznaczone w Ustawieniach.
+
+## Skróty spoza Steama (np. emulatory dodane przez Steam ROM Manager)
+
+- Czytane (tylko odczyt) z binarnego `userdata/<accountid>/config/shortcuts.vdf` (`steam/binaryVdf.ts`, `steam/shortcuts.ts`);
+  plik jest obserwowany, więc ponowne użycie Steam ROM Managera odświeża bibliotekę bez restartu.
+- Id w Lumen: `shortcut:<appid>` (32-bitowy appid bez znaku — ten sam, którego używają kolekcje Steam i folder `grid`).
+- Skróty ukryte w Steam (`IsHidden`) są pomijane. Brak pliku programu (`Exe`) → stan „brak programu”, bez akcji „Graj”.
+- Uruchamianie przez Steam: `steam://rungameid/<(appid << 32) | 0x02000000>` — Steam stosuje własną konfigurację
+  Steam Input, nakładkę i liczy czas gry. Lumen nie uruchamia emulatora bezpośrednio.
+- Grafiki: najpierw folder `userdata/<accountid>/config/grid` (`<id>p.*` plakat, `<id>_hero.*`, `<id>_logo.*`,
+  `<id>_icon.*`/`<id>.ico`) — tam zapisują je Steam ROM Manager i sam Steam; dalej SteamGridDB po nazwie.
+  Ten sam folder ma pierwszeństwo także dla gier Steam (własne okładki ustawione w kliencie Steam).
+- Skróty nie mają metadanych ze sklepu; ekran szczegółów pokazuje platformę (tagi Steam, np. PS2) i źródło.
+- Wykrywanie końca gry dla skrótów opiera się na tym samym `RunningAppID` — **nie zostało sprawdzone**.
 - **Brak logowania do Steam / przechwytywania haseł.**
 - **Brak fikcyjnych pasków postępu.** Pasek jest pokazywany tylko wtedy, gdy manifest Steam zawiera
   liczniki `BytesDownloaded/BytesToDownload`; Steam zapisuje je z opóźnieniem, co jest opisane w UI.
