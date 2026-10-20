@@ -79,6 +79,14 @@ export class UiModeManager extends EventEmitter {
     view.setBackgroundColor('#0b0d12')
     view.setVisible(false)
     const wc = view.webContents
+    // the hidden TV view takes keyboard focus when its page loads — in desktop mode keys went to
+    // an invisible page until the window was clicked; give it back to the visible interface
+    wc.on('focus', () => {
+      // not inside the event: Chromium finishes moving focus to this view afterwards
+      setTimeout(() => {
+        if (this._mode !== 'fullscreen' && !this.win.isDestroyed()) this.win.webContents.focus()
+      }, 0)
+    })
     wc.setWindowOpenHandler(() => ({ action: 'deny' }))
     wc.on('will-navigate', (e, url) => {
       if (!url.startsWith(`${EMU_UI_SCHEME}://`)) e.preventDefault()

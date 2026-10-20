@@ -1,4 +1,4 @@
-import type { EmuSaves,
+import type { LbArtOptionsResult, EmuSaves,
   ActionResult,
   ArtKind,
   ArtOption,
@@ -70,6 +70,9 @@ export interface LumenApi {
     search(term: string): Promise<{ ok: true; games: SgdbGame[] } | { ok: false; error: string }>
     setMatch(gameId: string, sgdbGame: SgdbGame | null): Promise<Prefs>
     choose(gameId: string, kind: ArtKind, option: ArtOption): Promise<Prefs>
+    /** LaunchBox Games DB images of an EmuStart game (by the LaunchBox id from the server) */
+    launchboxOptions(gameId: string, kind: ArtKind): Promise<LbArtOptionsResult>
+    chooseLaunchbox(gameId: string, kind: ArtKind, url: string): Promise<Prefs>
     /** use an image file chosen in the in-app picker (copied into Lumen's data folder) */
     useFile(gameId: string, kind: ArtKind, file: string): Promise<Prefs>
     useSteam(gameId: string, kind: ArtKind): Promise<Prefs>
@@ -176,6 +179,8 @@ export const IPC = {
   artSearch: 'art:search',
   artSetMatch: 'art:setMatch',
   artChoose: 'art:choose',
+  artLbOptions: 'art:lbOptions',
+  artChooseLb: 'art:chooseLb',
   artUseFile: 'art:useFile',
   artUseSteam: 'art:useSteam',
   artReset: 'art:reset',

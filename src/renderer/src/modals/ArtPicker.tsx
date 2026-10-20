@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { ArtKind, ArtOptionsResult, Game, SgdbGame } from '@shared/types'
+import type { ArtKind, ArtOptionsResult, Game, LbArtOptionsResult, SgdbGame } from '@shared/types'
 import { api, attempt, useStore, pickPath } from '../store'
 import { Modal } from '../components/Modal'
 import { TextField } from '../components/TextField'
@@ -13,6 +13,7 @@ const KINDS: [ArtKind, string][] = [
 
 const CHOICE_LABEL: Record<string, string> = {
   sgdb: 'wybrana ze SteamGridDB',
+  launchbox: 'wybrana z LaunchBox',
   file: 'plik lokalny',
   steam: 'oficjalna grafika Steam',
   none: 'brak'
@@ -116,12 +117,58 @@ export function ArtPicker({ game, onClose }: { game: Game; onClose: () => void }
           })}
         </div>
       )}
+      {isEmu && kind !== 'icon' && <LaunchBoxThumbs game={game} kind={kind} chosen={current?.type === 'launchbox' ? current.url : undefined} />}
       <div className="modal__footer">
         <button className="btn btn--primary" data-nav onClick={onClose}>
           Gotowe
         </button>
       </div>
     </Modal>
+  )
+}
+
+/** LaunchBox Games DB images of an EmuStart game: box fronts (by region), backgrounds, logos… */
+function LaunchBoxThumbs({ game, kind, chosen }: { game: Game; kind: ArtKind; chosen?: string }) {
+  const [res, setRes] = useState<LbArtOptionsResult | null>(null)
+  useEffect(() => {
+    let alive = true
+    setRes(null)
+    void api()
+      .art.launchboxOptions(game.id, kind)
+      .then((r) => alive && setRes(r))
+      .catch(() => alive && setRes({ ok: false, error: 'Nie udało się odczytać grafik LaunchBox.' }))
+    return () => {
+      alive = false
+    }
+  }, [game.id, kind])
+  return (
+    <>
+      <h3 className="saves__h">LaunchBox Games DB</h3>
+      {!res && <p className="details__loading">Wczytywanie…</p>}
+      {res && !res.ok && <p className="details__muted">{res.error}</p>}
+      {res?.ok && res.options.length === 0 && <p className="details__muted">LaunchBox nie ma grafik tego typu dla tej gry.</p>}
+      {res?.ok && res.options.length > 0 && (
+        <div className={`thumbs thumbs--${kind}`} data-nav-group={`lb-${kind}`}>
+          {res.options.map((o) => (
+            <button
+              key={o.url}
+              className={`thumb thumb--fit ${chosen === o.url ? 'is-on' : ''}`}
+              data-nav
+              title={`${o.type}${o.region ? ` · ${o.region}` : ''}`}
+              onClick={() =>
+                void attempt(api().art.chooseLaunchbox(game.id, kind, o.url)).then((p) => p && useStore.getState().toast('Zapisano wybór grafiki'))
+              }
+            >
+              <img src={o.url} alt="" loading="lazy" decoding="async" />
+              <span className="thumb__tag">
+                {o.type.replace(/^(Box|Fanart|Screenshot|Cart) - /, '')}
+                {o.region ? ` · ${o.region}` : ''}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </>
   )
 }
 

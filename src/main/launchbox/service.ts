@@ -8,6 +8,9 @@ import type { GameDetails, LaunchBoxStatus } from '@shared/types'
 import { log } from '../logger'
 import createBuildWorker from './worker?nodeWorker'
 import { findGame, toDetails, type GameRow } from './lookup'
+import { SCHEMA_VERSION } from './builder'
+import { sortImages, type LbImage } from './images'
+import type { RegionOrder } from '@shared/types'
 
 // LaunchBox Games DB as an offline metadata source for non-Steam games (emulators).
 // The whole database is published as one Metadata.zip (~110 MB, ~190k games). Lumen downloads
@@ -57,7 +60,15 @@ export class LaunchBoxService extends EventEmitter {
     try {
       const meta = Object.fromEntries((db.prepare('SELECT k, v FROM meta').all() as { k: string; v: string }[]).map((r) => [r.k, r.v]))
       const size = (await fs.stat(this.dbPath)).size
-      return { ...base, ready: !!meta.updated, updated: meta.updated, games: Number(meta.games ?? 0), sizeBytes: size }
+      return {
+        ...base,
+        ready: !!meta.updated,
+        updated: meta.updated,
+        games: Number(meta.games ?? 0),
+        images: Number(meta.images ?? 0),
+        outdated: !!meta.updated && Number(meta.schema ?? 1) < SCHEMA_VERSION,
+        sizeBytes: size
+      }
     } catch {
       return base
     }
@@ -137,6 +148,30 @@ export class LaunchBoxService extends EventEmitter {
     } catch (e) {
       log.warn('launchbox', `lookup failed for "${name}": ${(e as Error).message}`)
       return null
+    }
+  }
+
+  /**
+   * A database built by an older Lumen (no image list) is rebuilt once in the background — the
+   * player already chose to keep the LaunchBox database.
+   */
+  async upgradeIfOutdated(): Promise<void> {
+    const st = await this.status()
+    if (st.outdated && !this.job) {
+      log.info('launchbox', 'database without the image list — rebuilding')
+      await this.update()
+    }
+  }
+
+  /** images of a game of the given types, best first (shown version's regions, then preference) */
+  images(id: number, types: readonly string[], order: RegionOrder, prefer: string[] = []): LbImage[] {
+    const db = this.open()
+    if (!db || !types.length) return []
+    try {
+      const rows = db.prepare('SELECT type, region, fn FROM images WHERE gid = ?').all(id) as { type: string; region: string; fn: string }[]
+      return sortImages(rows, types, order, prefer)
+    } catch {
+      return [] // database without the image list (older Lumen) — until it is rebuilt
     }
   }
 

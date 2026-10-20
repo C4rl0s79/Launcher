@@ -19,6 +19,7 @@ import { pickBestMatch, pickExactMatch, SgdbAuthError, SgdbClient } from './art/
 import { LaunchBoxService } from './launchbox/service'
 import { XInputPoller } from './input/xinput'
 import { platformForTags } from './launchbox/match'
+import { IMAGE_BASE, LB_TYPES, PICKER_TYPES, regionsOfTags, type LbImage } from './launchbox/images'
 import { ArtworkService } from './art/artwork'
 import { isPlayable } from './steam/manifests'
 import { steamId64ToAccountId } from './steam/local'
@@ -179,14 +180,14 @@ function createWindow(): void {
   Menu.setApplicationMenu(null)
   win.on('page-title-updated', (e) => e.preventDefault())
   win.once('ready-to-show', () => {
-    win?.show()
+    if (win) activateWindow(win)
     if (settings.get().startMode === 'fullscreen') modes?.setMode('fullscreen')
     else modes?.preload()
   })
   win.on('focus', () => {
     send(IPC.appFocus, true)
     // keyboard focus belongs to the visible interface
-    if (modes?.mode === 'fullscreen') modes.activeContents.focus()
+    modes?.activeContents.focus()
   })
   win.on('minimize', () => log.info('window', 'minimized'))
   win.on('restore', () => log.info('window', 'restored'))
@@ -220,6 +221,31 @@ function hotkeys(input: Electron.Input, wc: Electron.WebContents): void {
   if (input.key === 'F10') modes?.toggle()
   if (input.key === 'F11' && modes?.mode !== 'fullscreen') win?.setFullScreen(!win.isFullScreen())
   if (input.key === 'F12' && !app.isPackaged) wc.toggleDevTools()
+}
+
+/**
+ * Show the window with keyboard focus. Windows does not hand the foreground to a window of a
+ * process the player did not start directly (the portable launcher unpacks and starts Lumen, the
+ * update task restarts it): the window appeared without focus and the pad stayed silent (pad
+ * input only while Lumen has focus). Steps Windows allows, each only when the previous one failed.
+ */
+function activateWindow(w: BrowserWindow): void {
+  if (w.isMinimized()) w.restore()
+  w.show()
+  w.focus()
+  w.webContents.focus()
+  if (w.isFocused()) return
+  w.setAlwaysOnTop(true)
+  w.show()
+  w.focus()
+  w.setAlwaysOnTop(false)
+  setTimeout(() => {
+    if (w.isDestroyed() || w.isFocused()) return
+    w.minimize()
+    w.restore()
+    w.focus()
+    log.info('window', `focus at start: ${w.isFocused() ? 'yes' : 'no (click the window)'}`)
+  }, 300)
 }
 
 function restoreWindow(): void {
@@ -269,9 +295,30 @@ function emuTitles(gameId: string): string[] {
   const rows = [emu.row(gameId), ...emu.versionsOf(gameId).map((v) => emu.row(v.id))]
   const out = new Set<string>()
   for (const r of rows) if (r?.title) out.add(r.title)
-  const lb = rows.find((r) => r?.lb)?.lb
+  const lb = emuLbId(gameId)
   const lbName = lb ? launchbox.nameById(lb) : undefined
   return lbName ? [lbName, ...[...out].filter((n) => n !== lbName)] : [...out]
+}
+
+/** LaunchBox Games DB id of an EmuStart game (from the server's metadata; any version) */
+function emuLbId(gameId: string): number | undefined {
+  return emu.row(gameId)?.lb || emu.versionsOf(gameId).map((v) => emu.row(v.id)?.lb).find(Boolean)
+}
+
+/** LaunchBox images of an EmuStart game, best first: the shown version's region, then preference */
+function emuLbImages(gameId: string, types: readonly string[]): LbImage[] {
+  const lb = emuLbId(gameId)
+  if (!lb) return []
+  return launchbox.images(lb, types, settings.get().regionOrder ?? 'europe', regionsOfTags(emu.row(gameId)?.tags ?? ''))
+}
+
+/** First LaunchBox image of these types that downloads, as a response */
+async function emuLbArt(gameId: string, kind: ArtKind, types: readonly string[]): Promise<Response | null> {
+  for (const img of emuLbImages(gameId, types).slice(0, 2)) {
+    const f = await artwork.fromUrl(gameId, kind, img.url)
+    if (f) return fileResponse(f)
+  }
+  return null
 }
 
 const IMAGE_TYPES: Record<string, string> = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp' }
@@ -281,11 +328,16 @@ async function fileResponse(file: string): Promise<Response> {
 }
 
 /**
- * EmuStart art. The server keeps real box art (3DO: longbox ~1:2, jewel case ~1:1), not 2:3
- * posters, so the poster, background and icon come first from the user's choice or SteamGridDB
- * (600x900 grids, matched strictly by title); the logo first from the server (LaunchBox Clear Logo).
- * The first SteamGridDB lookup can take a while: after a short wait the server's art is shown and
- * the poster is swapped in when it arrives (art revision bump).
+ * EmuStart art, in order:
+ *  - poster: the player's choice → SteamGridDB (600x900, matched strictly by title) → the server's
+ *    box art → LaunchBox box front. Box art is a real box shape (3DO longbox ~1:2, CD case ~1:1),
+ *    the interface shows it whole over a blurred copy;
+ *  - background: choice → SteamGridDB → LaunchBox "Fanart - Background" → the server's screenshot →
+ *    LaunchBox screenshot;
+ *  - logo: choice → the server (LaunchBox Clear Logo) → LaunchBox → SteamGridDB.
+ * LaunchBox images go by the LaunchBox id from the server's metadata (no title guessing). The first
+ * SteamGridDB lookup can take a while: after a short wait the next source is shown and the image is
+ * swapped in when it arrives (art revision bump).
  */
 async function emuArt(gameId: string, kind: string): Promise<Response> {
   const k = kind as ArtKind
@@ -295,8 +347,18 @@ async function emuArt(gameId: string, kind: string): Promise<Response> {
   if (first === 'late') void titled.then((f) => f && notifyArt(gameId))
   else if (first === null) return new Response('none', { status: 404 })
   else if (first) return fileResponse(first)
-  const own = await engineArt(gameId, kind)
-  if (own) return own
+  const steps: (() => Promise<Response | null>)[] =
+    k === 'grid'
+      ? [() => engineArt(gameId, kind), () => emuLbArt(gameId, k, LB_TYPES.box)]
+      : k === 'hero'
+        ? [() => emuLbArt(gameId, k, LB_TYPES.fanart), () => engineArt(gameId, kind), () => emuLbArt(gameId, k, LB_TYPES.screenshot)]
+        : k === 'logo'
+          ? [() => engineArt(gameId, kind), () => emuLbArt(gameId, k, LB_TYPES.logo)]
+          : []
+  for (const step of steps) {
+    const r = await step()
+    if (r) return r
+  }
   if (k === 'logo' && first !== 'late') {
     const f = await artwork.resolveTitled(gameId, k, names, true)
     if (f) return fileResponse(f)
@@ -574,6 +636,21 @@ function registerIpc(): void {
       return { ok: false, error: e instanceof SgdbAuthError ? e.message : 'Nie udało się połączyć ze SteamGridDB.' }
     }
   })
+  handle(IPC.artLbOptions, async (gameId: string, kind: ArtKind) => {
+    if (!isEmuGameId(gameId)) return { ok: false, error: 'Grafiki LaunchBox są dostępne dla gier EmuStart.' }
+    if (!emuLbId(gameId)) return { ok: false, error: 'Serwer EmuStart nie przypisał tej grze pozycji w LaunchBox.' }
+    const st = await launchbox.status()
+    if (!st.ready) return { ok: false, error: 'Pobierz bazę LaunchBox w Ustawieniach (Opisy gier spoza Steama).' }
+    if (st.outdated || st.job) return { ok: false, error: 'Baza LaunchBox aktualizuje się (dochodzi lista grafik) — spróbuj za kilka minut.' }
+    return { ok: true, options: emuLbImages(gameId, PICKER_TYPES[kind] ?? []).slice(0, 48) }
+  })
+  handle(IPC.artChooseLb, async (gameId: string, kind: ArtKind, url: string) => {
+    if (!ART_KINDS.includes(kind)) throw new Error('Nieznany rodzaj grafiki.')
+    if (!String(url).startsWith(IMAGE_BASE)) throw new Error('Nieoczekiwany adres grafiki.')
+    const p = await updatePrefs((pr) => ops.setArt(pr, gameId, kind, { type: 'launchbox', url: String(url) }))
+    bumpArt(gameId, kind)
+    return p
+  })
   handle(IPC.artSearch, async (term: string) => {
     if (!sgdb.enabled) return { ok: false, error: 'Brak klucza SteamGridDB.' }
     try {
@@ -829,6 +906,8 @@ app.whenReady().then(async () => {
     }
   )
   library.start().catch((e) => log.error('library', 'start failed', e))
+  // a LaunchBox database from an older Lumen has no image list (posters, backgrounds) — rebuilt once
+  setTimeout(() => void launchbox.upgradeIfOutdated().catch((e) => log.warn('launchbox', `upgrade: ${(e as Error).message}`)), 30_000)
   if (settings.get().emustartEnabled) engine.start().catch((e) => log.error('engine', 'start failed', e))
 })
 

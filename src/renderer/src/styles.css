@@ -1144,6 +1144,9 @@ button {
   object-fit: cover;
   display: block;
 }
+.thumb--fit img {
+  object-fit: contain;
+}
 .thumbs--logo .thumb img,
 .thumbs--icon .thumb img {
   object-fit: contain;

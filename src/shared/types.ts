@@ -215,6 +215,10 @@ export interface LaunchBoxStatus {
   ready: boolean
   updated?: string
   games?: number
+  /** images listed (box art, backgrounds, logos…) */
+  images?: number
+  /** built by an older Lumen without the image list — rebuilt automatically */
+  outdated?: boolean
   sizeBytes?: number
   error?: string
   job?: { phase: 'download' | 'build'; done: number; total: number }
@@ -250,6 +254,8 @@ export type ArtChoice =
   | { type: 'sgdb'; imageId: number; url: string; thumb?: string }
   | { type: 'file'; file: string }
   | { type: 'steam' }
+  /** image from LaunchBox Games DB (images.launchbox-app.com) */
+  | { type: 'launchbox'; url: string }
   | { type: 'none' }
 
 export interface GameArtPrefs {
@@ -353,6 +359,16 @@ export interface ArtOption {
   score?: number
   author?: string
 }
+
+/** An image from LaunchBox Games DB offered in the "Grafiki" window */
+export interface LbArtOption {
+  url: string
+  /** LaunchBox type: "Box - Front", "Fanart - Background", "Clear Logo"… */
+  type: string
+  region: string
+}
+
+export type LbArtOptionsResult = { ok: true; options: LbArtOption[] } | { ok: false; error: string }
 
 export type ArtOptionsResult =
   | { ok: true; sgdbGame?: SgdbGame; options: ArtOption[] }

@@ -122,3 +122,19 @@ def test_launchbox_ids(tmp_path, monkeypatch):
     con.commit()
     assert lumen.launchbox_ids() == {1: 4879, 2: 4879}
     library._local.con = None
+
+
+def test_lumen_is_its_own_device(monkeypatch):
+    """Inny skrót sprzętu niż samodzielny EmuStart na tym komputerze — serwer nie unieważnia
+    rejestracji EmuStart przy logowaniu Lumena (i odwrotnie); stały między uruchomieniami."""
+    import types
+    fake = types.SimpleNamespace(hw_id=lambda: "a" * 32)
+    lumen.install_device_identity(fake)
+    hw = fake.hw_id()
+    assert hw != "a" * 32 and len(hw) == 32 and all(c in "0123456789abcdef" for c in hw)
+    assert fake.hw_id() == hw
+    lumen.install_device_identity(fake)              # drugi raz bez podwójnego mieszania
+    assert fake.hw_id() == hw
+    empty = types.SimpleNamespace(hw_id=lambda: "")
+    lumen.install_device_identity(empty)
+    assert empty.hw_id() == ""

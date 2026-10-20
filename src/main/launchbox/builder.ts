@@ -3,10 +3,14 @@ import type { Readable } from 'node:stream'
 import sax from 'sax'
 import yauzl from 'yauzl'
 import { normTitle } from './match'
+import { STORED_TYPES } from './images'
 
 // Builds the local LaunchBox database from Metadata.zip (LaunchBox Games DB dump).
-// Same schema as EmuStart's launchbox.db (games / names / meta), minus images and MAME
-// sets which Lumen does not use. Runs inside a worker thread (see worker.ts).
+// Same schema as EmuStart's launchbox.db (games / names / images / meta), minus MAME sets which
+// Lumen does not use; images only of the types Lumen shows. Runs inside a worker thread (worker.ts).
+
+/** bump when the schema changes — an older database is rebuilt (service.ts) */
+export const SCHEMA_VERSION = 2
 
 export interface LbGameRow {
   id: number
@@ -21,24 +25,32 @@ export interface LbGameRow {
   rating: string
 }
 
+export interface LbImageRow {
+  gid: number
+  type: string
+  region: string
+  fn: string
+}
+
 /**
- * Streams Metadata.xml and reports <Game> and <GameAlternateName> records.
+ * Streams Metadata.xml and reports <Game>, <GameAlternateName> and <GameImage> records.
  * Only the fields we use are collected; everything else is skipped without buffering.
  */
 export function parseMetadataXml(
   input: Readable,
   onGame: (g: LbGameRow) => void,
-  onAltName: (gameId: number, name: string) => void
+  onAltName: (gameId: number, name: string) => void,
+  onImage: (img: LbImageRow) => void = () => undefined
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const parser = sax.createStream(true, { trim: false })
-    let record: 'Game' | 'GameAlternateName' | null = null
+    let record: 'Game' | 'GameAlternateName' | 'GameImage' | null = null
     let field: string | null = null
     let text = ''
     let cur: Record<string, string> = {}
 
     parser.on('opentag', (node) => {
-      if (!record && (node.name === 'Game' || node.name === 'GameAlternateName')) {
+      if (!record && (node.name === 'Game' || node.name === 'GameAlternateName' || node.name === 'GameImage')) {
         record = node.name
         cur = {}
       } else if (record) {
@@ -73,6 +85,10 @@ export function parseMetadataXml(
               rating: (cur.CommunityRating ?? '').trim()
             })
           }
+        } else if (record === 'GameImage') {
+          const gid = Number(cur.DatabaseID)
+          const type = (cur.Type ?? '').trim()
+          if (gid && cur.FileName && STORED_TYPES.has(type)) onImage({ gid, type, region: (cur.Region ?? '').trim(), fn: cur.FileName.trim() })
         } else {
           const id = Number(cur.DatabaseID)
           if (id && cur.AlternateName) onAltName(id, cur.AlternateName.trim())
@@ -92,6 +108,7 @@ CREATE TABLE IF NOT EXISTS games(id INTEGER PRIMARY KEY, name TEXT, platform TEX
     year TEXT, overview TEXT, developer TEXT, publisher TEXT, genres TEXT,
     players TEXT, rating TEXT);
 CREATE TABLE IF NOT EXISTS names(norm TEXT, gid INTEGER, platform TEXT);
+CREATE TABLE IF NOT EXISTS images(gid INTEGER, type TEXT, region TEXT, fn TEXT);
 CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT);
 `
 
@@ -100,16 +117,18 @@ export async function buildDatabase(
   xml: Readable,
   outPath: string,
   progress: (games: number) => void = () => undefined
-): Promise<{ games: number; alts: number }> {
+): Promise<{ games: number; alts: number; images: number }> {
   const db = new DatabaseSync(outPath)
   try {
     db.exec('PRAGMA journal_mode=OFF; PRAGMA synchronous=OFF;')
     db.exec(SCHEMA)
     const insGame = db.prepare('INSERT OR REPLACE INTO games VALUES(?,?,?,?,?,?,?,?,?,?)')
     const insName = db.prepare('INSERT INTO names VALUES(?,?,?)')
+    const insImage = db.prepare('INSERT INTO images VALUES(?,?,?,?)')
     const platformOf = new Map<number, string>()
     let games = 0
     let alts = 0
+    let images = 0
     db.exec('BEGIN')
     await parseMetadataXml(
       xml,
@@ -122,17 +141,24 @@ export async function buildDatabase(
       (gid, name) => {
         insName.run(normTitle(name), gid, platformOf.get(gid) ?? '')
         alts++
+      },
+      (img) => {
+        insImage.run(img.gid, img.type, img.region, img.fn)
+        images++
       }
     )
     db.exec('COMMIT')
     db.exec(`CREATE INDEX IF NOT EXISTS ix_names ON names(platform, norm);
-             CREATE INDEX IF NOT EXISTS ix_names_n ON names(norm);`)
+             CREATE INDEX IF NOT EXISTS ix_names_n ON names(norm);
+             CREATE INDEX IF NOT EXISTS ix_images ON images(gid);`)
     const meta = db.prepare('INSERT OR REPLACE INTO meta VALUES(?,?)')
     meta.run('updated', new Date().toISOString())
     meta.run('games', String(games))
     meta.run('alts', String(alts))
+    meta.run('images', String(images))
+    meta.run('schema', String(SCHEMA_VERSION))
     db.exec('VACUUM')
-    return { games, alts }
+    return { games, alts, images }
   } finally {
     db.close()
   }

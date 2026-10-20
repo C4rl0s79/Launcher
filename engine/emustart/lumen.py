@@ -61,6 +61,27 @@ def emit(event: dict) -> None:
     sys.stdout.flush()
 
 
+def install_device_identity(netsrc_mod) -> None:
+    """Lumen to osobne urządzenie na serwerze, nawet na komputerze z samodzielnym EmuStart.
+
+    Serwer trzyma jedną rejestrację na sprzęt (`devices.replace_same_hw`): logowanie z tym samym
+    skrótem sprzętu unieważnia poprzednią rejestrację — Lumen i EmuStart na jednym komputerze
+    wylogowywały się nawzajem („nieznane urządzenie”, 401). Jak dwa konta Windows na jednym
+    komputerze (`netsrc.hw_id`), inny program to inne urządzenie: skrót sprzętu + „lumen”.
+    Ponowna instalacja Lumena na tym samym komputerze nadal zastępuje poprzednią rejestrację Lumena."""
+    import hashlib
+    if getattr(netsrc_mod, "_lumen_hw", False):
+        return
+    netsrc_mod._lumen_hw = True
+    base = netsrc_mod.hw_id
+
+    def hw_id() -> str:
+        hw = base()
+        return hashlib.sha256(("lumen|" + hw).encode()).hexdigest()[:32] if hw else ""
+
+    netsrc_mod.hw_id = hw_id
+
+
 def disc_counts(es: str | None = None) -> dict:
     """{id gry: liczba płyt} dla gier wielopłytowych (płyty „(Disc N)” bez .m3u albo playlisty .m3u)."""
     import json
@@ -100,6 +121,7 @@ class LumenApi(api_mod.Api):
         # gry wielopłytowe jako jedna gra (lumen_discs): po każdej synchronizacji z serwerem i od razu
         # w zapisanej kopii biblioteki — przed startem Api, które zaczyna synchronizację w tle
         lumen_discs.install(netsrc, libsync, library)
+        install_device_identity(netsrc)
         try:
             lumen_discs.merge(library.db())
         except Exception:

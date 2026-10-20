@@ -218,14 +218,14 @@ function LaunchBoxSection() {
   return (
     <Section
       title="Opisy gier spoza Steama (LaunchBox)"
-      desc="Gry dodane do Steama jako skróty (np. emulatory) nie mają danych w sklepie Steam. Lumen może pobrać otwartą bazę LaunchBox Games DB (~110 MB, ok. 190 tys. gier) i dopasowywać opisy, gatunki, producentów i daty premiery lokalnie, bez sieci."
+      desc="Gry dodane do Steama jako skróty (np. emulatory) nie mają danych w sklepie Steam. Lumen może pobrać otwartą bazę LaunchBox Games DB (~110 MB, ok. 190 tys. gier) i dopasowywać opisy, gatunki, producentów i daty premiery lokalnie, bez sieci. Z tej bazy pochodzą też grafiki gier EmuStart (tła, pudełka, logo) — same obrazki pobierają się dopiero przy wyświetleniu."
     >
       <dl className="facts facts--compact">
         <div className="facts__row">
           <dt>Baza</dt>
           <dd>
             {st?.ready
-              ? `${st.games?.toLocaleString('pl-PL')} gier · ${formatBytes(st.sizeBytes) ?? ''} · zaktualizowano ${st.updated ? new Date(st.updated).toLocaleDateString('pl-PL') : '?'}`
+              ? `${st.games?.toLocaleString('pl-PL')} gier · ${st.images ? `${st.images.toLocaleString('pl-PL')} grafik · ` : ''}${formatBytes(st.sizeBytes) ?? ''} · zaktualizowano ${st.updated ? new Date(st.updated).toLocaleDateString('pl-PL') : '?'}${st.outdated ? ' · bez listy grafik — Lumen przebuduje bazę sam' : ''}`
               : 'nie pobrano'}
           </dd>
         </div>
@@ -438,7 +438,7 @@ function EmustartSection() {
     : emu.server.ok
       ? `połączono${emu.server.name ? ` (${emu.server.name})` : ''}${es?.serverVia ? ` · przez: ${es.serverVia}` : ''}`
       : emu.server.key_rejected
-        ? 'serwer nie przyjmuje tego urządzenia — zaloguj się ponownie'
+        ? 'serwer nie przyjmuje tego urządzenia (wylogowane w panelu serwera albo zastąpione innym logowaniem) — zaloguj się ponownie w trybie TV'
         : emu.server.checking
           ? 'łączenie…'
           : 'serwer nie odpowiada (pobrane gry działają bez niego)'

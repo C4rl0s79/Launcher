@@ -149,6 +149,7 @@ export class ArtworkService {
       if (choice.type === 'none') return null
       if (choice.type === 'file') return (await exists(choice.file)) ? choice.file : null
       if (choice.type === 'sgdb') return this.cachedDownload(`${gameId}|${kind}|sgdb-${choice.imageId}`, choice.url, gameId, kind)
+      if (choice.type === 'launchbox') return this.fromUrl(gameId, kind, choice.url)
       if (choice.type === 'steam') return (gridId && (await this.fromUserGrid(gridId, kind))) || (appId ? this.fromSteam(gameId, appId, kind) : null)
     }
 
@@ -182,6 +183,7 @@ export class ArtworkService {
       if (choice.type === 'none') return null
       if (choice.type === 'file') return (await exists(choice.file)) ? choice.file : undefined
       if (choice.type === 'sgdb') return (await this.cachedDownload(`${gameId}|${kind}|sgdb-${choice.imageId}`, choice.url, gameId, kind)) ?? undefined
+      if (choice.type === 'launchbox') return (await this.fromUrl(gameId, kind, choice.url)) ?? undefined
       return undefined // 'steam' here means the source's own (official) art
     }
     if (!auto) return undefined
@@ -197,6 +199,13 @@ export class ArtworkService {
       this.inflight.set(key, p)
     }
     return (await p) ?? undefined
+  }
+
+  /** An image by address (LaunchBox Games DB), downloaded once and kept in the cache. */
+  async fromUrl(gameId: string, kind: ArtKind, url: string): Promise<string | null> {
+    await this.ensureLoaded()
+    const tag = createHash('sha1').update(url).digest('hex').slice(0, 12)
+    return this.cachedDownload(`${gameId}|${kind}|url-${tag}`, url, gameId, kind)
   }
 
   // ---------- Steam sources ----------
