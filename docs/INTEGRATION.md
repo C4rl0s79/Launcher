@@ -14,7 +14,7 @@ Serwer EmuStart pozostaje osobnym programem (EmuStart Server); jego API (`/v1/�
 
 | | SteamLaunch („Lumen”) | EmuStart |
 |---|---|---|
-| Repozytorium | `D:\GIT\SteamLaunch` (`master`, 128eef8) | `D:\GIT\Emustart` = github.com/C4rl0s79/EmuStart (`feature/savesync-server`; w `engine/` od 20.10.2026: **0.46.0**, c87e189, PR #71) |
+| Repozytorium | `D:\GIT\SteamLaunch` (`master`, 128eef8) | `D:\GIT\Emustart` = github.com/C4rl0s79/EmuStart (w `engine/` od 20.10.2026: **`main` v0.46.0**, 0162659) |
 | Stos | Electron 44, React 19, TypeScript, electron-vite, zustand, koffi (XInput) | Python 3.14, pywebview 6 (WebView2), interfejs w czystym JS/HTML/CSS (`web/`), PyInstaller |
 | Architektura | proces główny (Steam: pliki VDF/ACF, rejestr, `steam://`, Web API, SteamGridDB, LaunchBox) + renderer React | klient: `Api` (`emustart/api.py`) wołane z UI przez most pywebview (albo `POST /api/<metoda>` w trybie `--browser`); serwer: `server_main.py` (biblioteka, grafiki, konta, urządzenia, emulatory, BIOS-y, zapisy) |
 | Testy (stan wyjściowy) | 103 vitest — wszystkie przechodziły, `tsc` bez błędów | 320 pytest — wszystkie przechodziły |
