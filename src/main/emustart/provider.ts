@@ -1,9 +1,10 @@
 import { EventEmitter } from 'node:events'
-import type { EmuLaunchStatus, EmuRuntime, EmustartSummary, Game } from '@shared/types'
+import type { EmuLaunchStatus, EmuRuntime, EmustartSummary, Game, RegionOrder } from '@shared/types'
 import { log } from '../logger'
 import { JsonFile } from '../store/jsonFile'
 import type { EmustartEngine } from './engine'
 import { emuGames, isEmuGameId, type EmuLibrary, type EmuLibraryRow } from './mapping'
+import { GROUP_PREFIX, groupVersions } from './versions'
 
 /** Raw `lumen_status` from the engine (emustart/lumen.py). */
 export interface EmuStatusRaw {
@@ -47,6 +48,11 @@ export class EmustartProvider extends EventEmitter {
   private fromCache = false
   private games: Game[] = []
   private rows = new Map<string, EmuLibraryRow>()
+  private byEngine = new Map<number, string>()
+  /** emugrp:… → member ids; member id → emugrp:… (games with several versions) */
+  private members = new Map<string, Game[]>()
+  private displayOf = new Map<string, string>()
+  private shown = new Map<string, string>()
   private status: EmuStatusRaw | null = null
   private pollTimer: NodeJS.Timeout | undefined
   private refreshing: Promise<void> | null = null
@@ -56,7 +62,9 @@ export class EmustartProvider extends EventEmitter {
 
   constructor(
     private readonly engine: EmustartEngine,
-    cacheFile: string
+    cacheFile: string,
+    /** desktop grouping of regional versions: region preference and the player's choices */
+    private readonly grouping: () => { order: RegionOrder; choices: Record<string, string> } = () => ({ order: 'europe', choices: {} })
   ) {
     super()
     this.cache = new JsonFile<EmuLibrary>(cacheFile, () => EMPTY)
@@ -89,19 +97,58 @@ export class EmustartProvider extends EventEmitter {
     return this.status
   }
 
+  /** the version (emu:<sid>) a Lumen id stands for — a game with several versions plays its shown one */
+  resolve(gameId: string): string {
+    return gameId.startsWith(GROUP_PREFIX) ? (this.shown.get(gameId) ?? gameId) : gameId
+  }
+
   /** engine-local game number for a Lumen id */
   engineId(gameId: string): number | undefined {
-    return isEmuGameId(gameId) ? this.rows.get(gameId)?.id : undefined
+    const id = this.resolve(gameId)
+    return isEmuGameId(id) ? this.rows.get(id)?.id : undefined
   }
 
   row(gameId: string): EmuLibraryRow | undefined {
-    return this.rows.get(gameId)
+    return this.rows.get(this.resolve(gameId))
   }
 
-  /** Lumen id of an engine game number */
+  /** library row of an engine game number (any version, shown or not) */
+  rowByEngineId(engineId: number): EmuLibraryRow | undefined {
+    const id = this.byEngine.get(engineId)
+    return id ? this.rows.get(id) : undefined
+  }
+
+  /** id of the library entry that shows a version (emugrp:… for grouped games) */
+  displayId(id: string): string {
+    return this.displayOf.get(id) ?? id
+  }
+
+  /** Lumen id (entry shown in the library) of an engine game number */
   lumenId(engineId: number): string | undefined {
-    for (const [id, r] of this.rows) if (r.id === engineId) return id
-    return undefined
+    const id = this.byEngine.get(engineId)
+    return id ? this.displayId(id) : undefined
+  }
+
+  /** versions of a grouped entry (empty for a single version) */
+  versionsOf(gameId: string): Game[] {
+    return this.members.get(gameId) ?? []
+  }
+
+  /** re-apply grouping (region preference or a version choice changed) */
+  regroup(): void {
+    this.applyGrouping()
+    this.emit('library')
+  }
+
+  private base: Game[] = []
+
+  private applyGrouping(): void {
+    const { order, choices } = this.grouping()
+    const g = groupVersions(this.base, order, choices)
+    this.games = g.games
+    this.members = g.members
+    this.displayOf = g.displayOf
+    this.shown = new Map(g.games.filter((x) => x.emu?.shownVersion).map((x) => [x.id, x.emu!.shownVersion!]))
   }
 
   summary(): EmustartSummary {
@@ -130,8 +177,10 @@ export class EmustartProvider extends EventEmitter {
 
   private setLib(lib: EmuLibrary): void {
     this.lib = lib
-    this.games = emuGames(lib, this.copyingSet())
+    this.base = emuGames(lib, this.copyingSet())
     this.rows = new Map(lib.games.map((r) => [`emu:${r.sid}`, r]))
+    this.byEngine = new Map(lib.games.map((r) => [r.id, `emu:${r.sid}`]))
+    this.applyGrouping()
     this.emit('library')
   }
 

@@ -80,6 +80,10 @@ export interface EmuGameInfo {
   copying: boolean
   /** discs in the set (multi-disc games are one entry); 1 = single disc / cartridge */
   discs: number
+  /** regional versions / revisions of this game (desktop shows them as one entry); absent = one version */
+  versions?: EmuVersion[]
+  /** id (emu:<sid>) of the version this entry shows and plays */
+  shownVersion?: string
   genre?: string
   year?: string
   players?: string
@@ -133,6 +137,22 @@ export interface LibrarySnapshot {
   /** EmuStart engine and server (the Steam part is in `steam`) */
   emustart: EmustartSummary
 }
+
+/** One version of a game that has several (regions, revisions). */
+export interface EmuVersion {
+  /** emu:<sid> */
+  id: string
+  tags: string
+  cached: boolean
+  pinned: boolean
+  copying: boolean
+  discs: number
+  size: number
+  lastPlayed?: number
+}
+
+/** Which regional version a game shows by default. */
+export type RegionOrder = 'europe' | 'usa' | 'japan'
 
 export type EngineState = 'disabled' | 'starting' | 'ready' | 'missing' | 'error'
 
@@ -246,6 +266,8 @@ export interface Prefs {
   gameCategories: Record<string, string[]>
   favorites: string[]
   art: Record<string, GameArtPrefs>
+  /** game with several versions (emugrp:…) → the version the player chose (emu:<sid>) */
+  versions: Record<string, string>
 }
 
 export type ArtSourcePriority = 'sgdbFirst' | 'steamFirst'
@@ -275,6 +297,8 @@ export interface Settings {
   gamepadBackend: GamepadBackend
   /** interface shown at start: desktop (Lumen look) or fullscreen (EmuStart look) */
   startMode: UiMode
+  /** regional version shown by default for games with several versions */
+  regionOrder: RegionOrder
   /** run the EmuStart engine (emulated games from an EmuStart server) */
   emustartEnabled: boolean
   /** EmuStart data folder (config, game cache, profiles); empty = Lumen's own folder */
@@ -301,6 +325,7 @@ export type SettingsPatch = Partial<
     | 'demoMode'
     | 'gamepadBackend'
     | 'startMode'
+    | 'regionOrder'
     | 'emustartEnabled'
     | 'emustartHome'
     | 'pythonPath'

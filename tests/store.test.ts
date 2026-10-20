@@ -15,7 +15,7 @@ const g = (id: string, source: Game['source'], installed: boolean, appId = 1): G
   installed
 })
 const smart = (s: Category['smart']): Category => ({ id: `smart:${s}`, name: String(s), kind: 'smart', smart: s, pinned: true, order: 0 })
-const prefs: Prefs = { version: 2, categories: [], gameCategories: {}, favorites: ['shortcut:9'], art: {} }
+const prefs: Prefs = { version: 2, categories: [], gameCategories: {}, favorites: ['shortcut:9'], art: {}, versions: {} }
 
 describe('built-in groups', () => {
   const games = [g('steam:1', 'steam', true, 1), g('steam:2', 'steam', false, 2), g('shortcut:9', 'shortcut', true, 9)]

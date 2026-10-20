@@ -104,8 +104,7 @@ export function registerEmustartIpc(handle: Handle, ctx: Ctx): void {
     }
     const m = /^emu:copy:(\d+)$/.exec(jobId)
     if (m) {
-      const gameId = provider.lumenId(Number(m[1]))
-      const row = gameId ? provider.row(gameId) : undefined
+      const row = provider.rowByEngineId(Number(m[1]))
       if (!row) return fail('Nie ma tej gry w bibliotece EmuStart.')
       // a kept game: stop keeping it (the partial download stays and resumes next time);
       // otherwise the background copy after a launch: remove the partial copy

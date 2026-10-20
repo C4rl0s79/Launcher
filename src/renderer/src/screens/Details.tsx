@@ -7,7 +7,7 @@ import { focusEl, focusFirst } from '../nav/engine'
 import { Art } from '../components/Art'
 import { CategoryPicker } from '../modals/CategoryPicker'
 import { ArtPicker } from '../modals/ArtPicker'
-import { formatBytes, formatEta, formatLastPlayed, formatPlaytime, htmlToParagraphs, STATE_LABEL, stateLabel } from '../lib/format'
+import { formatBytes, formatEta, formatLastPlayed, formatPlaytime, htmlToParagraphs, STATE_LABEL, stateLabel, versionCountLabel } from '../lib/format'
 
 interface PrimaryAction {
   label: string
@@ -235,6 +235,8 @@ export function DetailsScreen({ gameId }: { gameId: string }) {
           <DownloadStatus game={game} />
         )}
         {game.emu && gameJobs.map((j) => <EmuJobStatus key={j.id} job={j} />)}
+
+        {game.emu?.versions && <VersionPicker gameId={gameId} game={game} chosen={prefs.versions[gameId]} />}
 
         <div className="details__actions" data-nav-group="details-actions">
           <button className="btn" data-nav data-key="fav" onClick={toggleFav}>
@@ -472,4 +474,50 @@ function syncLabel(state: string, last: number): string {
   if (state === 'pending') return 'czekają na wysłanie (brak połączenia z serwerem)'
   if (state === 'never') return 'jeszcze nie synchronizowane'
   return state
+}
+
+/**
+ * Regional versions / revisions of one game: which one the entry shows and plays. Shown version
+ * is automatic (last played → downloaded → region preference) until the player picks one.
+ */
+function VersionPicker({ gameId, game, chosen }: { gameId: string; game: Game; chosen?: string }) {
+  const versions = game.emu!.versions!
+  const shown = game.emu!.shownVersion
+  const choose = (id: string | null): void => {
+    void attempt(api().emustart.chooseVersion(gameId, id))
+  }
+  return (
+    <div className="versions" data-nav-group="details-versions">
+      <div className="versions__head">
+        <strong>{versionCountLabel(versions.length)}</strong>
+        <span className="details__muted">
+          {chosen ? 'wybrana przez Ciebie' : 'automatycznie: ostatnio grana, pobrana albo wg preferowanego regionu (Ustawienia → EmuStart)'}
+        </span>
+      </div>
+      <div className="versions__list">
+        {versions.map((v) => (
+          <button
+            key={v.id}
+            className={`version ${v.id === shown ? 'is-shown' : ''}`}
+            data-nav
+            data-key={`ver-${v.id}`}
+            aria-pressed={v.id === shown}
+            onClick={() => choose(v.id)}
+          >
+            <span className="version__tags">{v.tags || 'bez oznaczeń'}</span>
+            <span className="version__state">
+              {v.copying ? 'pobieranie…' : v.cached ? 'na dysku' : 'na serwerze'}
+              {v.discs > 1 ? ` · 💿${v.discs}` : ''}
+              {v.lastPlayed ? ' · grana' : ''}
+            </span>
+          </button>
+        ))}
+        {chosen && (
+          <button className="version version--auto" data-nav data-key="ver-auto" onClick={() => choose(null)}>
+            <span className="version__tags">Automatycznie</span>
+          </button>
+        )}
+      </div>
+    </div>
+  )
 }

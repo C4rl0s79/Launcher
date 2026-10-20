@@ -73,6 +73,10 @@ export function formatEta(sec?: number): string | undefined {
   return `${s} s`
 }
 
+export function versionCountLabel(n: number): string {
+  return `${n} ${plural(n, 'wersja', 'wersje', 'wersji')}`
+}
+
 export function gameCountLabel(n: number): string {
   return `${n} ${plural(n, 'gra', 'gry', 'gier')}`
 }

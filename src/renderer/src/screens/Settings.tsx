@@ -434,6 +434,22 @@ function EmustartSection() {
       title="EmuStart"
       desc="Gry na emulowane platformy z serwera EmuStart. Pobieranie, emulatory i BIOS-y z serwera, uruchamianie i synchronizację zapisów wykonuje silnik EmuStart (ten sam kod co program EmuStart) — Lumen go uruchamia i pokazuje jego stan."
     >
+      <div className="modal__row">
+        <span className="card__desc">Gry z kilkoma wersjami (regiony) — domyślnie pokazuj:</span>
+        <div className="segmented" role="group" aria-label="Preferowany region">
+          {(
+            [
+              ['europe', 'Polska / Europa'],
+              ['usa', 'USA'],
+              ['japan', 'Japonia']
+            ] as const
+          ).map(([v, label]) => (
+            <button key={v} className={`seg ${settings.regionOrder === v ? 'is-on' : ''}`} data-nav onClick={() => void patch({ regionOrder: v })}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
       <Toggle
         label="Gry z serwera EmuStart"
         desc="Wyłączone: silnik EmuStart nie jest uruchamiany, w bibliotece zostają tylko gry Steam."

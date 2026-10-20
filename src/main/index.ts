@@ -98,7 +98,7 @@ const engine = new EmustartEngine({
   tempDir: () => tempDir,
   windowTitle: WINDOW_TITLE
 })
-const emu = new EmustartProvider(engine, paths.emustartLibrary)
+const emu = new EmustartProvider(engine, paths.emustartLibrary, () => ({ order: settings.get().regionOrder, choices: prefs.get().versions }))
 const unified = new UnifiedLibrary(library, emu)
 const meta = new StoreMetadataProvider(paths.metaCache, () => settings.get().language)
 const launchbox = new LaunchBoxService(paths.launchbox)
@@ -373,8 +373,10 @@ function handle<A extends unknown[], R>(channel: string, fn: (...args: A) => Pro
 }
 
 async function updatePrefs(fn: (p: Prefs) => Prefs): Promise<Prefs> {
+  const before = prefs.get().versions
   const p = await prefs.update(fn)
   send(IPC.prefsChanged, p)
+  if (p.versions !== before) emu.regroup()
   return p
 }
 
@@ -445,6 +447,7 @@ function registerIpc(): void {
       await library.scan()
       if (before.steamIdOverride !== after.steamIdOverride) void library.refreshAccount(true)
     }
+    if (before.regionOrder !== after.regionOrder) emu.regroup()
     if (before.emustartEnabled !== after.emustartEnabled || before.emustartHome !== after.emustartHome || before.pythonPath !== after.pythonPath) {
       if (after.emustartEnabled) void engine.restart()
       else void engine.stop()
@@ -568,6 +571,13 @@ function registerIpc(): void {
     win: () => win,
     jobs: () => unified.jobs,
     dataDir: () => settings.get().emustartHome || paths.emustartHome
+  })
+
+  handle(IPC.emuChooseVersion, async (gameId: string, versionId: string | null) => {
+    const versions = emu.versionsOf(String(gameId))
+    if (!versions.length) throw new Error('Ta gra ma jedną wersję.')
+    if (versionId !== null && !versions.some((v) => v.id === versionId)) throw new Error('Nieznana wersja gry.')
+    return updatePrefs((p) => ops.chooseVersion(p, gameId, versionId ?? undefined))
   })
 
   handle(IPC.uiGetMode, () => modes?.mode ?? 'desktop')

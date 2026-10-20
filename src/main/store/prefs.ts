@@ -18,7 +18,7 @@ const REMOVED_SMART = new Set(['smart:installed', 'smart:notInstalled'])
 export const PREFS_VERSION = 3
 
 export function defaultPrefs(): Prefs {
-  return { version: PREFS_VERSION, categories: SMART_CATEGORIES.map((c) => ({ ...c })), gameCategories: {}, favorites: [], art: {} }
+  return { version: PREFS_VERSION, categories: SMART_CATEGORIES.map((c) => ({ ...c })), gameCategories: {}, favorites: [], art: {}, versions: {} }
 }
 
 export function migratePrefs(raw: unknown): Prefs {
@@ -45,7 +45,10 @@ export function migratePrefs(raw: unknown): Prefs {
     categories,
     gameCategories: isRecord(r.gameCategories) ? sanitizeGameCategories(r.gameCategories) : {},
     favorites: Array.isArray(r.favorites) ? r.favorites.filter((x) => typeof x === 'string') : [],
-    art: isRecord(r.art) ? (r.art as Record<string, GameArtPrefs>) : {}
+    art: isRecord(r.art) ? (r.art as Record<string, GameArtPrefs>) : {},
+    versions: isRecord(r.versions)
+      ? Object.fromEntries(Object.entries(r.versions).filter((e): e is [string, string] => typeof e[1] === 'string'))
+      : {}
   }
   return normalizeOrder(prefs)
 }
@@ -216,6 +219,14 @@ export const ops = {
       categories.push({ id, name: sys.display, kind: 'emustart', emuSystem: sys.es, pinned: true, order: categories.length + 1000 })
     }
     return changed ? normalizeOrder({ ...p, categories }) : p
+  },
+
+  /** Version of a game with several versions shown and played from now on (undefined = automatic). */
+  chooseVersion(p: Prefs, groupId: string, versionId: string | undefined): Prefs {
+    const versions = { ...p.versions }
+    if (versionId) versions[groupId] = versionId
+    else delete versions[groupId]
+    return { ...p, versions }
   },
 
   toggleFavorite(p: Prefs, gameId: string): Prefs {

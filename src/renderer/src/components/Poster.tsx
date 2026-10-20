@@ -1,7 +1,7 @@
 import { memo } from 'react'
 import type { Game } from '@shared/types'
 import { Art } from './Art'
-import { isBusy } from '../lib/format'
+import { isBusy, versionCountLabel } from '../lib/format'
 
 interface Props {
   game: Game
@@ -30,6 +30,7 @@ export const Poster = memo(function Poster({ game, favorite, onOpen, onFocusGame
           {isBusy(game) && <span className="badge badge--busy">Pobieranie</span>}
           {game.installState === 'updateRequired' && <span className="badge">Aktualizacja</span>}
           {game.source === 'demo' && <span className="badge badge--demo">DEMO</span>}
+          {game.emu?.versions && <span className="badge badge--versions">{versionCountLabel(game.emu.versions.length)}</span>}
         </div>
         {favorite && <span className="poster__fav" aria-label="Ulubiona">★</span>}
         {game.emu && game.emu.discs > 1 && (

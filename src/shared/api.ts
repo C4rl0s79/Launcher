@@ -98,6 +98,8 @@ export interface LumenApi {
     refreshLibrary(): Promise<EmuActionResult>
     restartEngine(): Promise<void>
     clearConflicts(): Promise<void>
+    /** game with several versions (regions): which one to show and play; null = automatic */
+    chooseVersion(gameId: string, versionId: string | null): Promise<Prefs>
   }
   jobs: {
     get(): Promise<JobsSnapshot>
@@ -180,6 +182,7 @@ export const IPC = {
   emuRefresh: 'emu:refresh',
   emuRestart: 'emu:restart',
   emuClearConflicts: 'emu:clearConflicts',
+  emuChooseVersion: 'emu:chooseVersion',
   jobsGet: 'jobs:get',
   jobsCancel: 'jobs:cancel',
   jobsChanged: 'jobs:changed',

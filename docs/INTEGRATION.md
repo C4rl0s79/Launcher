@@ -14,7 +14,7 @@ Serwer EmuStart pozostaje osobnym programem (EmuStart Server); jego API (`/v1/�
 
 | | SteamLaunch („Lumen”) | EmuStart |
 |---|---|---|
-| Repozytorium | `D:\GIT\SteamLaunch` (`master`, 128eef8) | `D:\GIT\Emustart` = github.com/C4rl0s79/EmuStart (w `engine/` od 20.10.2026: **`main` v0.46.0**, 0162659) |
+| Repozytorium | `D:\GIT\SteamLaunch` (`master`, 128eef8) | `D:\GIT\Emustart` = github.com/C4rl0s79/EmuStart (w `engine/` od 20.10.2026: **`main` v0.46.1**, 8b40316 + PR #73) |
 | Stos | Electron 44, React 19, TypeScript, electron-vite, zustand, koffi (XInput) | Python 3.14, pywebview 6 (WebView2), interfejs w czystym JS/HTML/CSS (`web/`), PyInstaller |
 | Architektura | proces główny (Steam: pliki VDF/ACF, rejestr, `steam://`, Web API, SteamGridDB, LaunchBox) + renderer React | klient: `Api` (`emustart/api.py`) wołane z UI przez most pywebview (albo `POST /api/<metoda>` w trybie `--browser`); serwer: `server_main.py` (biblioteka, grafiki, konta, urządzenia, emulatory, BIOS-y, zapisy) |
 | Testy (stan wyjściowy) | 103 vitest — wszystkie przechodziły, `tsc` bez błędów | 320 pytest — wszystkie przechodziły |
@@ -106,7 +106,7 @@ małe i opisane w `engine/CHANGELOG.md`:
 | `web/index.html` | CSP: `img-src` także `lumen-art:` | brak |
 | `web/app.js`, `web/options.js` | most `?lumen`, system „Steam”, akcje Steam, „Tryb pulpitu”, wybór gry | brak (aktywne tylko z `?lumen`) |
 | `lumen-engine.spec` (nowy) | PyInstaller: `EmuStartEngine.exe` bez pywebview | brak |
-| `emustart/scanner.py` | gry wielopłytowe: płyty „(Disc A)”, podtytuły płyt, płyty obok gier-katalogów | **tak — także EmuStart Server** (skan biblioteki); do przeniesienia do EmuStart |
+| `emustart/scanner.py` | gry wielopłytowe: płyty „(Disc A)”, podtytuły płyt, płyty obok gier-katalogów | **tak — także EmuStart Server** (skan biblioteki); w EmuStart: PR #73 |
 
 Bezpieczeństwo silnika: HTTP tylko na `127.0.0.1`, sprawdzanie nagłówka Host (DNS rebinding — jak
 w EmuStart), `X-EmuStart` (bez CORS), a dodatkowo losowy token sesji z procesu Lumen. Token jest
@@ -211,7 +211,18 @@ Jedna pozycja na grę: płyty łączy **skan biblioteki na serwerze** (`scanner.
 „(Disc N)” / „(Disc A)” z tego samego folderu, także z podtytułem płyty). Uruchomienie gry wielopłytowej:
 EmuStart pobiera wszystkie płyty i tworzy playlistę `.m3u` dla emulatora (zmiana płyty w emulatorze).
 Liczba płyt: ikona 💿 N na plakacie (pulpit) i przy grze na liście (TV), „Płyty” w szczegółach.
-Wersje regionalne (Europe / Japan / USA…) to osobne gry — nie są łączone.
+Wersje regionalne (Europe / Japan / USA…) to osobne gry na serwerze — łączy je dopiero widok pulpitu (§6d).
+
+## 6d. Wersje regionalne — jedna pozycja w trybie pulpitu
+
+Gry o tym samym tytule na tej samej platformie (regiony, rewizje: „Defcon 5 (Europe)”, „(Japan)”, „(Korea)”)
+są w trybie pulpitu **jednym plakatem** z odznaką „N wersji” (`main/emustart/versions.ts`). Pozycja pokazuje
+i uruchamia jedną wersję: wybraną przez gracza w szczegółach gry (zapamiętaną w `prefs.json` → `versions`),
+a bez wyboru — ostatnio graną, potem pobraną, potem wg preferowanego regionu (Ustawienia → EmuStart:
+Polska/Europa, USA, Japonia); wersje beta/demo/nielicencjonowane nigdy nie są domyślne. Gry z jedną wersją
+mają dotychczasowe id (`emu:<game_id>`), grupy — `emugrp:<skrót>`. Tryb TV zostaje jak w EmuStart: każda
+wersja osobno, z regionem przy nazwie. Wyjątek: dema Amigi (`amigawhddemos`) — ten sam tytuł to różne
+produkcje, więc nie są łączone. Na przykładowej bibliotece: 41 712 pozycji → 33 931 w trybie pulpitu.
 
 ## 6b. Wybór folderów i plików — tylko padem
 

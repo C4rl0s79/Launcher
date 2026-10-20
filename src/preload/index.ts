@@ -70,7 +70,8 @@ const api: LumenApi = {
     setFolder: (key, folder) => invoke(IPC.emuSetFolder, key, folder),
     refreshLibrary: () => invoke(IPC.emuRefresh),
     restartEngine: () => invoke(IPC.emuRestart),
-    clearConflicts: () => invoke(IPC.emuClearConflicts)
+    clearConflicts: () => invoke(IPC.emuClearConflicts),
+    chooseVersion: (id, version) => invoke(IPC.emuChooseVersion, id, version)
   },
   jobs: {
     get: () => invoke(IPC.jobsGet),
