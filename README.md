@@ -67,8 +67,9 @@ Wynik w katalogu `release/`:
 
 | Plik | Opis |
 | --- | --- |
-| `Lumen-<wersja>-setup.exe` | instalator (wybór katalogu, skróty w menu Start i na pulpicie) |
-| `Lumen-<wersja>-portable.exe` | pojedynczy plik bez instalacji |
+| `Lumen-<wersja>-win64.zip` | **wersja folderowa (zalecana jako przenośna)**: rozpakuj gdziekolwiek — program i wszystkie dane zostają w tym jednym folderze |
+| `Lumen-<wersja>-setup.exe` | instalator (wybór katalogu, skróty w menu Start i na pulpicie); dane w `LumenData\` obok programu, odinstalowanie i aktualizacja ich nie usuwają |
+| `Lumen-<wersja>-portable.exe` | pojedynczy plik bez instalacji; dane w `LumenData\` obok pliku, ale sam program rozpakowuje się przy każdym starcie do `%TEMP%` |
 | `win-unpacked/Lumen.exe` | rozpakowana aplikacja (szybki podgląd: `npm run dist:dir`) |
 
 Pliki nie są podpisane certyfikatem, więc Windows SmartScreen może przy pierwszym uruchomieniu pokazać ostrzeżenie.
@@ -115,9 +116,15 @@ Zapisy synchronizuje EmuStart przez serwer przed i po grze (stan faktyczny i ogr
 
 ### Gdzie są dane
 
-Wersja instalowana: `%APPDATA%\Lumen\`. **Wersja portable**: folder `LumenData\` obok `Lumen-…-portable.exe`
-(cały program razem z bazą LaunchBox można przenieść na inny dysk lub komputer; klucze API są szyfrowane
-dla konta Windows, więc na innym komputerze trzeba je wpisać ponownie).
+Wszystkie wersje (instalator, ZIP, portable): folder **`LumenData\` obok programu** — ustawienia, cache,
+baza LaunchBox, a w `LumenData\emustart\` pobrane gry (`cache\`), emulatory (`emulators\`, razem
+z BIOS-ami z serwera w folderze `system` RetroArcha), profile i logi EmuStart; pliki tymczasowe (rozpakowane
+gry, Chromium) w `LumenData\tmp\` zamiast `%TEMP%`. Poza folderem programu nic nie jest zapisywane
+(Steam jest tylko odczytywany). Wyjątki: gdy folder programu jest tylko do odczytu (np. `Program Files`),
+dane trafiają do `%APPDATA%\Lumen\` (komunikat w logu); klucz urządzenia EmuStart jest w TPM, gdy
+komputer go ma. Przy pierwszym starcie dane ze starszej wersji (`%APPDATA%\Lumen\`) są **kopiowane**
+do `LumenData\` — oryginał zostaje. Klucze API są szyfrowane dla konta Windows, więc na innym komputerze
+trzeba je wpisać ponownie. W trybie deweloperskim (`npm run dev`) dane są w `%APPDATA%\Lumen\`.
 
 | Ścieżka | Zawartość | Kasowane przez „Wyczyść pamięć podręczną” |
 | --- | --- | --- |

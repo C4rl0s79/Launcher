@@ -189,6 +189,17 @@ Nowa synchronizacja „jak Steam Cloud” (rewizje, wybór gracza przy konflikci
 stronie serwera (`savesync.py`, etap 1). Gdy klient EmuStart ją dostanie (etap 2), Lumen przejmie ją
 automatycznie przez `git subtree pull` — UI wymaga wtedy tylko okna wyboru przy konflikcie.
 
+## 6a. Dane w folderze programu
+
+Wersje zbudowane trzymają wszystko w `LumenData\` obok `Lumen.exe` (`src/main/dataDir.ts`): dane Lumen,
+silnik EmuStart (`LumenData\emustart\`: config, pobrane gry, domyślny folder emulatorów `emulators\`
+z BIOS-ami w `system` RetroArcha — EmuStart instaluje emulatory w trybie portable, więc ich ustawienia
+i zapisy też są w ich folderach), pliki tymczasowe Chromium i silnika (`TEMP`/`TMP` = `LumenData\tmp\`,
+także rozpakowane gry). Instalator nie usuwa `LumenData\` przy odinstalowaniu ani aktualizacji
+(`resources/installer.nsh`). Wyjątki: folder programu tylko do odczytu → `%APPDATA%\Lumen\`; klucz
+urządzenia w TPM; emulator wskazany ręcznie spoza folderu (np. zwykła instalacja PCSX2 z danymi
+w `Documents`); wersja `portable.exe` rozpakowuje sam program do `%TEMP%` (dlatego jest wersja ZIP).
+
 ## 7. Tryby interfejsu
 
 - Jedno okno, dwa widoki: renderer Lumen i `WebContentsView` z UI EmuStart (ładowany w tle przy starcie).

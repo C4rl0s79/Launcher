@@ -22,6 +22,8 @@ export interface EngineOptions {
   command: () => EngineCommand | { error: string }
   /** EmuStart data folder (EMUSTART_HOME) */
   home: () => string
+  /** temp folder for the engine (TEMP/TMP) — inside the app's data folder, not %TEMP% */
+  tempDir: () => string
   windowTitle: string
 }
 
@@ -96,6 +98,8 @@ export class EmustartEngine extends EventEmitter {
       env: {
         ...process.env,
         EMUSTART_HOME: home,
+        TEMP: this.opts.tempDir(),
+        TMP: this.opts.tempDir(),
         LUMEN_ENGINE_TOKEN: this.token,
         LUMEN_WINDOW_TITLE: this.opts.windowTitle,
         PYTHONIOENCODING: 'utf-8',

@@ -16,12 +16,19 @@ extraResources:
     to: engine/web
 win:
   icon: resources/icon.png
+  # name of the zip (folder version); nsis and portable set their own below
+  artifactName: ${productName}-${version}-win64.${ext}
   target:
     - target: nsis
       arch: [x64]
     - target: portable
       arch: [x64]
+    # folder version: unpack anywhere — program and LumenData stay in that one folder
+    - target: zip
+      arch: [x64]
 nsis:
+  # keeps LumenData (user data next to Lumen.exe) on uninstall and update
+  include: resources/installer.nsh
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true

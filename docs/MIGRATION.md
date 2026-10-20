@@ -5,9 +5,15 @@ na miejscu, a nowe dane zapisuje obok.
 
 ## Dotychczasowy Lumen (SteamLaunch)
 
-Nazwa produktu i folder danych są te same (`%APPDATA%\Lumen\`, portable: `LumenData\`), więc
-ustawienia, kategorie, ulubione, wybory grafik, `first-seen.json`, cache i baza LaunchBox są używane
-bez zmian.
+Od 0.2.0 dane są w `LumenData\` **obok programu** (instalator, ZIP i portable). Przy pierwszym starcie
+z pustym `LumenData\` Lumen **kopiuje** ze starego folderu (`%APPDATA%\Lumen\`) ustawienia, kategorie,
+ulubione, wybory grafik (ścieżki własnych grafik są przepisywane na nowy folder), `first-seen.json`,
+`secrets.json`, bazę LaunchBox i ostatnią bibliotekę konta Steam. Pamięci podręczne grafik i opisów
+budują się od nowa. Stary folder zostaje nietknięty — to jednocześnie kopia zapasowa i droga powrotu.
+Istniejący `LumenData\` (np. wersji portable) nigdy nie jest nadpisywany.
+
+Odinstalowanie i aktualizacja instalatorem nie usuwają `LumenData\` (`resources/installer.nsh`).
+Folder programu tylko do odczytu (np. `Program Files`) → dane w `%APPDATA%\Lumen\` jak dotąd.
 
 | Plik | Zmiana | Zgodność wstecz |
 |---|---|---|
@@ -23,7 +29,8 @@ miejsce. `prefs.json` i `settings.json` mają też automatyczne `.bak` (zapis pr
 
 Dane EmuStart leżą obok programu (`config.json`, `data\`, `cache\`, `profiles\`, `logs\`). Dwie drogi:
 
-1. **Nowy folder (domyślnie)** — `%APPDATA%\Lumen\emustart\`. Zaloguj urządzenie do serwera w trybie TV
+1. **Nowy folder (domyślnie)** — `LumenData\emustart\` (pobrane gry w `cache\`, emulatory w `emulators\`,
+   BIOS-y z serwera w folderze `system` RetroArcha w `emulators\`). Zaloguj urządzenie do serwera w trybie TV
    (Menu → Ustawienia → Zaloguj, link z panelu serwera). Biblioteka, grafiki, profile i zapisy przychodzą
    z serwera; pobrane wcześniej gry pobiorą się ponownie przy pierwszym uruchomieniu.
 2. **Istniejący folder EmuStart** — Ustawienia → EmuStart → „Folder danych EmuStart” → **Wybierz…** → folder programu

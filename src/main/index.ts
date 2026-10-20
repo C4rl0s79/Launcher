@@ -1,11 +1,12 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, shell } from 'electron'
-import { existsSync, promises as fs } from 'node:fs'
+import { existsSync, mkdirSync, promises as fs } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { ART_SCHEME, EMU_UI_SCHEME, IPC, type PickPathOptions } from '@shared/api'
 import { EMU_UI, isModeCombo } from '@shared/emuPad'
 import type { ActionResult, ArtKind, ArtOption, Game, JobsSnapshot, LibrarySnapshot, Prefs, SecretName, SettingsPatch, SgdbGame, UiMode } from '@shared/types'
 import { initLogger, log } from './logger'
+import { chooseDataDir, migrateDataDir } from './dataDir'
 import { ops, PrefsError, PrefsStore } from './store/prefs'
 import { SettingsStore } from './store/settings'
 import { LibraryService } from './library/service'
@@ -35,10 +36,26 @@ protocol.registerSchemesAsPrivileged([
   { scheme: EMU_UI_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }
 ])
 
-// Separate profile for tests/development: LUMEN_USER_DATA=<dir>
-if (process.env.LUMEN_USER_DATA) app.setPath('userData', path.resolve(process.env.LUMEN_USER_DATA))
-// Portable build: keep everything (settings, caches, LaunchBox DB) next to the .exe.
-else if (process.env.PORTABLE_EXECUTABLE_DIR) app.setPath('userData', path.join(process.env.PORTABLE_EXECUTABLE_DIR, 'LumenData'))
+// Data folder: LumenData next to the exe in packaged builds (installer and portable) — settings,
+// caches, EmuStart data with the game cache, emulators and BIOS files, temp files (dataDir.ts).
+// LUMEN_USER_DATA=<dir>: separate profile for tests/development.
+const legacyDataDir = app.getPath('userData')
+const dataChoice = chooseDataDir({
+  override: process.env.LUMEN_USER_DATA,
+  portableDir: process.env.PORTABLE_EXECUTABLE_DIR,
+  exeDir: path.dirname(process.execPath),
+  packaged: app.isPackaged,
+  defaultDir: legacyDataDir
+})
+const migrated = !process.env.LUMEN_USER_DATA ? migrateDataDir(legacyDataDir, dataChoice.dir) : []
+app.setPath('userData', dataChoice.dir)
+// Chromium and the engine write temp files here instead of %TEMP%
+const tempDir = path.join(dataChoice.dir, 'tmp')
+mkdirSync(tempDir, { recursive: true })
+app.setPath('temp', tempDir)
+// also for Chromium's own temp files and child processes (renderers, GPU, the engine)
+process.env.TEMP = tempDir
+process.env.TMP = tempDir
 
 if (!app.requestSingleInstanceLock()) {
   app.quit()
@@ -77,6 +94,7 @@ const engine = new EmustartEngine({
       pythonPath: settings.get().pythonPath
     }),
   home: () => settings.get().emustartHome || paths.emustartHome,
+  tempDir: () => tempDir,
   windowTitle: WINDOW_TITLE
 })
 const emu = new EmustartProvider(engine, paths.emustartLibrary)
@@ -598,12 +616,35 @@ function registerFullscreenBridge(): void {
   })
 }
 
+/**
+ * Lumen's own EmuStart folder: emulators (and with them the BIOS files from the server, which go
+ * to RetroArch's system folder) live inside it unless the user chose another folder. An existing
+ * EmuStart folder picked in Settings keeps its own configuration.
+ */
+async function emustartDefaults(): Promise<void> {
+  if (settings.get().emustartHome) return
+  try {
+    const s = await engine.call<{ emu_root?: string }>('get_settings', [], 30_000)
+    if (s.emu_root) return
+    const root = path.join(paths.emustartHome, 'emulators')
+    await fs.mkdir(root, { recursive: true })
+    await engine.call('save_settings', [{ emu_root: root }], 30_000)
+    log.info('emustart', `folder emulatorów: ${root}`)
+    void emu.refresh()
+  } catch (e) {
+    log.warn('emustart', `domyślny folder emulatorów: ${(e as Error).message}`)
+  }
+}
+
 // ---------------- lifecycle ----------------
 
 app.on('second-instance', () => restoreWindow())
 
 app.whenReady().then(async () => {
   log.info('app', `Lumen ${app.getVersion()} starting (electron ${process.versions.electron}, packaged=${app.isPackaged})`)
+  log.info('app', `data folder: ${userData}`)
+  if (dataChoice.warning) log.warn('app', dataChoice.warning)
+  if (migrated.length) log.info('app', `copied from ${legacyDataDir} (left unchanged): ${migrated.join(', ')}`)
   await Promise.all([settings.init(), prefs.init(), emu.init()])
   registerArtProtocol()
   registerEmuUiProtocol()
@@ -623,8 +664,10 @@ app.whenReady().then(async () => {
     if (ev.type === 'quit') app.quit()
   })
   engine.on('state', (st) => {
+    if (st !== 'ready') return
     // the fullscreen UI reads the engine state when it loads — reload it once the engine is up
-    if (st === 'ready') modes?.reloadEmu()
+    modes?.reloadEmu()
+    void emustartDefaults()
   })
   library.on('snapshot', (s: LibrarySnapshot) => {
     // mirror Steam collections as read-only categories (skipped when they could not be read,
