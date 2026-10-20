@@ -1,0 +1,554 @@
+"""launchbox — baza LaunchBox Games DB: metadane, opisy i grafiki (offline).
+
+Na podstawie PyLinksWeb (services/launchbox.py). LaunchBox udostępnia całą bazę
+jednym plikiem `Metadata.zip` (~108 MB): ok. 189 tys. gier z opisem, datą,
+producentem, wydawcą, gatunkami i liczbą graczy oraz ~1,3 mln grafik w
+kategoriach (okładka, zrzut, Clear Logo…) pod images.launchbox-app.com.
+`Mame.xml` tłumaczy nazwy setów arcade na tytuły.
+
+W odróżnieniu od PyLinks zapisujemy też metadane gier (tabela games), bo EmuStart
+używa ich do opisów i filtrów. Baza: data/launchbox.db, budowana raz; potem
+wszystko działa bez sieci (sieć tylko po wybraną grafikę).
+"""
+
+from __future__ import annotations
+
+import contextlib
+import io
+import os
+import logging
+import re
+import sqlite3
+import threading
+import time
+import urllib.request
+import zipfile
+from pathlib import Path
+
+from emustart import art_sources, paths
+
+log = logging.getLogger("emustart.launchbox")
+
+METADATA_URL = "https://gamesdb.launchbox-app.com/Metadata.zip"
+IMAGE_BASE = "https://images.launchbox-app.com/"
+UA = "EmuStart/0.9 (+https://github.com/C4rl0s79/EmuStart)"
+
+# system (folder ES) → platforma w LaunchBoksie
+PLATFORMS = {
+    "psx": "Sony Playstation", "ps2": "Sony Playstation 2", "ps3": "Sony Playstation 3",
+    "psp": "Sony PSP", "psvita": "Sony Playstation Vita",
+    "nes": "Nintendo Entertainment System", "fds": "Nintendo Famicom Disk System",
+    "snes": "Super Nintendo Entertainment System", "SNESMSU1": "Super Nintendo Entertainment System",
+    "satellaview": "Nintendo Satellaview", "sufami": "Super Nintendo Entertainment System",
+    "n64": "Nintendo 64", "n64dd": "Nintendo 64DD", "gb": "Nintendo Game Boy",
+    "gbc": "Nintendo Game Boy Color", "gba": "Nintendo Game Boy Advance", "nds": "Nintendo DS",
+    "gameandwatch": "Nintendo Game & Watch", "gamecube": "Nintendo GameCube", "wii": "Nintendo Wii",
+    "virtualboy": "Nintendo Virtual Boy", "pokemini": "Nintendo Pokemon Mini",
+    "mastersystem": "Sega Master System", "megadrive": "Sega Genesis", "gamegear": "Sega Game Gear",
+    "sega32x": "Sega 32X", "segacd": "Sega CD", "saturn": "Sega Saturn", "dreamcast": "Sega Dreamcast",
+    "pico": "Sega Pico", "pcengine": "NEC TurboGrafx-16", "tg16": "NEC TurboGrafx-16",
+    "supergrafx": "PC Engine SuperGrafx", "pc88": "NEC PC-8801", "pc98": "NEC PC-9801",
+    "atari2600": "Atari 2600", "atari5200": "Atari 5200", "atari7800": "Atari 7800",
+    "atarijaguar": "Atari Jaguar", "lynx": "Atari Lynx", "atari800": "Atari 800", "atarist": "Atari ST",
+    "3do": "3DO Interactive Multiplayer", "amiga": "Commodore Amiga",
+    "amigawhdgames": "Commodore Amiga", "amigawhddemos": "Commodore Amiga", "c64": "Commodore 64",
+    "vic20": "Commodore VIC-20", "plus4": "Commodore Plus 4", "msx": "Microsoft MSX",
+    "msx2": "Microsoft MSX2", "ngp": "SNK Neo Geo Pocket", "ngpc": "SNK Neo Geo Pocket Color",
+    "wswan": "WonderSwan", "wswanc": "WonderSwan Color", "odyssey2": "Magnavox Odyssey 2",
+    "zxspectrum": "Sinclair ZX Spectrum", "x360": "Microsoft Xbox 360", "xbox360": "Microsoft Xbox 360",
+    "colecovision": "ColecoVision", "intellivision": "Mattel Intellivision", "vectrex": "GCE Vectrex",
+    "channelf": "Fairchild Channel F", "supervision": "Watara Supervision", "megaduck": "Mega Duck",
+    "arcadia": "Emerson Arcadia 2001", "scv": "Epoch Super Cassette Vision",
+    "gamecom": "Tiger Game.com", "gamepock": "Epoch Game Pocket Computer",
+    "fbneo": "Arcade", "mame": "Arcade", "arcade": "Arcade", "neogeo": "SNK Neo Geo AES",
+}
+
+# rodzaj grafiki EmuStart → kategorie LaunchBoksa, od najlepszej
+KINDS = {
+    "box": ["Box - Front", "Box - Front - Reconstructed", "Fanart - Box - Front", "Box - 3D"],
+    "snap": ["Screenshot - Gameplay", "Screenshot - Game Title", "Screenshot"],
+    "logo": ["Clear Logo"],
+}
+REGION_ORDER = ["", "World", "North America", "United States", "Europe", "United Kingdom",
+                "Germany", "France", "Japan"]
+
+_NORM_RE = re.compile(r"[^a-z0-9]+")
+_TAG_RE = re.compile(r"\s*[\(\[][^\)\]]*[\)\]]")
+_ART_RE = re.compile(r"^(.*?),\s+(the|a|an)(?![a-z])(.*)$")
+_LEAD_ART_RE = re.compile(r"^(the|an|a)\s+")
+
+
+def norm_title(name: str) -> str:
+    """Klucz dopasowania (z PyLinks): bez tagów, interpunkcji i przedimka.
+    „Legend of Zelda, The - Ocarina of Time” = „The Legend of Zelda: Ocarina of Time”."""
+    s = (name or "").lower()
+    s = _TAG_RE.sub(" ", s)
+    m = _ART_RE.match(s)
+    if m:
+        s = f"{m.group(2)} {m.group(1)} {m.group(3)}"
+    s = s.replace("&", " and ")
+    s = _LEAD_ART_RE.sub("", s.strip())
+    return _NORM_RE.sub("", s)
+
+
+def db_path() -> Path:
+    return paths.DATA / "launchbox.db"
+
+
+_SCHEMA = """
+CREATE TABLE IF NOT EXISTS games(id INTEGER PRIMARY KEY, name TEXT, platform TEXT,
+    year TEXT, overview TEXT, developer TEXT, publisher TEXT, genres TEXT,
+    players TEXT, rating TEXT);
+CREATE TABLE IF NOT EXISTS names(norm TEXT, gid INTEGER, platform TEXT);
+CREATE TABLE IF NOT EXISTS images(gid INTEGER, type TEXT, region TEXT, fn TEXT);
+CREATE TABLE IF NOT EXISTS mame(setname TEXT PRIMARY KEY, title TEXT, cloneof TEXT);
+CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT);
+"""
+
+
+def status() -> dict:
+    p = db_path()
+    if not p.is_file():
+        return {"ready": False}
+    try:
+        with _reader() as con:
+            meta = dict(con.execute("SELECT k, v FROM meta").fetchall())
+    except sqlite3.Error:
+        return {"ready": False}
+    return {"ready": bool(meta.get("updated")), "updated": meta.get("updated", ""),
+            "games": int(meta.get("games", 0) or 0), "images": int(meta.get("images", 0) or 0),
+            "size_mb": round(p.stat().st_size / (1 << 20), 1)}
+
+
+def ready() -> bool:
+    return status().get("ready", False)
+
+
+class Updater:
+    """Pobranie Metadata.zip i budowa bazy w tle. UI odpytuje status()."""
+
+    def __init__(self):
+        self.cancel = threading.Event()
+        self.text = ""
+        self.done = self.total = 0
+        self.error = ""
+        self.finished = False
+        self.result: dict = {}
+        self.thread = threading.Thread(target=self._run, daemon=True, name="launchbox")
+
+    def start(self) -> None:
+        self.thread.start()
+
+    def status(self) -> dict:
+        return {"running": not self.finished, "text": self.text, "done": self.done,
+                "total": self.total, "error": self.error, "result": self.result}
+
+    def _run(self) -> None:
+        zp = paths.DATA / "launchbox_metadata.zip"
+        try:
+            self._download(zp)
+            self.text, self.done, self.total = "Buduję bazę (rozbiór 512 MB XML)…", 0, 0
+            tmp = db_path().with_suffix(".new")
+            tmp.unlink(missing_ok=True)
+            self.result = build(zp, tmp, self._progress, self.cancel)
+            _install(tmp)
+            self.text = "Gotowe"
+        except Exception as ex:
+            log.exception("launchbox")
+            self.error = str(ex)
+        finally:
+            for p in (zp, zp.with_suffix(".part")):
+                try:
+                    p.unlink(missing_ok=True)
+                except OSError:
+                    pass
+            self.finished = True
+
+    def _progress(self, n: int, text: str) -> None:
+        self.done, self.text = n, text
+
+    def _download(self, dest: Path) -> None:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        part = dest.with_suffix(".part")
+        req = urllib.request.Request(METADATA_URL, headers={"User-Agent": UA})
+        with urllib.request.urlopen(req, timeout=60) as r:
+            self.total = int(r.headers.get("Content-Length") or 0)
+            self.done = 0
+            with open(part, "wb") as f:
+                while True:
+                    if self.cancel.is_set():
+                        raise InterruptedError("przerwano")
+                    chunk = r.read(1 << 20)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    self.done += len(chunk)
+                    self.text = f"Pobieram bazę LaunchBox: {self.done >> 20} / {self.total >> 20} MB"
+        part.replace(dest)
+
+
+def build(zip_path: Path, out: Path, progress=None, cancel=None) -> dict:
+    """Rozbiera Metadata.zip do SQLite (gry z metadanymi, nazwy, grafiki, sety MAME)."""
+    from xml.etree.ElementTree import iterparse
+    out.parent.mkdir(parents=True, exist_ok=True)
+    con = sqlite3.connect(str(out))
+    con.executescript(_SCHEMA)
+    n_games = n_img = n_alt = 0
+    games, names, imgs = [], [], []
+    plat_of: dict = {}
+
+    def flush():
+        nonlocal games, names, imgs
+        con.executemany("INSERT OR REPLACE INTO games VALUES(?,?,?,?,?,?,?,?,?,?)", games)
+        con.executemany("INSERT INTO names VALUES(?,?,?)", names)
+        con.executemany("INSERT INTO images VALUES(?,?,?,?)", imgs)
+        games, names, imgs = [], [], []
+
+    try:
+        with zipfile.ZipFile(zip_path) as z:
+            with z.open("Metadata.xml") as f:
+                for _ev, el in iterparse(f, events=("end",)):
+                    tag = el.tag
+                    if tag == "Game":
+                        gid, name = el.findtext("DatabaseID"), el.findtext("Name") or ""
+                        plat = el.findtext("Platform") or ""
+                        if gid and name:
+                            gid = int(gid)
+                            plat_of[gid] = plat
+                            year = el.findtext("ReleaseYear") or (el.findtext("ReleaseDate") or "")[:4]
+                            games.append((gid, name, plat, year, el.findtext("Overview") or "",
+                                          el.findtext("Developer") or "", el.findtext("Publisher") or "",
+                                          el.findtext("Genres") or "", el.findtext("MaxPlayers") or "",
+                                          el.findtext("CommunityRating") or ""))
+                            names.append((norm_title(name), gid, plat))
+                            n_games += 1
+                        el.clear()
+                    elif tag == "GameImage":
+                        gid, fn = el.findtext("DatabaseID"), el.findtext("FileName")
+                        if gid and fn:
+                            imgs.append((int(gid), el.findtext("Type") or "",
+                                         el.findtext("Region") or "", fn))
+                            n_img += 1
+                        el.clear()
+                    elif tag == "GameAlternateName":
+                        gid, nm = el.findtext("DatabaseID"), el.findtext("AlternateName")
+                        if gid and nm:
+                            names.append((norm_title(nm), int(gid), plat_of.get(int(gid), "")))
+                            n_alt += 1
+                        el.clear()
+                    else:
+                        continue
+                    if len(games) >= 5000 or len(imgs) >= 50000:
+                        flush()
+                        if progress:
+                            progress(n_games, f"Buduję bazę: {n_games} gier, {n_img} grafik…")
+                        if cancel is not None and cancel.is_set():
+                            raise InterruptedError("przerwano")
+            flush()
+            rows = []
+            with z.open("Mame.xml") as f:
+                for _ev, el in iterparse(f, events=("end",)):
+                    if el.tag == "MameFile":
+                        st = el.findtext("FileName")
+                        if st:
+                            rows.append((st.lower(), el.findtext("Name") or "",
+                                         (el.findtext("CloneOf") or "").lower()))
+                        el.clear()
+            con.executemany("INSERT OR REPLACE INTO mame VALUES(?,?,?)", rows)
+            if "Platforms.xml" in z.namelist():
+                _store_platforms(con, _platform_rows(z.read("Platforms.xml")))
+        con.executescript("""
+            CREATE INDEX IF NOT EXISTS ix_names ON names(platform, norm);
+            CREATE INDEX IF NOT EXISTS ix_names_n ON names(norm);
+            CREATE INDEX IF NOT EXISTS ix_images ON images(gid);""")
+        con.executemany("INSERT OR REPLACE INTO meta VALUES(?,?)", [
+            ("updated", time.strftime("%Y-%m-%d %H:%M")), ("games", str(n_games)),
+            ("images", str(n_img)), ("alts", str(n_alt))])
+        con.commit()
+        con.execute("VACUUM")
+    finally:
+        con.close()
+    return {"games": n_games, "images": n_img, "alts": n_alt}
+
+
+# ── platformy (Platforms.xml) ──
+
+_PLAT_SQL = """CREATE TABLE IF NOT EXISTS platforms(name TEXT PRIMARY KEY, release TEXT,
+    developer TEXT, manufacturer TEXT, cpu TEXT, memory TEXT, graphics TEXT, sound TEXT,
+    display TEXT, media TEXT, controllers TEXT, notes TEXT, category TEXT)"""
+_PLAT_FIELDS = ("ReleaseDate", "Developer", "Manufacturer", "Cpu", "Memory", "Graphics",
+                "Sound", "Display", "Media", "MaxControllers", "Notes", "Category")
+
+
+def _platform_rows(xml_bytes: bytes) -> list:
+    import xml.etree.ElementTree as ET
+    rows = []
+    for p in ET.fromstring(xml_bytes).findall("Platform"):
+        name = p.findtext("Name")
+        if name:
+            vals = [(p.findtext(f) or "").strip() for f in _PLAT_FIELDS]
+            vals[0] = vals[0][:10]                       # data bez godziny
+            rows.append((name, *vals))
+    return rows
+
+
+def _store_platforms(con, rows: list) -> None:
+    con.execute(_PLAT_SQL)
+    con.executemany("INSERT OR REPLACE INTO platforms VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", rows)
+
+
+class _RangeFile(io.RawIOBase):
+    """Plik zdalny czytany fragmentami (HTTP Range) — zipfile odczyta z niego
+    jeden wpis archiwum bez pobierania całości."""
+
+    def __init__(self, url: str):
+        self.url, self.pos = url, 0
+        req = urllib.request.Request(url, method="HEAD", headers={"User-Agent": UA})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            self.size = int(r.headers["Content-Length"])
+
+    def readable(self):
+        return True
+
+    def seekable(self):
+        return True
+
+    def tell(self):
+        return self.pos
+
+    def seek(self, off, whence=0):
+        self.pos = off if whence == 0 else self.pos + off if whence == 1 else self.size + off
+        return self.pos
+
+    def readinto(self, b):
+        n = min(len(b), self.size - self.pos)
+        if n <= 0:
+            return 0
+        req = urllib.request.Request(self.url, headers={
+            "User-Agent": UA, "Range": f"bytes={self.pos}-{self.pos + n - 1}"})
+        with urllib.request.urlopen(req, timeout=60) as r:
+            data = r.read()
+        b[:len(data)] = data
+        self.pos += len(data)
+        return len(data)
+
+
+def fetch_platforms() -> int:
+    """Pobiera z serwera tylko Platforms.xml (~75 KB z archiwum 108 MB) i zapisuje
+    do bazy LaunchBox. Zwraca liczbę platform."""
+    with zipfile.ZipFile(io.BufferedReader(_RangeFile(METADATA_URL), 1 << 16)) as z:
+        rows = _platform_rows(z.read("Platforms.xml"))
+    with _gate_enter():
+        con = sqlite3.connect(str(db_path()))
+        try:
+            _store_platforms(con, rows)
+            con.commit()
+        finally:
+            con.close()
+    return len(rows)
+
+
+def platform(es: str) -> dict | None:
+    """Dane platformy LaunchBoksa dla systemu (producent, premiera, nośnik, opis…)."""
+    name = PLATFORMS.get(es) or PLATFORMS.get(es.lower(), "")
+    if not name or not db_path().is_file():
+        return None
+    try:
+        with _reader() as con:
+            r = con.execute("SELECT * FROM platforms WHERE name=?", (name,)).fetchone()
+    except sqlite3.Error:
+        return None                         # baza bez tabeli platform (sprzed 0.10)
+    return dict(r) if r else None
+
+
+# ── zapytania ──
+
+# Połączenie na zapytanie (otwarcie bazy SQLite to ułamek milisekundy). Odczyty i podmiana
+# pliku bazy przechodzą przez bramkę: Windows nie podmieni pliku otwartego w innym wątku
+# (WinError 32 przy „Aktualizuj bazę LaunchBox”), więc podmiana czeka, aż trwające
+# odczyty się skończą, a nowe odczyty czekają na koniec podmiany.
+_gate = threading.Condition()
+_readers = 0
+_swapping = False
+SWAP_WAIT = 30.0          # najdłużej tyle podmiana czeka na trwające odczyty
+
+
+@contextlib.contextmanager
+def _gate_enter():
+    global _readers
+    with _gate:
+        while _swapping:
+            _gate.wait()
+        _readers += 1
+    try:
+        yield
+    finally:
+        with _gate:
+            _readers -= 1
+            _gate.notify_all()
+
+
+@contextlib.contextmanager
+def _reader():
+    """Połączenie tylko-do-odczytu na czas jednego zapytania (albo kilku w `with`)."""
+    with _gate_enter():
+        con = sqlite3.connect(f"file:{db_path()}?mode=ro", uri=True)
+        con.row_factory = sqlite3.Row
+        try:
+            yield con
+        finally:
+            con.close()
+
+
+def _install(tmp: Path) -> None:
+    """Nowa baza na miejsce starej: po zakończeniu trwających odczytów, z ponowieniem,
+    gdy plik chwilowo trzyma inny proces (np. antywirus). Bramka nie jest trzymana
+    w czasie czekania — odczyty czekają tylko na samą podmianę."""
+    global _swapping
+    with _gate:
+        while _swapping:
+            _gate.wait()
+        _swapping = True
+        end = time.monotonic() + SWAP_WAIT
+        while _readers and time.monotonic() < end:
+            _gate.wait(end - time.monotonic())
+    try:
+        for i in range(10):
+            try:
+                os.replace(tmp, db_path())
+                return
+            except PermissionError:
+                if i == 9:
+                    raise
+                time.sleep(0.3)
+    finally:
+        with _gate:
+            _swapping = False
+            _gate.notify_all()
+
+
+def find_game(es: str, name: str, setname: str = "") -> dict | None:
+    """Gra LaunchBoksa dla gry EmuStart (platforma + tytuł; arcade po nazwie setu)."""
+    if not ready():
+        return None
+    try:
+        with _reader() as con:
+            return _find_game(con, es, name, setname)
+    except sqlite3.Error:
+        log.exception("LaunchBox: %s", name)
+        return None
+
+
+def _find_game(con, es: str, name: str, setname: str) -> dict | None:
+    plat = PLATFORMS.get(es) or PLATFORMS.get(es.lower(), "")
+    titles = []
+    if setname:
+        r = con.execute("SELECT title, cloneof FROM mame WHERE setname=?", (setname.lower(),)).fetchone()
+        if r and r["title"]:
+            titles.append(r["title"])
+        if r and r["cloneof"]:
+            p = con.execute("SELECT title FROM mame WHERE setname=?", (r["cloneof"],)).fetchone()
+            if p and p["title"]:
+                titles.append(p["title"])
+    titles.append(name)
+    for t in titles:
+        n = norm_title(t)
+        if not n:
+            continue
+        gids = [r["gid"] for r in con.execute(
+            "SELECT DISTINCT gid FROM names WHERE platform=? AND norm=?", (plat, n))] if plat else []
+        if not gids and plat:
+            # „Final Fantasy VII (USA) (Disc 1)” / drobne różnice zapisu — ten sam początek klucza
+            gids = [r["gid"] for r in con.execute(
+                "SELECT DISTINCT gid FROM names WHERE platform=? AND norm LIKE ? LIMIT 20",
+                (plat, n[:12] + "%"))] if len(n) >= 12 else []
+        if not gids:
+            continue
+        rows = [dict(r) for r in con.execute(
+            "SELECT * FROM games WHERE id IN (%s)" % ",".join("?" * len(gids)), gids)]
+        rows = [r for r in rows if _nums_ok(t, r["name"])]   # „Part 3” ≠ „Part II”
+        if not rows:
+            continue
+        best = max(rows, key=lambda g: (art_sources.similarity(art_sources.plain_title(t), g["name"]),
+                                        bool(g["overview"])))
+        if art_sources.similarity(art_sources.plain_title(t), best["name"]) >= 0.6 or len(rows) == 1:
+            return best
+    return _find_variants(con, plat, name) if plat else None
+
+
+_ROMAN = {"1": "i", "2": "ii", "3": "iii", "4": "iv", "5": "v", "6": "vi", "7": "vii", "8": "viii",
+          "9": "ix", "10": "x"}
+
+
+def _find_variants(con, plat: str, name: str) -> dict | None:
+    """Ostatnie próby (np. nazwy WHDLoad): „Kings Quest 5” = „King's Quest V”,
+    „Speedball 2” = „Speedball 2: Brutal Deluxe” (ten sam początek tytułu)."""
+    n = norm_title(name)
+    if len(n) < 5:
+        return None
+    variants = [re.sub(r"(\d+)$", lambda m: _ROMAN.get(m.group(1), m.group(1)), n)]
+    variants = [v for v in variants if v != n]
+    for v in variants:
+        r = con.execute("SELECT gid FROM names WHERE platform=? AND norm=? LIMIT 1", (plat, v)).fetchone()
+        if r:
+            return dict(con.execute("SELECT * FROM games WHERE id=?", (r["gid"],)).fetchone())
+    for v in [n] + variants:
+        rows = con.execute("SELECT gid, norm FROM names WHERE platform=? AND norm LIKE ? LIMIT 30",
+                           (plat, v + "%")).fetchall()
+        ok = []
+        for r in sorted(rows, key=lambda r: len(r["norm"])):
+            g = dict(con.execute("SELECT * FROM games WHERE id=?", (r["gid"],)).fetchone())
+            # dalsza część musi być podtytułem: „Xenon 2: Megablast”, nie „Archon II”
+            main = re.split(r":| - ", g["name"], maxsplit=1)[0]
+            if norm_title(main) in (n, *variants) and _nums_ok(name, g["name"]):
+                ok.append(g)
+        if ok:
+            return ok[0]
+    return None
+
+
+_ROMAN_INT = {"ii": 2, "iii": 3, "iv": 4, "v": 5, "vi": 6, "vii": 7, "viii": 8, "ix": 9, "x": 10}
+
+
+def _nums(title: str) -> set:
+    """Numery części w głównym tytule (przed „:”/„ - ”), rzymskie jako liczby."""
+    main = re.split(r":| - ", _TAG_RE.sub(" ", title or ""), maxsplit=1)[0]
+    out = set()
+    for w in re.findall(r"[a-z0-9]+", main.lower()):
+        if w.isdigit():
+            out.add(int(w))
+        elif w in _ROMAN_INT:
+            out.add(_ROMAN_INT[w])
+    return out
+
+
+def _nums_ok(a: str, b: str) -> bool:
+    return _nums(a) == _nums(b)
+
+
+def metadata_of(g: dict) -> dict:
+    """Pola EmuStart z rekordu gry LaunchBoksa."""
+    out = {}
+    if g.get("overview"):
+        out["description"] = g["overview"].strip()
+    if g.get("year"):
+        out["year"] = g["year"][:4]
+    for src, dst in (("developer", "developer"), ("publisher", "publisher"), ("players", "players")):
+        if g.get(src):
+            out[dst] = g[src]
+    if g.get("genres"):
+        out["genre"] = ", ".join(x.strip() for x in g["genres"].split(";") if x.strip())
+    out["lb_id"] = g["id"]
+    return out
+
+
+def images(gid: int, kind: str | None = None) -> list:
+    """[{url, type, region}] — dla `kind` tylko kategorie tego rodzaju, od najlepszej."""
+    with _reader() as con:
+        rows = [dict(r) for r in con.execute("SELECT type, region, fn FROM images WHERE gid=?", (gid,))]
+    order = KINDS.get(kind) if kind else None
+    if order:
+        rows = [r for r in rows if r["type"] in order]
+        rows.sort(key=lambda r: (order.index(r["type"]),
+                                 REGION_ORDER.index(r["region"]) if r["region"] in REGION_ORDER else 99))
+    return [{"url": IMAGE_BASE + r["fn"], "type": r["type"], "region": r["region"]} for r in rows]

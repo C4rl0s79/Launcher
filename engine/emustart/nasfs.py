@@ -1,0 +1,493 @@
+"""nasfs — folder profili graczy: przez serwer EmuStart (HTTP, EmuStart na PC) albo na dysku
+(DirFs — EmuStart Server, jego własny folder profili).
+
+Ścieżki względem korzenia profili (`profiles_nas`, np. Z:\\emustart\\Profiles), zapisane
+z „/”: `Ania/save/pcsx2/memcards/Mcd001.ps2`.
+
+Przez serwer kopia zapasowa nadpisywanego pliku powstaje na serwerze (przez SMB
+szła najpierw do komputera i z powrotem), a pliki idą skompresowane zstd (pusta
+karta pamięci PS2 8 MB → kilkaset bajtów). Serwer wybieramy tylko wtedy, gdy jego
+folder profili to ten sam folder, który widzimy przez SMB (znacznik `.emustart-root`),
+albo gdy SMB jest niedostępny.
+"""
+
+from __future__ import annotations
+
+import http.client
+import json
+import logging
+import os
+import re
+import shutil
+import threading
+import time
+import urllib.parse
+import uuid
+from pathlib import Path
+
+log = logging.getLogger("emustart.nasfs")
+
+ROOT_MARK = ".emustart-root"
+NAS_BACKUPS = 10
+ZSTD_MIN = 4096                 # mniejsze pliki bez kompresji
+MAX_BODY = 1 << 30
+
+
+def _zstd():
+    try:
+        from compression import zstd
+        return zstd
+    except ImportError:          # Python < 3.14
+        return None
+
+
+_RESERVED = {"CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$",
+             *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
+_SHORT_83 = re.compile(r"^[^.~]{1,6}~\d{1,6}(\.[^.]{0,3})?$")
+
+
+def clean_rel(rel: str) -> str:
+    """Ścieżka względna bez wyjścia poza korzeń: bez „..”, dysków, ścieżek bezwzględnych —
+    i bez nazw, które Windows utożsamia z innymi (kropka / spacja na końcu, krótkie nazwy
+    8.3 jak „JEZUS~1”, urządzenia jak „CON”): inaczej „Jezus.” ominęłoby sprawdzanie konta
+    „Jezus”, a trafiło do jego folderu."""
+    parts = []
+    for p in str(rel).replace("\\", "/").split("/"):
+        if p in ("", "."):
+            continue
+        if (p == ".." or ":" in p or p.startswith("~") or p.endswith((".", " "))
+                or any(ord(ch) < 32 for ch in p) or _SHORT_83.match(p)
+                or p.split(".", 1)[0].upper().rstrip() in _RESERVED):
+            raise ValueError(f"niedozwolona ścieżka: {rel}")
+        parts.append(p)
+    return "/".join(parts)
+
+
+# ── wspólne operacje na lokalnym folderze (SMB po stronie klienta, dysk po stronie serwera) ──
+
+def scan_dir(root: Path) -> dict:
+    """{ścieżka względna „/”: (rozmiar, czas)} — os.scandir (na Windows rozmiar i czas
+    przychodzą z listą, bez zapytania o każdy plik)."""
+    out, stack = {}, [root]
+    while stack:
+        d = stack.pop()
+        try:
+            with os.scandir(d) as it:
+                for e in it:
+                    try:
+                        if e.is_dir(follow_symlinks=False):
+                            stack.append(Path(e.path))
+                        elif e.is_file(follow_symlinks=False) and not e.name.endswith(".emustart-tmp"):
+                            st = e.stat()
+                            out[Path(e.path).relative_to(root).as_posix()] = (st.st_size, st.st_mtime)
+                    except OSError:
+                        continue
+        except OSError:
+            continue
+    return out
+
+
+def write_atomic(dst: Path, data: bytes, mtime: float | None = None) -> None:
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dst.with_name(f"{dst.name}.{threading.get_ident()}.emustart-tmp")
+    tmp.write_bytes(data)
+    if mtime:
+        os.utime(tmp, (time.time(), mtime))
+    for i in range(5):                       # plik chwilowo otwarty przez inny wątek/program
+        try:
+            os.replace(tmp, dst)
+            return
+        except PermissionError:
+            time.sleep(0.1 * (i + 1))
+    tmp.unlink(missing_ok=True)
+    raise PermissionError(f"nie można zapisać {dst}")
+
+
+BACKUP_LEVEL = 19          # zstd, maksymalny zwykły poziom — kopie zapasowe czyta się rzadko
+
+
+def backup_copy(f: Path, bak: Path) -> None:
+    """Kopia zapasowa nadpisywanego pliku. Gdy plik się kompresuje (karty pamięci są
+    w większości puste: 8 MB → kilka KB), zapisywana jako `<nazwa>.zst`; stany gry
+    emulatory kompresują same — te kopiujemy bez zmian (zstd nic by nie dało)."""
+    if not f.is_file():
+        return
+    bak.parent.mkdir(parents=True, exist_ok=True)
+    z = _zstd()
+    try:
+        size = f.stat().st_size
+        if z and size >= ZSTD_MIN:
+            data = f.read_bytes()
+            probe = data[:1 << 20]
+            if len(z.compress(probe, 3)) < 0.9 * len(probe):
+                out = bak.with_name(bak.name + ".zst")
+                out.write_bytes(z.compress(data, BACKUP_LEVEL))
+                shutil.copystat(f, out)
+                return
+    except OSError:
+        pass
+    shutil.copy2(f, bak)
+
+
+def restore_backup(src: Path, dst: Path) -> None:
+    """Przywrócenie kopii zapasowej (także spakowanej `.zst`)."""
+    if src.suffix == ".zst":
+        write_atomic(dst, _zstd().decompress(src.read_bytes()), src.stat().st_mtime)
+    else:
+        shutil.copy2(src, dst)
+
+
+def prune_backups(bdir: Path, keep: int = NAS_BACKUPS) -> None:
+    try:
+        dirs = sorted((d for d in bdir.iterdir() if d.is_dir()), key=lambda d: d.name)
+    except OSError:
+        return
+    for d in dirs[:-keep]:
+        shutil.rmtree(d, ignore_errors=True)
+
+
+def backup_root(rel: str) -> Path | None:
+    """`<profil>/_backup` dla ścieżki kopii zapasowej `<profil>/_backup/<czas>/…`."""
+    parts = rel.split("/")
+    return Path(*parts[:2]) if len(parts) >= 3 and parts[1] == "_backup" else None
+
+
+def root_id(root: Path, create: bool) -> str:
+    f = root / ROOT_MARK
+    try:
+        return f.read_text(encoding="utf-8").strip()
+    except OSError:
+        if not create:
+            return ""
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+        v = uuid.uuid4().hex
+        f.write_text(v, encoding="utf-8")
+        return v
+    except OSError:
+        return ""
+
+
+MOVED_MARK = ".emustart-moved"      # folder profili przeniesiony do katalogu serwera (srvadmin)
+
+
+class DirFs:
+    """Folder profili na dysku — po stronie EmuStart Server (jego folder profili)."""
+
+    name = "dysk"
+
+    def __init__(self, root: Path):
+        self.root = Path(root)
+
+    def _usable(self) -> str:
+        """'' = folder do użycia; inaczej powód (brak folderu, przeniesiony na serwer)."""
+        if str(self.root) in ("", "."):
+            return "folder profili nie jest ustawiony"
+        if (self.root / MOVED_MARK).exists():
+            return "folder profili przeniesiony na serwer EmuStart — połącz się z serwerem"
+        return ""
+
+    def _p(self, rel: str) -> Path:
+        why = self._usable()
+        if why:
+            raise OSError(why)               # nigdy zapisu do „.” ani do starego, przeniesionego folderu
+        r = clean_rel(rel)
+        return self.root / r if r else self.root
+
+    def online(self) -> bool:
+        if self._usable():
+            return False
+        try:
+            self.root.mkdir(parents=True, exist_ok=True)
+            return self.root.is_dir()
+        except OSError:
+            return False
+
+    def scan(self, rel: str) -> dict:
+        return scan_dir(self._p(rel))
+
+    def listdir(self, rel: str) -> list:
+        p = self._p(rel)
+        try:
+            return [(e.name, e.is_dir()) for e in os.scandir(p)]
+        except OSError:
+            return []
+
+    def stat(self, rel: str):
+        try:
+            st = self._p(rel).stat()
+            return (st.st_size, st.st_mtime)
+        except OSError:
+            return None
+
+    def exists(self, rel: str) -> bool:
+        return self._p(rel).exists()
+
+    def read(self, rel: str) -> bytes | None:
+        try:
+            return self._p(rel).read_bytes()
+        except OSError:
+            return None
+
+    def write(self, rel: str, data: bytes, mtime: float | None = None) -> None:
+        write_atomic(self._p(rel), data, mtime)
+
+    def unlink(self, rel: str) -> None:
+        self._p(rel).unlink(missing_ok=True)
+
+    def get_file(self, rel: str, local: Path) -> bool:
+        src = self._p(rel)
+        if not src.is_file():
+            return False
+        local.parent.mkdir(parents=True, exist_ok=True)
+        tmp = local.with_name(local.name + ".emustart-tmp")
+        shutil.copy2(src, tmp)
+        os.replace(tmp, local)
+        return True
+
+    def put_file(self, local: Path, rel: str, backup: str = "") -> None:
+        dst = self._p(rel)
+        if backup:
+            backup_copy(dst, self._p(backup))
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        tmp = dst.with_name(dst.name + ".emustart-tmp")
+        shutil.copy2(local, tmp)
+        os.replace(tmp, dst)
+
+    def prune(self, rel: str) -> None:
+        prune_backups(self._p(rel))
+
+
+# tokeny profili z PIN-em (profil małymi literami → token) — wysyłane do serwera
+# w nagłówku X-Profile-Token przy plikach tego profilu (profiles.py je ustawia)
+TOKENS: dict = {}
+
+
+class PinRequired(OSError):
+    """Serwer nie wydaje plików profilu bez PIN-u (brak / nieważny token)."""
+
+
+class RemoteFs:
+    """Folder profili przez serwer EmuStart (/v1/nas/…)."""
+
+    name = "serwer"
+
+    def __init__(self, host: str, port: int, key: str):
+        self.host, self.port, self.key = host, port, key
+        self._local = threading.local()
+
+    def _conn(self) -> http.client.HTTPConnection:
+        c = getattr(self._local, "c", None)
+        if c is None:
+            from emustart import netsrc
+            c = netsrc.conn(self.host, self.port, 60)
+            self._local.c = c
+        return c
+
+    def _req(self, method: str, path: str, q: dict, body: bytes | None = None,
+             headers: dict | None = None) -> tuple[int, bytes, dict]:
+        url = (path if path.startswith("/v1/") else f"/v1/nas/{path}") + "?" + urllib.parse.urlencode(q)
+        from emustart import netsrc
+        h = {**netsrc.auth_headers(self.key), **(headers or {})}
+        prof = (q.get("profile") or q.get("p") or "").replace("\\", "/").split("/")[0].lower()
+        if prof and TOKENS.get(prof):
+            h["X-Profile-Token"] = TOKENS[prof]
+        last = None
+        for attempt in range(3):
+            c = self._conn()
+            try:
+                c.request(method, url, body=body, headers=h)
+                r = c.getresponse()
+                data = r.read()
+                if r.will_close:
+                    c.close()
+                    self._local.c = None
+                if r.status == 401 and self.key.startswith(netsrc.DEV) and attempt == 0:
+                    netsrc.drop_token()            # token sesji wygasł (np. restart serwera)
+                    h = {**netsrc.auth_headers(self.key), **{k: v for k, v in h.items() if k != "Authorization"}}
+                    continue
+                return r.status, data, {k.lower(): v for k, v in r.getheaders()}
+            except (OSError, http.client.HTTPException) as ex:
+                last = ex
+                c.close()
+                self._local.c = None
+                time.sleep(0.2 * (attempt + 1))
+        raise OSError(f"serwer {self.host}: {last}")
+
+    def _json(self, path: str, q: dict):
+        st, data, _h = self._req("GET", path, q)
+        if st == 404:
+            return None
+        if st == 403 and b'"pin"' in data:
+            raise PinRequired(f"konto wymaga hasła ({q.get('p', '')})")
+        if st != 200:
+            raise OSError(f"serwer: {path} {st} {data[:200]!r}")
+        return json.loads(data)
+
+    def online(self) -> bool:
+        try:
+            return self._json("list", {"p": ""}) is not None
+        except OSError:
+            return False
+
+    def scan(self, rel: str) -> dict:
+        d = self._json("scan", {"p": clean_rel(rel)}) or {}
+        return {k: tuple(v) for k, v in (d.get("files") or {}).items()}
+
+    def listdir(self, rel: str) -> list:
+        d = self._json("list", {"p": clean_rel(rel)}) or {}
+        return [tuple(e) for e in d.get("entries") or []]
+
+    def stat(self, rel: str):
+        d = self._json("stat", {"p": clean_rel(rel)})
+        return (d["size"], d["mtime"]) if d else None
+
+    def exists(self, rel: str) -> bool:
+        d = self._json("stat", {"p": clean_rel(rel)})
+        return d is not None
+
+    def _get(self, rel: str):
+        z = _zstd()
+        st, data, h = self._req("GET", "file", {"p": clean_rel(rel)},
+                                headers={"Accept-Encoding": "zstd"} if z else None)
+        if st == 404:
+            return None, None
+        if st != 200:
+            raise OSError(f"serwer: odczyt {rel}: {st}")
+        if h.get("content-encoding") == "zstd":
+            data = z.decompress(data)
+        return data, float(h.get("x-mtime") or 0) or None
+
+    def read(self, rel: str) -> bytes | None:
+        return self._get(rel)[0]
+
+    def write(self, rel: str, data: bytes, mtime: float | None = None, backup: str = "") -> None:
+        q = {"p": clean_rel(rel)}
+        if mtime:
+            q["mtime"] = repr(float(mtime))
+        if backup:
+            q["backup"] = clean_rel(backup)
+        headers = {}
+        z = _zstd()
+        if z and len(data) >= ZSTD_MIN:
+            packed = z.compress(data, 3)
+            if len(packed) < len(data):
+                data = packed
+                headers["Content-Encoding"] = "zstd"
+        st, body, _h = self._req("PUT", "file", q, body=data, headers=headers)
+        if st != 200:
+            raise OSError(f"serwer: zapis {rel}: {st} {body[:200]!r}")
+
+    def unlink(self, rel: str) -> None:
+        st, body, _h = self._req("DELETE", "file", {"p": clean_rel(rel)})
+        if st not in (200, 404):
+            raise OSError(f"serwer: usuwanie {rel}: {st}")
+
+    def get_file(self, rel: str, local: Path) -> bool:
+        data, mtime = self._get(rel)
+        if data is None:
+            return False
+        write_atomic(local, data, mtime)
+        return True
+
+    def put_file(self, local: Path, rel: str, backup: str = "") -> None:
+        self.write(rel, local.read_bytes(), local.stat().st_mtime, backup)
+
+    def prune(self, rel: str) -> None:
+        pass                    # serwer przycina kopie zapasowe sam po każdym zapisie z kopią
+
+    # konta z hasłem (emustart/accounts.py)
+    def profiles(self) -> list:
+        st, data, _h = self._req("GET", "/v1/profiles", {})
+        if st != 200:
+            raise OSError(f"serwer: lista profili {st}")
+        return json.loads(data).get("profiles") or []
+
+    def profile_op(self, op: str, q: dict) -> dict:
+        """login | create | password — hasło w treści JSON, połączeniem szyfrowanym, gdy się da."""
+        from emustart import netsrc
+        body = json.dumps(q).encode("utf-8")
+        for attempt in range(2):
+            c = netsrc.secure_conn(self.host, self.port, 30)
+            try:
+                c.request("PUT", f"/v1/profiles/{op}", body=body,
+                          headers={**netsrc.auth_headers(self.key), "Content-Type": "application/json"})
+                r = c.getresponse()
+                data = r.read()
+            except (OSError, http.client.HTTPException) as ex:
+                raise OSError(f"serwer: konto {op}: {ex}")
+            finally:
+                c.close()
+            if r.status == 401 and self.key.startswith(netsrc.DEV) and attempt == 0:
+                netsrc.drop_token()
+                continue
+            break
+        try:
+            out = json.loads(data)
+        except ValueError:
+            raise OSError(f"serwer: konto {op} {r.status}")
+        if r.status == 404 and "error" not in out:
+            out["error"] = "Serwer ma starszą wersję EmuStart — zaktualizuj go."
+        if r.status == 409:
+            out["exists"] = True
+        return out
+
+    # menedżer zapisów (emustart/savemgr.py) — liczony na serwerze, przy plikach
+    def savemgr_catalog(self, q: dict) -> dict:
+        st, data, _h = self._req("GET", "/v1/savemgr/catalog", q)
+        if st != 200:
+            raise OSError(f"serwer: menedżer zapisów {st} {data[:200]!r}")
+        return json.loads(data)
+
+    def savemgr_copy(self, q: dict) -> dict:
+        st, data, _h = self._req("PUT", "/v1/savemgr/copy", q, body=b"")
+        if st != 200:
+            raise OSError(f"serwer: kopia stanu {st} {data[:200]!r}")
+        return json.loads(data)
+
+
+# ── folder profili EmuStart na PC: przez serwer ──
+
+class OfflineFs:
+    """Bez zalogowania do serwera / serwer nieosiągalny przy starcie: tryb offline — zapisy
+    czekają w kolejce i wyślą się, gdy serwer odpowie."""
+
+    name = "serwer"
+
+    def online(self) -> bool:
+        return False
+
+    def profiles(self) -> list:
+        raise OSError("serwer EmuStart niedostępny")
+
+    def profile_op(self, op: str, q: dict) -> dict:
+        return {"ok": False, "error": "Serwer EmuStart jest niedostępny."}
+
+    def __getattr__(self, name):
+        def offline(*_a, **_k):
+            raise OSError("serwer EmuStart niedostępny")
+        return offline
+
+
+_choice: dict = {}
+_choice_lock = threading.Lock()
+OFFLINE = OfflineFs()
+
+
+def backend(cfg: dict):
+    """Folder profili graczy — przez serwer EmuStart (zapisy, stany, ustawienia, konta).
+    Bez zalogowania do serwera: tryb offline (zapisy czekają w kolejce)."""
+    from emustart import netsrc
+    ep = netsrc.endpoint(cfg)
+    if not ep:
+        return OFFLINE
+    with _choice_lock:
+        hit = _choice.get(ep)
+        if hit is None:
+            hit = _choice[ep] = RemoteFs(*ep)
+    return hit
+
+
+def reset() -> None:
+    with _choice_lock:
+        _choice.clear()

@@ -1,0 +1,457 @@
+:root {
+  --bg: #0b0d12;
+  --bg2: #141824;
+  --panel: rgba(20, 24, 36, .92);
+  --line: rgba(255, 255, 255, .08);
+  --text: #e9edf5;
+  --dim: #8d97ab;
+  --accent: #4f8cff;
+  --accent2: color-mix(in srgb, var(--accent), white 35%);
+  --accent-soft: color-mix(in srgb, var(--accent) 35%, transparent);
+  --ok: #3fbf7f;
+  --warn: #e6b450;
+  --err: #ef5f5f;
+  /* wartości z edytora wyglądu (web/look.js) */
+  --row: max(28px, 4.6vh);
+  --setrow: max(28px, 4.6vh);     /* wiersze ustawień — niezależne od listy gier */
+  --fs-all: 1;
+  --fs: calc(clamp(14px, 1.55vh, 20px) * var(--fs-all));
+  --tlogo-h: .92; --tlogo-w: 75%; --pvlogo-h: 16vh; --car-h: 34%; --car-w: 26vw; --listlogo-h: 6.5vh;
+  --list-w: 42%; --media-h: 44vh; --box-w: 32%; --desc-lines: 14;
+  --fs-list: 1; --fs-title: 1; --fs-meta: 1; --fs-desc: 1; --fs-sys: 1; --fs-sysdesc: 1; --fs-menu: 1; --fs-hint: 1; --fs-top: 1;
+  --bg-grad: #1b2236;
+  font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; }
+body {
+  background: radial-gradient(120% 90% at 50% 0%, var(--bg-grad) 0%, var(--bg) 60%) fixed, var(--bg);
+  color: var(--text);
+  font-size: var(--fs);
+  user-select: none;
+  cursor: default;
+}
+body.nomouse { cursor: none; }
+.hidden { display: none !important; }
+img { display: block; }
+
+/* ── pasek górny ── */
+.topbar {
+  position: fixed; inset: 0 0 auto 0; height: 7vh;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 3vw; z-index: 5; font-size: calc(1em * var(--fs-top));
+}
+.brand { font-size: 1.5em; letter-spacing: .04em; color: var(--dim); }
+.brand b { color: var(--text); font-weight: 600; }
+.status { display: flex; gap: 1em; align-items: center; color: var(--dim); }
+.pill {
+  padding: .25em .8em; border-radius: 99px; background: var(--line);
+  font-size: .85em; white-space: nowrap;
+}
+.pill.ok { color: var(--ok); }
+.pill.warn { color: var(--warn); }
+.pill.err { color: var(--err); }
+#clock { font-variant-numeric: tabular-nums; font-size: 1.1em; color: var(--text); }
+
+.screen { position: fixed; inset: 7vh 0 7vh 0; }
+
+/* ── karuzela systemów ── */
+.carousel {
+  position: absolute; left: 0; right: 0; top: calc(35% - var(--car-h) / 2); height: var(--car-h);
+  overflow: hidden;
+}
+.syscard {
+  position: absolute; top: 50%; left: 50%;
+  width: var(--car-w); height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  transition: transform .28s cubic-bezier(.2,.8,.2,1), opacity .28s, filter .28s;
+  will-change: transform;
+}
+.syscard img { max-width: 92%; max-height: 80%; object-fit: contain;
+  filter: drop-shadow(0 8px 30px rgba(0,0,0,.6)); }
+.syscard .txt { font-size: 3.4vw; font-weight: 700; text-align: center; letter-spacing: .02em; }
+.sysinfo { position: absolute; left: 0; right: 0; top: 60%; text-align: center; }
+.sysinfo h1 { font-size: calc(2.6em * var(--fs-sys)); margin: 0 0 .2em; font-weight: 600; }
+.sysinfo p { color: var(--dim); margin: 0; font-size: calc(1.15em * var(--fs-sysdesc)); }
+.empty { position: absolute; inset: 30% 20% auto; text-align: center; color: var(--dim); }
+.empty h2 { color: var(--text); }
+
+/* ── lista gier ── */
+#games { display: grid; grid-template-columns: minmax(300px, var(--list-w)) 1fr; gap: 2.5vw; padding: 0 3vw; }
+.gamelist { display: flex; flex-direction: column; min-height: 0; }
+.listhead { display: flex; align-items: center; gap: 1em; height: calc(var(--listlogo-h) + 2.5vh); }
+.listhead img { height: var(--listlogo-h); max-width: 18vw; object-fit: contain; }
+.listhead h2 { margin: 0; font-size: 1.4em; }
+.listhead p { margin: 0; color: var(--dim); font-size: .9em; }
+.rows { position: relative; flex: 1; overflow: hidden; }
+.row {
+  position: absolute; left: 0; right: 0; height: var(--row);
+  display: flex; align-items: center; gap: .6em;
+  padding: 0 1em; border-radius: 8px;
+  white-space: nowrap; overflow: hidden; font-size: calc(1em * var(--fs-list));
+}
+.row .t { overflow: hidden; text-overflow: ellipsis; }
+.row .g { color: var(--dim); font-size: .8em; overflow: hidden; text-overflow: ellipsis; flex-shrink: 3; }
+.row .ic { margin-left: auto; display: flex; gap: .4em; flex-shrink: 0; font-size: .8em; }
+.row.sel { background: linear-gradient(90deg, var(--accent), var(--accent-soft)); color: #fff; }
+.row.sel .g { color: rgba(255,255,255,.8); }
+.tag { padding: .05em .5em; border-radius: 5px; background: var(--line); color: var(--dim); }
+.tag.c { color: var(--ok); }
+.tag.p { color: var(--warn); }
+.tag.d { color: var(--accent2); }
+.row.sel .tag { background: rgba(0,0,0,.25); color: #fff; }
+
+.preview { display: flex; flex-direction: column; gap: 2vh; min-height: 0; padding-top: 2vh; }
+.snap {
+  flex: 0 0 auto; aspect-ratio: 4 / 3; max-height: 46vh;
+  border-radius: 12px; overflow: hidden; background: #000 center/cover;
+  box-shadow: 0 20px 60px rgba(0,0,0,.5); align-self: flex-start; width: 100%;
+  max-width: calc(46vh * 4 / 3);
+}
+.snap img { width: 100%; height: 100%; object-fit: contain; }
+.pvbody { display: flex; gap: 2vw; min-height: 0; flex: 1; }
+.box { flex: 0 0 auto; width: 15vw; max-height: 30vh; position: relative; }
+.box img { max-width: 100%; max-height: 30vh; border-radius: 6px; box-shadow: 0 12px 40px rgba(0,0,0,.6); }
+.noart {
+  width: 100%; aspect-ratio: 3/4; max-height: 30vh; border: 2px dashed var(--line);
+  border-radius: 8px; display: flex; align-items: center; justify-content: center;
+  color: var(--dim); font-size: .85em;
+}
+.meta { min-width: 0; }
+.meta h1 { margin: 0; font-size: 1.8em; line-height: 1.15; font-weight: 600; }
+.meta .tags { color: var(--dim); margin: .3em 0 1em; }
+.meta dl { display: grid; grid-template-columns: auto 1fr; gap: .45em 1.2em; margin: 0; }
+.meta dt { color: var(--dim); }
+.meta dd { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.st-c { color: var(--ok); }
+.st-p { color: var(--warn); }
+.st-n { color: var(--accent2); }
+
+/* ── ustawienia ── */
+#settings, #art { padding: 0 8vw; overflow: hidden; display: flex; flex-direction: column; }
+#settings, #art, #pads, #profiles { font-size: calc(1em * var(--fs-menu)); }
+#settings h1, #art h1 { margin: 1vh 0; font-weight: 600; }
+.artjob { margin: 0 0 1.5vh; }
+.ajline { margin: .7em 0 .2em; font-variant-numeric: tabular-nums; }
+.ajcur { margin: 0; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.setrow .ok { color: var(--ok); }
+.setrow .no { color: var(--dim); }
+.intro { color: var(--warn); margin: 0 0 1em; }
+.setlist { flex: 1; overflow: hidden; position: relative; }
+.setrow {
+  display: grid; grid-template-columns: 30% 1fr auto; align-items: center; gap: 1em;
+  min-height: var(--setrow); padding: .3em 1em; border-radius: 8px;
+}
+.setrow.head { color: var(--accent2); font-size: .85em; text-transform: uppercase;
+  letter-spacing: .12em; margin-top: 1em; min-height: auto; display: block; }
+.setrow .v { color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.setrow.off .k, .setrow.off .v { opacity: .45; }
+.setrow.sel { background: linear-gradient(90deg, var(--accent), var(--accent-soft)); }
+.setrow.sel .v { color: #fff; }
+.setrow input {
+  width: 100%; font: inherit; color: var(--text); background: rgba(0,0,0,.35);
+  border: 1px solid var(--line); border-radius: 6px; padding: .3em .6em;
+}
+.setrow .arrows { color: rgba(255,255,255,.6); }
+.setrow.action .k { font-weight: 600; }
+
+/* ── okna ── */
+.modal {
+  position: fixed; inset: 0; z-index: 20; background: rgba(5,7,12,.82);
+  display: flex; align-items: center; justify-content: center; backdrop-filter: blur(6px);
+}
+.panel {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
+  padding: 3vh 3vw; min-width: 28vw; font-size: calc(1em * var(--fs-menu)); max-width: 70vw; box-shadow: 0 30px 80px rgba(0,0,0,.6);
+}
+.panel.wide { width: 62vw; }
+.panel h2 { margin-top: 0; }
+#menuItems, .menulist { list-style: none; padding: 0; margin: 0; }
+#menuItems li, .menulist li { padding: .6em 1em; border-radius: 8px; font-size: 1.15em; }
+#menuItems li.sel, .menulist li.sel { background: var(--accent); }
+.menulist li.off { opacity: .35; }
+.menulist li small { display: block; font-size: .7em; color: var(--dim); }
+.menulist li.sel small { color: rgba(255,255,255,.8); }
+#ingame .panel { min-width: 34vw; }
+
+.lsys { color: var(--dim); margin: 0; text-transform: uppercase; letter-spacing: .15em; font-size: .85em; }
+#lTitle { margin: .2em 0 .1em; font-size: 2.3em; line-height: 1.1; }
+#lHead { margin: .2em 0 1em; color: var(--accent2); font-weight: 500; }
+.bar { position: relative; height: 3.2vh; min-height: 22px; border-radius: 99px;
+  background: rgba(255,255,255,.08); overflow: hidden; }
+.bar > div { position: absolute; inset: 0 auto 0 0; width: 0;
+  background: linear-gradient(90deg, var(--accent), var(--accent2)); transition: width .25s; }
+.bar span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-variant-numeric: tabular-nums; text-shadow: 0 1px 3px #000; }
+.lstats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1em; margin: 1.6em 0 .4em; }
+.lstats small { display: block; color: var(--dim); margin-bottom: .2em; }
+.lstats b { font-size: 1.6em; font-variant-numeric: tabular-nums; font-weight: 600; }
+.lfiles { color: var(--dim); margin: .4em 0 0; }
+.lmsg { min-height: 1.4em; color: var(--dim); }
+.lmsg.err { color: var(--err); }
+.hints { display: flex; gap: 2em; justify-content: flex-end; margin-top: 1.5em; }
+
+/* ── pasek podpowiedzi i przyciski ── */
+.hintbar {
+  position: fixed; inset: auto 0 0 0; height: 7vh; z-index: 5;
+  display: flex; align-items: center; justify-content: flex-end; gap: 2em; padding: 0 3vw;
+  color: var(--dim); font-size: calc(1em * var(--fs-hint));
+}
+.hint { display: inline-flex; align-items: center; gap: .5em; white-space: nowrap; }
+.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 1.7em; height: 1.7em; padding: 0 .35em; border-radius: 99px;
+  font-weight: 700; font-size: .85em; color: #fff;
+}
+.btn.a { background: #3f9b48; } .btn.b { background: #c8443c; }
+.btn.x { background: #3b6fd0; } .btn.y { background: #c99a1d; }
+.btn.lb, .btn.rb, .btn.lt, .btn.rt, .btn.start, .btn.select, .btn.dpad {
+  background: #3a4153; border-radius: 6px; padding: 0 .5em; }
+
+.toast {
+  position: fixed; left: 50%; bottom: 9vh; transform: translateX(-50%); z-index: 30;
+  background: var(--panel); border: 1px solid var(--line); padding: .8em 1.6em; border-radius: 10px;
+}
+
+/* ── opis gry w podglądzie ── */
+.desc { margin-top: 1em; color: var(--dim); font-size: .9em; line-height: 1.45;
+  max-height: 9.5em; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; }
+.desc .wl { color: var(--accent2); font-size: .8em; text-transform: uppercase; letter-spacing: .1em; }
+
+/* ── opcje gry ── */
+.gopanel { max-height: 86vh; display: flex; flex-direction: column; }
+.golist { overflow: hidden auto; max-height: 60vh; }
+.golist li { display: flex; justify-content: space-between; gap: 2em; }
+.golist .gv { color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 55%; }
+.golist li.sel .gv { color: rgba(255,255,255,.85); }
+/* obrazek stanu gry (zapis z emulatora) */
+.golist li.withthumb { align-items: center; justify-content: flex-start; gap: 1em; }
+.golist li.withthumb .gv { margin-left: auto; }
+.golist .gothumb { width: 8em; aspect-ratio: 4 / 3; object-fit: cover; border-radius: .3em; flex: none;
+                   background: rgba(255,255,255,.06); }
+.artgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 1em;
+  max-height: 60vh; overflow: hidden auto; padding: .3em; }
+.artgrid.snapgrid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.artgrid figure { margin: 0; padding: .4em; border-radius: 10px; border: 2px solid transparent; background: rgba(0,0,0,.25); }
+.artgrid figure.sel { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.artgrid img { width: 100%; aspect-ratio: 3/4; object-fit: contain; background: #000; border-radius: 6px; }
+.artgrid.snapgrid img { aspect-ratio: 4/3; }
+.artgrid figcaption { font-size: .75em; margin-top: .3em; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── klawiatura ekranowa ── */
+.oskfield { width: 100%; font: inherit; font-size: 1.2em; color: var(--text); background: rgba(0,0,0,.35);
+  border: 1px solid var(--line); border-radius: 8px; padding: .4em .7em; margin-bottom: 1em; resize: none; }
+.oskkeys { display: flex; flex-direction: column; gap: .4em; }
+.oskrow { display: flex; gap: .4em; justify-content: center; }
+.oskkey { min-width: 2.6em; padding: .55em .4em; text-align: center; border-radius: 8px; background: rgba(255,255,255,.07); }
+.oskkey.wide { min-width: 7em; }
+.oskkey.sel { background: var(--accent); color: #fff; }
+
+/* ── pady i profile ── */
+#pads, #profiles { padding: 0 8vw; overflow: hidden; display: flex; flex-direction: column; }
+#pads h1, #profiles h1 { margin: 1vh 0; font-weight: 600; }
+.padprompt { font-size: 1.6em; color: var(--warn); margin: .5em 0 1em; }
+.pcards { display: flex; flex-wrap: wrap; gap: 2vw; justify-content: center; margin-top: 8vh; }
+.pcard { width: 11vw; min-width: 130px; text-align: center; padding: 1.2em .5em; border-radius: 16px; border: 2px solid transparent; }
+.pcard.sel { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 15%, transparent); }
+.pav { width: 7vw; min-width: 90px; aspect-ratio: 1; margin: 0 auto .6em; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; font-size: 2.6em; font-weight: 700;
+  background: linear-gradient(135deg, #4f8cff, #8a5cff); }
+.pcard.add .pav { background: rgba(255,255,255,.08); color: var(--dim); }
+.pcard.cur .pname::after { content: " ●"; color: var(--ok); }
+.pname { font-size: 1.15em; }
+.preview { overflow: hidden; }
+.pvbody, .meta { min-height: 0; overflow: hidden; }
+
+/* pobrane logo (Carbon/RetroArch) bywają ciemne — jasna poświata na ciemnym tle */
+img.glow { filter: drop-shadow(0 0 1px rgba(255,255,255,.9)) drop-shadow(0 0 6px rgba(255,255,255,.35)) !important; }
+
+/* ── wybór logo systemu ── */
+.logogrid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+/* szachownica w średnich szarościach: widać na niej i czarne, i białe logo (warianty paczek) */
+.logogrid img { aspect-ratio: 16 / 9; padding: 10px;
+  background: repeating-conic-gradient(#3b414d 0% 25%, #30353f 0% 50%) 50% / 18px 18px; }
+.logogrid figure.none img { visibility: hidden; }
+.logogrid figure.none figcaption { position: relative; top: -3.5em; text-align: center; color: var(--text); }
+.logogrid figure.broken { display: none; }
+.logogrid .nologo { aspect-ratio: 16 / 9; display: flex; align-items: center; justify-content: center;
+  font-size: 1.4em; font-weight: 700; background: #0b0d12; border-radius: 6px; }
+
+/* ── tytuły gier jako logo (Clear Logo) ── */
+.row img.tlogo { height: calc(var(--row) * var(--tlogo-h)); max-width: var(--tlogo-w); object-fit: contain; object-position: left center;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,.8)); flex-shrink: 0; }
+.pvlogo { max-width: 100%; max-height: 14vh; object-fit: contain; object-position: left center; margin-bottom: .4em;
+  filter: drop-shadow(0 2px 6px rgba(0,0,0,.8)); }
+.artgrid.logopick img { aspect-ratio: 16 / 9; background: #0b0d12; padding: 8px; }
+
+/* ── opis platformy w karuzeli: wyśrodkowany blok ~55% szerokości ── */
+.sysabout { width: 55%; margin: 1.6em auto 0; text-align: center; }
+.sysfacts { margin: 0 0 .7em; color: var(--accent2); font-size: .95em; }
+.sysfacts b { color: var(--text); font-weight: 600; }
+.sysdesc { margin: 0; color: var(--dim); line-height: 1.5; font-size: .95em;
+  display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* ── podgląd gry 2×2 (0.11): okładka | zrzut / metadane | opis ── */
+.preview.pv2 { display: grid; grid-template-columns: minmax(10vw, var(--box-w)) 1fr; grid-template-rows: auto minmax(0, 1fr);
+  gap: 2.5vh 1.8vw; padding-top: 2vh; overflow: hidden; }
+.pv2 .box { width: auto; max-height: var(--media-h); align-self: start; }
+.pv2 .box img { max-width: 100%; max-height: var(--media-h); }
+.pv2 .noart { max-height: var(--media-h); }
+.pv2 .snap { justify-self: end; align-self: start; width: 100%; max-width: calc(var(--media-h) * 4 / 3); max-height: var(--media-h); }
+.pv2 .meta { min-width: 0; overflow: hidden; }
+.pv2 .meta h1 { font-size: calc(1.45em * var(--fs-title)); }
+.pv2 .meta .tags { font-size: calc(1em * var(--fs-meta)); }
+.pv2 .meta dl { grid-template-columns: auto minmax(0, 1fr); font-size: calc(.92em * var(--fs-meta)); }
+.pv2 .pvlogo { max-height: var(--pvlogo-h); }
+.pv2 .desc { margin-top: 0; max-height: none; -webkit-line-clamp: var(--desc-lines); font-size: calc(.95em * var(--fs-desc)); }
+
+/* ── edytor wyglądu (web/look.js): panel z boku, bez przyciemniania tła ── */
+.lookpanel { position: fixed; top: 8vh; bottom: 8vh; right: 2vw; width: 34vw; min-width: 420px; z-index: 25;
+  display: flex; flex-direction: column; padding: 2vh 1.5vw; font-size: var(--fs);
+  background: rgba(14, 17, 26, .94); border: 1px solid var(--line); border-radius: 14px;
+  box-shadow: 0 30px 80px rgba(0,0,0,.7); }
+.lookpanel.left { right: auto; left: 2vw; }
+.lookpanel h2 { margin: 0 0 .2em; font-size: 1.3em; }
+.lookpanel .lmsg { margin: 0 0 .6em; font-size: .85em; min-height: 0; }
+.lklist { flex: 1; overflow: hidden auto; scrollbar-width: none; }
+.lkrow { display: grid; grid-template-columns: 1fr 42%; align-items: center; gap: .8em; padding: .35em .7em; border-radius: 8px; }
+.lkrow.head { color: var(--accent2); font-size: .8em; text-transform: uppercase; letter-spacing: .12em; margin-top: .9em; }
+.lkrow.sel { background: linear-gradient(90deg, var(--accent), var(--accent-soft)); }
+.lkrow .lv { display: flex; align-items: center; gap: .5em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.lkrow .lv b { min-width: 4.2em; text-align: right; font-weight: 600; }
+.lkrow .track { flex: 1; height: 6px; border-radius: 99px; background: rgba(255,255,255,.12); position: relative; }
+.lkrow .track i { position: absolute; inset: 0 auto 0 0; border-radius: 99px; background: var(--accent2); }
+.lkrow.sel .track i { background: #fff; }
+.lkrow .sw { width: 1.1em; height: 1.1em; border-radius: 50%; border: 2px solid rgba(255,255,255,.6); flex-shrink: 0; }
+.lkrow .ch { color: rgba(255,255,255,.55); }
+.lkrow.chg .lk::after { content: " •"; color: var(--warn); }
+.lookpanel .hints { flex-wrap: wrap; gap: .4em 1.2em; margin-top: 1em; font-size: .85em; }
+
+/* ── 0.20: logo zaznaczonej gry obok logo platformy; podgląd okładka | szczegóły | zrzut ── */
+.listhead { gap: 1.2vw; }
+#listGameLogo { height: var(--listlogo-h); max-width: 22vw; object-fit: contain; object-position: left center;
+  filter: drop-shadow(0 1px 3px rgba(0,0,0,.8)); flex-shrink: 1; min-width: 0; }
+.listhead .lhtext { margin-left: auto; text-align: right; flex-shrink: 0; }
+/* góra obrazków na wysokości górnej krawędzi logo platformy (logo wyśrodkowane w nagłówku) */
+.preview.pv3 { display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-rows: var(--media-h) minmax(0, 1fr); gap: 2.5vh 1.6vw;
+  padding-top: 1.25vh; overflow: hidden; }
+.pv3 .box { width: auto; height: var(--media-h); max-height: none; align-self: start; }
+.pv3 .box img { height: var(--media-h); width: auto; max-width: 30vw; max-height: none; object-fit: contain; }
+.pv3 .noart { height: var(--media-h); width: calc(var(--media-h) * 0.75); max-height: none; }
+.pv3 .snap { height: var(--media-h); width: auto; max-width: calc(var(--media-h) * 4 / 3); max-height: none;
+  aspect-ratio: auto; align-self: start; background: transparent; box-shadow: none; }
+.pv3 .snap img { height: var(--media-h); width: auto; max-width: calc(var(--media-h) * 4 / 3); object-fit: contain;
+  border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,.5); background: #000; }
+.pv3 .meta { min-width: 0; height: var(--media-h); overflow: hidden; }
+.pv3 .meta h1 { font-size: calc(1.45em * var(--fs-title)); margin-top: -.15em; }
+.pv3 .meta .tags { font-size: calc(1em * var(--fs-meta)); }
+.pv3 .meta dl { grid-template-columns: auto minmax(0, 1fr); font-size: calc(.92em * var(--fs-meta)); }
+.pv3 .desc { grid-column: 1 / -1; margin-top: 0; max-height: none; -webkit-line-clamp: var(--desc-lines);
+  font-size: calc(.95em * var(--fs-desc)); }
+
+/* 0.21.1: wspólna wysokość okładki i zrzutu liczona w JS (layoutPreview) — szczegóły
+   gry zawsze mają miejsce, także przy kwadratowej albo szerokiej okładce */
+.preview.pv3 { grid-template-rows: var(--pv-h, var(--media-h)) minmax(0, 1fr); }
+.pv3 .box, .pv3 .snap, .pv3 .meta { height: var(--pv-h, var(--media-h)); }
+.pv3 .box img, .pv3 .snap img { height: var(--pv-h, var(--media-h)); max-width: none; }
+.pv3 .noart { height: var(--pv-h, var(--media-h)); width: calc(var(--pv-h, var(--media-h)) * 0.75); }
+.pv3 .snap { max-width: none; }
+
+/* podpowiedzi przycisków działają też jako przyciski (mysz) */
+.hint[data-a] { cursor: pointer; border-radius: 99px; padding: .15em .5em .15em .15em; }
+.hint[data-a]:hover { background: var(--line); }
+.hint[data-a="dpad"] { cursor: default; }
+.hint[data-a="dpad"]:hover { background: none; }
+
+/* ── telefon (aplikacja na Androida, poziomo: ok. 900 × 410 px CSS) ──
+   ekran niski i szeroki: stałe paski zamiast 7 % wysokości. Podgląd gry:
+     okładka | zrzut   | tytuł + wszystkie szczegóły (cała wysokość)
+     opis (pod obrazkami)  |
+   nagłówek listy: logo platformy + logo gry (jak na komputerze) */
+body.phone {
+  /* wymiary z edytora wyglądu (web/look.js, wersje `ph`) — tu tylko czcionka bazowa */
+  --fs: calc(15px * var(--fs-all));
+}
+.phone .topbar { height: 38px; padding: 0 2vw; }
+.phone .brand { font-size: 1.25em; }
+.phone .hintbar { height: 38px; padding: 0 2vw; gap: 1.4em; }
+.phone .screen { inset: 38px 0 38px 0; }
+
+/* systemy */
+/* karuzela wyżej (22 % zamiast 29 %) — pod nią opis platformy w 3 liniach */
+.phone .carousel { top: max(1%, calc(22% - var(--car-h) / 2)); height: var(--car-h); }
+.phone .syscard .txt { font-size: 5vw; }
+.phone .sysinfo { top: calc(max(1%, calc(22% - var(--car-h) / 2)) + var(--car-h) + 1%); }
+.phone .sysinfo h1 { font-size: calc(1.6em * var(--fs-sys)); margin-bottom: .1em; }
+.phone .sysinfo p { font-size: calc(1em * var(--fs-sysdesc)); }
+.phone .sysabout { width: 86%; margin-top: .35em; }
+.phone .sysfacts { margin: 0 0 .25em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.phone .sysdesc { -webkit-line-clamp: 3; line-height: 1.4; }
+
+/* lista gier */
+.phone #games { grid-template-columns: minmax(0, var(--list-w)) minmax(0, 1fr); gap: 1.6vw; padding: 0 1.6vw; }
+.phone .listhead { height: calc(var(--listlogo-h) + 8px); gap: 10px; }
+.phone .listhead img#listLogo { max-width: calc(var(--listlogo-h) * 3); }
+.phone #listGameLogo { max-width: calc(var(--listlogo-h) * 3.5); }
+.phone .listhead .lhtext h2 { display: none; }        /* nazwa platformy — jest logo */
+.phone .listhead .lhtext p { font-size: .8em; }
+.phone .row { padding: 0 .6em; }
+.phone .row .g { font-size: .75em; }
+
+/* podgląd gry */
+.phone .preview.pv3 { grid-template-columns: var(--ph-bw, auto) var(--ph-sw, auto) minmax(0, 1fr);
+  grid-template-rows: var(--ph-h, 56%) minmax(0, 1fr);
+  grid-template-areas: "box snap meta" "desc desc meta";
+  gap: 8px 1.4vw; padding: 6px 0 4px; height: 100%; }
+.phone .pv3 .box { grid-area: box; height: var(--ph-h); width: var(--ph-bw, auto); }
+.phone .pv3 .box img { height: var(--ph-h); width: auto; max-width: none; object-fit: contain; }
+.phone .pv3 .noart { height: var(--ph-h); width: calc(var(--ph-h) * .75); }
+.phone .pv3 .snap { grid-area: snap; height: var(--ph-h); width: var(--ph-sw, auto); min-height: 0; }
+.phone .pv3 .snap img { height: var(--ph-h); width: auto; max-width: none; object-fit: contain; }
+.phone .pv3 .meta { grid-area: meta; height: 100%; overflow: hidden; }
+.phone .pv3 .meta h1 { font-size: calc(1.2em * var(--fs-title)); }
+.phone .pv3 .meta .tags { margin: .15em 0 .45em; }
+.phone .pv3 .meta dl { grid-template-columns: auto minmax(0, 1fr); gap: .2em .8em; font-size: calc(.88em * var(--fs-meta)); }
+.phone .pv3 .desc { grid-area: desc; margin: 0; font-size: calc(.85em * var(--fs-desc));
+  line-height: 1.35; max-height: calc(var(--desc-lines) * 1.35em); }
+
+/* okna */
+.phone .panel { min-width: 0; max-width: 94vw; max-height: 94vh; padding: 14px 3vw; overflow: hidden auto; }
+.phone .panel.wide { width: 90vw; }
+.phone #lTitle { font-size: 1.6em; }
+.phone .lstats { margin: .8em 0 .2em; }
+.phone .hints { margin-top: .8em; gap: 1.2em; flex-wrap: wrap; }
+.phone #settings, .phone #profiles, .phone #pads, .phone #art { padding: 0 3vw; }
+.phone #settings h1, .phone #profiles h1 { font-size: 1.4em; margin: .3em 0; }
+.phone .setrow { grid-template-columns: 34% 1fr auto; }
+.phone .pcards { margin-top: 3vh; }
+.phone .lookpanel { width: 62vw; min-width: 0; top: 44px; bottom: 44px; }
+.phone .golist, .phone .artgrid { max-height: 62vh; }
+.phone .pv3 .desc { display: block; -webkit-line-clamp: unset; overflow: hidden;
+  -webkit-mask-image: linear-gradient(#000 78%, transparent); mask-image: linear-gradient(#000 78%, transparent); }
+
+/* ── 0.31.2: logo gry nad okładką (na jej szerokość, od górnej krawędzi ekranu), w nagłówku
+   listy tylko logo platformy (większe) i liczba gier — nazwa platformy jest na logo ── */
+#pvGameLogo { position: fixed; z-index: 4; object-fit: contain; object-position: center bottom;
+  filter: drop-shadow(0 2px 6px rgba(0,0,0,.85)); pointer-events: none; }
+body:not(.phone) #listGameLogo { display: none; }
+.phone #pvGameLogo { display: none; }
+/* telefon: logo gry pod szczegółami (w nagłówku listy tylko logo platformy) */
+#pvMetaLogo { display: none; }
+.phone .pv3 .meta { display: flex; flex-direction: column; }
+.phone .pv3 .meta > * { flex-shrink: 0; }
+.phone #pvMetaLogo:not(.hidden) { display: block; flex: 1 1 0; min-height: 24px; width: 100%;
+  max-height: calc(var(--listlogo-h) * 2.2); margin-top: .6em; object-fit: contain; object-position: left top;
+  filter: drop-shadow(0 2px 6px rgba(0,0,0,.85)); }
+.phone #listGameLogo { display: none; }
+/* edytor wyglądu dotykiem: −/+ i ◀/▶ jako przyciski, pasek — dotknięcie ustawia wartość */
+.lkrow .lv .ch { cursor: pointer; user-select: none; padding: 0 .45em; border-radius: 6px; }
+.lkrow .lv .ch:active { background: var(--line); }
+.lkrow .lv .track { cursor: pointer; }
+.phone .lkrow .lv .ch { padding: .15em .7em; font-size: 1.15em; }
+body:not(.phone) .listhead { height: calc(var(--listlogo-h) * 1.3 + 2.5vh); }
+body:not(.phone) .listhead img#listLogo { height: calc(var(--listlogo-h) * 1.3); max-width: 26vw; }
+.listhead img#listLogo:not(.hidden) ~ .lhtext h2 { display: none; }   /* nazwa platformy — jest logo */
+body:not(.phone) .listhead .lhtext p { font-size: 1.05em; }

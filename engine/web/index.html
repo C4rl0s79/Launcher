@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>EmuStart</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">Emu<b>Start</b></div>
+  <div class="status">
+    <span id="copyInfo" class="pill hidden"></span>
+    <span id="syncInfo" class="pill hidden"></span>
+    <span id="emuInfo" class="pill hidden"></span>
+    <span id="profInfo" class="pill"></span>
+    <span id="netInfo" class="pill"></span>
+    <span id="clock"></span>
+  </div>
+</header>
+
+<!-- ekran systemów -->
+<section id="systems" class="screen">
+  <div class="carousel" id="carousel"></div>
+  <div class="sysinfo">
+    <h1 id="sysName"></h1>
+    <p id="sysMeta"></p>
+    <div id="sysAbout" class="sysabout hidden">
+      <p id="sysFacts" class="sysfacts"></p>
+      <p id="sysDesc" class="sysdesc"></p>
+    </div>
+  </div>
+  <div id="emptyState" class="empty hidden">
+    <h2>Brak gier w bibliotece</h2>
+    <p>Wciśnij <span class="btn start">Start</span> i wybierz „Ustawienia”, żeby wskazać foldery i zeskanować kolekcję.</p>
+  </div>
+</section>
+
+<!-- ekran gier -->
+<section id="games" class="screen hidden">
+  <div class="gamelist">
+    <div class="listhead">
+      <img id="listLogo" alt="">
+      <img id="listGameLogo" class="hidden" alt="">
+      <div class="lhtext">
+        <h2 id="listTitle"></h2>
+        <p id="listCount"></p>
+      </div>
+    </div>
+    <div class="rows" id="rows"></div>
+  </div>
+  <!-- podgląd: okładka | szczegóły | zrzut (równe wysokości), pod spodem opis na całą szerokość -->
+  <div class="preview pv3">
+    <div class="box"><img id="pvGameLogo" class="hidden" alt=""><img id="pvBox" alt=""><div id="pvBoxEmpty" class="noart">brak okładki</div></div>
+    <div class="meta">
+      <h1 id="pvTitle"></h1>
+      <p id="pvTags" class="tags"></p>
+      <dl id="pvMeta"></dl>
+      <img id="pvMetaLogo" class="hidden" alt="">
+    </div>
+    <div class="snap"><img id="pvSnap" alt=""></div>
+    <div id="pvDesc" class="desc"></div>
+  </div>
+</section>
+
+<!-- ustawienia -->
+<section id="settings" class="screen hidden">
+  <h1 id="setTitle">Ustawienia</h1>
+  <p id="setIntro" class="intro hidden">Pierwsze uruchomienie. Zaloguj się do serwera EmuStart, potem wybierz „Wykryj emulatory”.</p>
+  <div class="setlist" id="setList"></div>
+</section>
+
+<!-- kolejność padów -->
+<section id="pads" class="screen hidden">
+  <h1>Kolejność padów</h1>
+  <p id="padPrompt" class="padprompt hidden"></p>
+  <div class="setlist" id="padList"></div>
+</section>
+
+<!-- profile -->
+<section id="profiles" class="screen hidden">
+  <h1 id="profTitle">Kto gra?</h1>
+  <p id="profIntro" class="intro hidden"></p>
+  <div class="pcards" id="profCards"></div>
+</section>
+
+<!-- opcje gry (przytrzymane A) -->
+<div id="gopt" class="modal hidden">
+  <div class="panel wide gopanel">
+    <p class="lsys" id="goPage"></p>
+    <h2 id="goTitle"></h2>
+    <ul id="goItems" class="menulist golist"></ul>
+    <div id="goArt" class="hidden">
+      <p id="goArtInfo" class="lmsg"></p>
+      <div id="goArtGrid" class="artgrid"></div>
+    </div>
+    <div class="hints" id="goHints"></div>
+  </div>
+</div>
+
+<!-- pobieranie emulatorów -->
+<div id="inst" class="modal hidden">
+  <div class="panel wide">
+    <p class="lsys">Emulatory</p>
+    <h1 id="inTitle"></h1>
+    <div id="inBody"></div>
+    <div id="inProg" class="hidden">
+      <p id="inStep" class="lfiles"></p>
+      <div class="bar"><div id="inBar"></div><span id="inPct"></span></div>
+      <p id="inBytes" class="lfiles"></p>
+    </div>
+    <p id="inMsg" class="lmsg"></p>
+    <div class="hints" id="inHints"></div>
+  </div>
+</div>
+
+<!-- opcje systemu (przytrzymane A na logo) -->
+<div id="sopt" class="modal hidden">
+  <div class="panel wide gopanel">
+    <p class="lsys" id="soPage"></p>
+    <h2 id="soTitle"></h2>
+    <ul id="soItems" class="menulist golist"></ul>
+    <div id="soLogo" class="hidden">
+      <p id="soLogoInfo" class="lmsg"></p>
+      <div id="soLogoGrid" class="artgrid logogrid"></div>
+    </div>
+    <div class="hints" id="soHints"></div>
+  </div>
+</div>
+
+<!-- filtry listy gier (X) -->
+<div id="flt" class="modal hidden">
+  <div class="panel wide gopanel">
+    <p class="lsys" id="flPage"></p>
+    <h2 id="flTitle"></h2>
+    <p id="flInfo" class="lfiles"></p>
+    <ul id="flItems" class="menulist golist"></ul>
+    <div class="hints" id="flHints"></div>
+  </div>
+</div>
+
+<!-- wybór folderu (pad) -->
+<div id="fbrowse" class="modal hidden">
+  <div class="panel wide gopanel">
+    <p class="lsys" id="fbTitle"></p>
+    <h2 id="fbPath"></h2>
+    <p id="fbInfo" class="lfiles"></p>
+    <ul id="fbList" class="menulist golist"></ul>
+    <div class="hints" id="fbHints"></div>
+  </div>
+</div>
+
+<!-- klawiatura ekranowa -->
+<div id="osk" class="modal hidden">
+  <div class="panel wide">
+    <h2 id="oskTitle"></h2>
+    <input id="oskInput" class="oskfield" autocomplete="off" spellcheck="false">
+    <textarea id="oskArea" class="oskfield hidden" rows="6"></textarea>
+    <div id="oskKeys" class="oskkeys"></div>
+    <div class="hints" id="oskHints"></div>
+  </div>
+</div>
+
+<!-- edytor wyglądu (web/look.js) — panel z boku, ekran pod spodem widoczny -->
+<div id="lookEd" class="lookpanel hidden">
+  <h2>Wygląd</h2>
+  <p class="lmsg">Zmiany widać od razu. A przełącza ekran pod spodem (systemy / gry).</p>
+  <div id="lkList" class="lklist"></div>
+  <div class="hints" id="lkHints"></div>
+</div>
+
+<!-- menu Start -->
+<div id="menu" class="modal hidden">
+  <div class="panel">
+    <h2>Menu</h2>
+    <ul id="menuItems"></ul>
+  </div>
+</div>
+
+<!-- uruchamianie / pobieranie -->
+<div id="launch" class="modal hidden">
+  <div class="panel wide">
+    <p class="lsys" id="lSystem"></p>
+    <h1 id="lTitle"></h1>
+    <h2 id="lHead"></h2>
+    <div id="lProgress" class="hidden">
+      <div class="bar"><div id="lBar"></div><span id="lPct"></span></div>
+      <div class="lstats">
+        <div><small>Pobrano</small><b id="lDone"></b></div>
+        <div><small>Zostało</small><b id="lLeft"></b></div>
+        <div><small>Prędkość</small><b id="lSpeed"></b></div>
+        <div><small>Pozostały czas</small><b id="lEta"></b></div>
+      </div>
+      <p id="lFiles" class="lfiles"></p>
+    </div>
+    <p id="lMsg" class="lmsg"></p>
+    <div class="hints" id="lHints"></div>
+  </div>
+</div>
+
+<!-- menu w grze (A+Y przez 2 s) -->
+<div id="ingame" class="modal hidden">
+  <div class="panel">
+    <p class="lsys">Menu gry</p>
+    <h2 id="igTitle"></h2>
+    <ul id="igItems" class="menulist"></ul>
+    <p id="igMsg" class="lmsg err"></p>
+    <div class="hints" id="igHints"></div>
+  </div>
+</div>
+
+<!-- okno skanowania -->
+<!-- logowanie na serwerze: prośba czeka na zatwierdzenie (kod do porównania) -->
+<div id="join" class="modal hidden">
+  <div class="panel">
+    <h2>Logowanie na serwerze</h2>
+    <div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap">
+      <div style="flex:1;min-width:260px">
+        <p>Zatwierdź na innym urządzeniu tego konta albo w panelu serwera — sprawdź, czy kod się zgadza.</p>
+        <div id="joinCode" style="font-size:44px;letter-spacing:.12em;margin:10px 0"></div>
+        <p id="joinText" class="muted"></p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="scan" class="modal hidden">
+  <div class="panel">
+    <h2>Skanowanie kolekcji</h2>
+    <p id="scanText"></p>
+    <div class="bar"><div id="scanBar"></div></div>
+  </div>
+</div>
+
+<footer class="hintbar" id="hintbar"></footer>
+<div id="toast" class="toast hidden"></div>
+
+<script src="app.js"></script>
+<script src="options.js"></script>
+<script src="look.js"></script>
+</body>
+</html>
