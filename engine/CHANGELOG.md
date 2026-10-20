@@ -22,8 +22,28 @@ Plan najbliższych zmian: [ROADMAP.md](ROADMAP.md).
   C&C, MGS3 Subsistence, Red Alert…) i płyty `.iso` obok gier-katalogów (Xbox 360: Lost Odyssey)
   łączą się w jedną grę. Gry już połączone mają te same nazwy co dotąd (te same identyfikatory gier
   i zapisów). „(CD32)”, „(CDTV)”, „(Disk Writer)” nie są już traktowane jak numer płyty.
-  Zmiana działa po aktualizacji serwera i ponownym skanie biblioteki. Liczba płyt (`discs`) w listach
+  Zmiana działa po aktualizacji serwera i ponownym skanie biblioteki. Do EmuStart: PR #73. Liczba płyt (`discs`) w listach
   gier dla Lumen (`LumenApi.list_games`, `lumen_library`).
+
+## [0.46.1] — 2026-10-20
+
+Zakres: wybór emulatora i rdzenia na koncie gracza (`emustart/emuchoice.py`, `emustart/api.py`;
+Android: `Prefs.kt`, `Bridge.kt`).
+
+### Poprawione
+- **Wybrane emulatory i rdzenie przechodzą z kontem** — po zalogowaniu istniejącym kontem
+  na innym komputerze był domyślny emulator, a inny rdzeń to inne zapisy (Snes9x ≠ bsnes),
+  więc zapisy z serwera „znikały”. Teraz:
+  - **Windows ↔ Windows**: emulator systemu i emulator wybrany dla gry zapisują się na
+    koncie (`settings/windows/emulators.json`, bez ścieżek komputera: „RetroArch + bsnes”,
+    „DuckStation”). Przy wejściu na profil wybory konta wygrywają z ustawieniami komputera;
+    brakujący rdzeń albo emulator EmuStart pobiera z serwera i ustawia sam. Uruchomienie
+    gry zaraz po zalogowaniu czeka na wybory z konta. Wybory zrobione przed tą wersją (tylko
+    w `config.json`) trafiają na konto przy pierwszym uruchomieniu — tylko inne niż
+    domyślne, żeby domyślny emulator nowego komputera nie nadpisał wyboru ze starego.
+  - **Android ↔ Android**: wybory należą do profilu, nie do telefonu (inny gracz na tym
+    samym telefonie ma swoje), pobierane z konta od razu po zmianie profilu i po
+    zalogowaniu (wcześniej obowiązywał wybór poprzedniego gracza).
 
 ## [0.46.0] — 2026-10-20
 
