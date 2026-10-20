@@ -86,7 +86,7 @@ export function registerEmustartIpc(handle: Handle, ctx: Ctx): void {
     // game_options: states in the emulator's folder of this profile (after taking the newest from the
     // server) and the sync status; save_manager: PS2 states of this PC and the phone (server only)
     const [opts, mgr] = await Promise.all([
-      call<{ states?: { path: string; name: string; label?: string; time: number; thumb?: string; resume?: boolean }[]; sync?: EmuSaveSync & { bundles?: unknown[] } }>(
+      call<{ states?: { path: string; name: string; label?: string; time: number; thumb?: string; resume?: boolean; other_core?: string; detail?: string }[]; sync?: EmuSaveSync & { bundles?: unknown[] } }>(
         'game_options',
         [id],
         90_000
@@ -105,6 +105,8 @@ export function registerEmustartIpc(handle: Handle, ctx: Ctx): void {
         label: st.resume ? 'Kontynuuj (szybki zapis EmuStart)' : st.label || st.name,
         time: st.time,
         resume: st.resume,
+        otherCore: st.other_core || undefined,
+        detail: st.detail || undefined,
         thumb: st.thumb ? await ctx.engineImage(st.thumb) : undefined
       })
     }

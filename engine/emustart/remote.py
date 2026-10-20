@@ -141,6 +141,18 @@ def _body(handler) -> dict:
     return d if isinstance(d, dict) else {}
 
 
+def _client_app(handler, d: dict) -> str:
+    """Program, który prosi o zalogowanie: pole „app” albo nazwa z User-Agent („Lumen/0.4.3”)
+    — dwa programy na jednym komputerze mają osobne rejestracje."""
+    app = str(d.get("app") or "").strip()
+    if app:
+        return app
+    ua = (handler.headers.get("User-Agent") or "").split(" ", 1)[0].split("/", 1)[0]
+    if ua.lower().startswith(("python", "java", "dalvik", "okhttp", "mozilla", "curl")):
+        return ""
+    return ua.replace("-Android", " Android").replace("-", " ")
+
+
 def enroll_flow(handler, op: str) -> None:
     """Zalogowanie urządzenia i logowanie podpisem (emustart/enroll.py):
     POST /v1/enroll/request {mode, account, password, name, class, version, pubkey[, login_code]}
@@ -154,7 +166,7 @@ def enroll_flow(handler, op: str) -> None:
         r = enroll.request(str(d.get("mode", "")), str(d.get("account", "")), str(d.get("name", "")),
                            str(d.get("class", "")), ip, str(d.get("version", "")), str(d.get("pubkey", "")),
                            profile_names(), str(d.get("hw", "")), str(d.get("password", "")),
-                           str(d.get("login_code", "")), create_account)
+                           str(d.get("login_code", "")), create_account, _client_app(handler, d))
         return _json(handler, r, 200 if r.get("ok") else 400)
     if op == "poll":
         r = enroll.poll(str(d.get("rid", "")))
@@ -267,7 +279,7 @@ def handle(handler) -> None:
     parts = [p for p in path.split("/") if p][1:]           # bez „v1”
     try:
         if parts == ["info"]:
-            feats = ["find", "system", "bios", "media", "library", "emulators"] + (["nas", "savemgr", "profiles"] if NAS_ROOT else [])
+            feats = ["find", "system", "bios", "media", "library", "emulators", "savesync", "lock"] + (["nas", "savemgr", "profiles"] if NAS_ROOT else [])
             return _json(handler, {"name": socket.gethostname(), "version": __version__, "api": 1,
                                    "features": feats + ["admin"], "nas_id": NAS_ID, "endpoints": endpoints(),
                                    "admin": _admin(handler),
@@ -1028,6 +1040,35 @@ def savesync_post(handler) -> None:
         if len(parts) == 3 and parts[2] == "resolve":
             return savesync.resolve(acc, dev, parts[0], parts[1], d)
         raise savesync.SyncError("nieznany adres")
+    return _sync_errors(handler, run)
+
+
+def lock_post(handler) -> None:
+    """POST /v1/lock/take | renew | release | status — blokada profilu (emustart/plock.py);
+    urządzenie z tokenu sesji, konto jak przy zapisach (inne — z tokenem konta)."""
+    from emustart import devices, plock, savesync
+    if not authorized(handler):
+        return _json(handler, {"error": "brak lub zły klucz serwera"}, 401)
+    _seen(handler)
+    n = int(handler.headers.get("Content-Length") or 0)
+    try:
+        d = json.loads(handler.rfile.read(min(n, 4096)) or b"{}") if n else {}
+    except ValueError:
+        d = {}
+    d = d if isinstance(d, dict) else {}
+    op = urllib.parse.urlsplit(handler.path).path.rstrip("/").rsplit("/", 1)[-1]
+
+    def run():
+        acc, dev = _sync_identity(handler, d)
+        if op == "take":
+            return plock.take(acc, dev, devices.name_of(dev) or dev, d.get("lease"), bool(d.get("force")))
+        if op == "renew":
+            return plock.renew(acc, dev, d.get("lease"))
+        if op == "release":
+            return plock.release(acc, dev)
+        if op == "status":
+            return plock.status(acc)
+        raise savesync.SyncError("nieznana operacja blokady")
     return _sync_errors(handler, run)
 
 

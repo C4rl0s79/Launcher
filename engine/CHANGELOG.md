@@ -30,10 +30,79 @@ Plan najbliższych zmian: [ROADMAP.md](ROADMAP.md).
   się nawzajem (401, „nieznane urządzenie”). Kod EmuStart bez zmian.
 - **Nazwa urządzenia Lumen: „<komputer> (Lumen)”** (`lumen.install_device_name`) w `profiles`
   (blokada profilu, znaczniki, kopie zapasowe), `api` (logowanie, menedżer zapisów) i `savemgr`.
-- **Zapisy wszystkich gier przy logowaniu, starcie i wylogowaniu** (`emustart/lumen_saves.py`,
-  `LumenApi.server_logout` / `server_enroll_poll`, `web/app.js` → `logoutUnsent` tylko z `?lumen`):
-  przed wylogowaniem wysłanie niewysłanych paczek (zostały — decyzja gracza), po zalogowaniu i przy
-  starcie pobranie nowszych wersji znanych paczek, gdy tu bez zmian. Kod synchronizacji EmuStart bez zmian.
+- Od EmuStart 0.48.0 zapisy przy logowaniu / starcie / wylogowaniu i blokada profilu są w EmuStart
+  (Lumen nie dokłada już własnych — `lumen_saves.py` usunięty).
+
+## [0.48.0] — 2026-10-20
+
+Zakres: serwer (`plock.py`, `remote.py`), PC (`profiles.py`, `syncclient.py`, `api.py`, `web/app.js`),
+Android (`Saves.kt`, `SaveSync.kt`, `Bridge.kt`, `web/options.js`). Wymaga EmuStart Server 0.48.0
+(blokada profilu) — zaktualizuj serwer i aplikacje.
+
+### Dodane
+- **Jedna gra naraz na profil — blokada na serwerze** (`emustart/plock.py`, `/v1/lock/take|renew|
+  release|status`): atomowa (dwa urządzenia startujące w tej samej chwili — blokadę dostaje
+  jedno), urządzenie rozpoznawane po tokenie sesji, nie po nazwie komputera. Dzierżawa i
+  odnawianie jak dotąd, przejęcie tylko po potwierdzeniu gracza; urządzenie, któremu profil
+  przejęto, przestaje go odnawiać. PC i telefon korzystają z API; plik `<profil>/lock` w folderze
+  profilu nie jest już używany.
+- **Zapisy przy wylogowaniu** (PC i telefon): najpierw czeka na wysyłanie po ostatniej grze i
+  wysyła zaległe zapisy; gdy czegoś nie udało się wysłać — pytanie „spróbuj jeszcze raz /
+  wyloguj mimo to (zapisy zostaną na urządzeniu i wyślą się po zalogowaniu na to samo konto) /
+  anuluj”; w trakcie gry wylogowanie zablokowane.
+- **Zapisy po zalogowaniu i przy starcie** (PC i telefon, także po zmianie profilu): nowsze wersje
+  paczek gier znanych na urządzeniu pobierają się, gdy lokalnie bez zmian; konflikty zostają do
+  decyzji przy uruchomieniu gry; gra, która właśnie działa, jest pomijana.
+
+### Poprawione
+- **Telefon: „Wczytaj zapis” wprost w opcjach gry** — pobiera z serwera zapisy w grze i stany tej
+  gry (z innych rdzeni z oznaczeniem). Od 0.46 telefon miał tylko „Zapisy i stany” (menedżer
+  zapisów), który pokazuje już tylko stany PS2 — wyglądało, jakby telefon nie widział żadnych
+  zapisów. Menedżer nazywa się teraz „Stany PS2”.
+- **Niewysłane zapisy poprzedniego konta nie trafiają na nowe** — paczka pamięta konto (PC: w
+  bazie, telefon: osobny stan na konto); po zalogowaniu innym kontem czekają i wyślą się po
+  powrocie na tamto konto.
+- **Urządzenie unieważnione na serwerze** — komunikat mówi, ile gier ma zapisy czekające na
+  wysłanie (zamiast samego „nieznane urządzenie”).
+
+## [0.47.0] — 2026-10-20
+
+Zakres: zapisy jak Steam Cloud — jeden zestaw na konto i grę. Serwer (`savesync.py`,
+`savemigrate.py`, panel), PC (`syncclient.py`, `savebundles.py`), Android (`SaveSync.kt`,
+`Saves.kt`, `Bridge.kt`), rejestracja urządzeń (`devices.py`, `enroll.py`). Po aktualizacji
+serwera: panel → Konfiguracja → „Zapisy sprzed 0.46” → Sprawdź, potem Przenieś zapisy.
+
+### Dodane
+- **Migracja zapisów sprzed 0.46 do synchronizacji zapisów** (`emustart/savemigrate.py`, panel
+  serwera → Konfiguracja → „Zapisy sprzed 0.46”). Zapisy w grze, stany i karty DuckStation z
+  folderów profili (`save/retroarch/saves|states/<rdzeń>/…`, `states/shared/retroarch/<rdzeń>/…`,
+  `states/android/retroarch/…`, `save/duckstation/memcards/…`) trafiają do paczek (konto +
+  platforma + gra + emulator + rdzeń + rodzaj), dopasowane do gier biblioteki jak na
+  urządzeniach (nazwy umowne, miniatury stanów). Paczki, które już są (np. z urządzenia z 0.46),
+  **nie są nadpisywane** — stara wersja trafia do ich historii z opisem „zapisy sprzed 0.46
+  (urządzenie, data)” i można ją przywrócić w panelu. Ze starych folderów nic nie znika;
+  ponowne uruchomienie niczego nie dubluje (porównanie zawartości). „Sprawdź (bez zmian)” —
+  sam raport; raport w panelu: ile gier i plików, czego nie dopasowano (np. wspólne karty
+  PCSX2, stany bez folderu rdzenia). Próba na kopii danych: `python -m emustart.savemigrate
+  --server <kopia folderu server> [--dry]`. Migracja nie uruchamia się sama.
+- „Wczytaj zapis” (PC i telefon) pokazuje też **stany z innych rdzeni** tej gry (np. bsnes,
+  gdy gra jest na Snes9x) z oznaczeniem „✗ rdzeń … — nie wczyta się” (stany są per rdzeń).
+
+### Zmienione
+- **Zapisy w grze wspólne dla zgodnych rdzeni** (`savebundles.SAVE_GROUPS`, jawna lista):
+  SNES — Snes9x (wszystkie wersje), bsnes (w tym HD beta, Mercury, 2014), Mesen-S; NES —
+  FCEUmm, Nestopia, Mesen, QuickNES (surowy SRAM / bateria, jak „root overrides” Steam Cloud).
+  Stany zostają per rdzeń; rdzenie spoza listy — jak dotąd per rdzeń. Serwer przyjmuje zapisy
+  rdzenia z grupy do wspólnej paczki także od urządzeń z 0.46 (widzą ją pod swoim rdzeniem), a
+  paczki zapisów wysłane wcześniej osobno dla rdzeni łączy przy pierwszym dostępie do gry
+  (nowsza aktualna, pozostałe w historii; nic nie znika).
+
+### Poprawione
+- **Dwa programy na jednym komputerze nie wylogowują się nawzajem** — nowa rejestracja zastępuje
+  tylko wcześniejszą rejestrację tego samego programu na tym sprzęcie (wcześniej EmuStart i
+  Lumen unieważniały się na zmianę: 401). Prośba o zalogowanie (panel, zatwierdzanie na
+  urządzeniu) pokazuje program („EmuStart”, „EmuStart Android”, „Lumen” — pole `app` albo
+  User-Agent) i to, którą rejestrację zastąpi.
 
 ## [0.46.2] — 2026-10-20
 

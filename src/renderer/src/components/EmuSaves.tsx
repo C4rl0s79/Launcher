@@ -130,7 +130,11 @@ export function EmuSaves({
                 data-nav
                 data-autofocus={i === 0 || undefined}
                 disabled={busy}
-                onClick={() => void play(st.path)}
+                onClick={() =>
+                  st.otherCore
+                    ? toast(`Ten stan zapisał rdzeń ${st.otherCore} — wybierz go dla tej gry w trybie TV (Opcje gry → Emulator), żeby go wczytać.`, 'info')
+                    : void play(st.path)
+                }
               >
                 {st.thumb ? (
                   <img className="saves__thumb" src={st.thumb} alt="" />
@@ -138,10 +142,16 @@ export function EmuSaves({
                   <span className="saves__thumb saves__thumb--none" />
                 )}
                 <span className="saves__text">
-                  <strong>{st.label}</strong>
-                  <small>{when(st.time)}</small>
+                  <strong>
+                    {st.otherCore ? '✗ ' : ''}
+                    {st.label}
+                  </strong>
+                  <small>
+                    {when(st.time)}
+                    {st.detail ? ` · ${st.detail}` : ''}
+                  </small>
                 </span>
-                <span className="saves__act">Graj od tego stanu</span>
+                <span className="saves__act">{st.otherCore ? 'Nie wczyta się w tym rdzeniu' : 'Graj od tego stanu'}</span>
               </button>
             ))}
           </div>

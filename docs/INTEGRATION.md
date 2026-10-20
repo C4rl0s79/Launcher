@@ -197,23 +197,23 @@ Lumen **nie dodaje** własnej synchronizacji — używa klienta EmuStart 0.46.0 
 - koniec sesji = koniec procesu emulatora (`proc.wait()`); emulatory uruchamiane przez proces pośredni
   nie są osobno obsługiwane — **niesprawdzone**.
 
-### 6.0. Jedna gra naraz na profil, zapisy wszystkich gier (Lumen 0.4.5)
+### 6.0. Zapisy jak Steam Cloud — EmuStart 0.47 / 0.48 (Lumen 0.5.0)
 
-- **Jedna gra naraz na profil (jak Steam)**: blokada profilu na serwerze EmuStart (`profiles.lock`,
-  dzierżawa 5 min odnawiana co minutę w trakcie gry, telefon też). Kolejność przy uruchomieniu:
-  blokada → pobranie zapisów gry → gra → wysłanie zapisów → zdjęcie blokady. Gdy profil gra na innym
-  urządzeniu (także samodzielny EmuStart na tym komputerze — od 0.4.4 osobna nazwa urządzenia),
-  uruchomienie w trybie pulpitu pokazuje „Profil gra teraz na urządzeniu …” i **Przejmij profil i
-  graj** (X) albo Zamknij — jak w trybie TV. Gdy mimo to dwa urządzenia zagrają naraz (np. bez
-  połączenia), serwer odrzuca nieaktualną wysyłkę (409) → konflikt do decyzji gracza, nic nie ginie.
-- **Przed wylogowaniem** (`lumen_saves.flush`): wysłanie wszystkich niewysłanych paczek zapisów; gdy
-  coś zostało (serwer nieosiągalny) — tryb TV pyta: spróbuj jeszcze raz / wyloguj mimo to (zapisy
-  zostają na komputerze i wyślą się po zalogowaniu na to samo konto) / anuluj. W trakcie gry
-  wylogowanie jest zablokowane.
-- **Po zalogowaniu i przy starcie** (`lumen_saves.pull_all`): nowsze wersje paczek znanych na tym
-  komputerze (`save_sync`), gdy tutaj bez zmian; konflikty zostają do decyzji przy uruchomieniu gry,
-  gra w trakcie sesji / wysyłania jest pomijana. Gry nigdy nieuruchamiane na tym komputerze — przy
-  pierwszym uruchomieniu (foldery zapisów zależą od emulatora).
+Wszystko poniżej robi kod EmuStart (silnik Lumena = EmuStart 0.48.0); Lumen niczego tu nie dokłada poza
+oknem „Zapisy” i „Przejmij profil” w trybie pulpitu. **Wymaga EmuStart Server 0.48.0.**
+- **jeden zestaw zapisów na konto i grę**: zapisy w grze wspólne dla zgodnych rdzeni (SNES: Snes9x,
+  bsnes, Mesen-S; NES: FCEUmm, Nestopia, Mesen, QuickNES), stany per rdzeń — „Wczytaj zapis” i okno
+  „Zapisy” pokazują też stany innych rdzeni z oznaczeniem „✗ … nie wczyta się”;
+- **zapisy sprzed 0.46** przenosi migracja na serwerze — **nie uruchamia się sama**: panel serwera →
+  Konfiguracja → „Zapisy sprzed 0.46” → Sprawdź, potem Przenieś zapisy (istniejące paczki nie są
+  nadpisywane, stara wersja idzie do historii);
+- **jedna gra naraz na profil**: atomowa blokada na serwerze (`/v1/lock/…`, urządzenie z tokenu
+  sesji); kolejność blokada → pobranie → gra → wysłanie → zdjęcie; w trybie pulpitu „Profil gra
+  teraz na urządzeniu …” → **Przejmij profil i graj** (X) albo Zamknij;
+- **przed wylogowaniem** wysłanie zaległych zapisów (zostały — pytanie), **po zalogowaniu i przy
+  starcie** pobranie nowszych wersji znanych paczek;
+- **rejestracje per program**: serwer zastępuje tylko rejestrację tego samego programu na sprzęcie;
+  Lumen wysyła `app: "Lumen"` (`lumen.install_device_identity`) i dalej własny skrót sprzętu.
 
 ### 6.1. Rozjazd zapisów między Lumenem, EmuStart i telefonem — diagnoza (20.10.2026)
 

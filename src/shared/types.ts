@@ -461,6 +461,10 @@ export interface EmuLocalState {
   /** picture the emulator stored with the state (data: URL) */
   thumb?: string
   resume?: boolean
+  /** state saved by another core of this game (another device) — listed, but it will not load */
+  otherCore?: string
+  /** "rdzeń bsnes — nie wczyta się w snes9x" */
+  detail?: string
 }
 
 /** A PS2 state on the server, from this PC or the phone (EmuStart's save manager) */

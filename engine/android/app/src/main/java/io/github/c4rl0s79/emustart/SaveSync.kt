@@ -35,7 +35,8 @@ class SaveSync(ctx: Context, private val server: Server) {
     /** Paczka gry na tym telefonie: `files()` — pliki teraz (nazwa w paczce → plik),
      *  `target(arc)` — gdzie położyć plik pobrany z serwera (może być kilka miejsc). */
     class Bundle(val emu: String, val core: String, val kind: String,
-                 val files: () -> Map<String, File>, val target: (String) -> List<File>) {
+                 val files: () -> Map<String, File>, val target: (String) -> List<File>,
+                 val tag: JSONObject = JSONObject()) {
         val key: String get() = "$emu/${core.ifEmpty { "-" }}/$kind"
     }
 
@@ -85,6 +86,21 @@ class SaveSync(ctx: Context, private val server: Server) {
 
         /** Rdzeń jak na komputerze („bsnes_libretro_android” → „bsnes”). */
         fun coreId(core: String) = core.removeSuffix("_libretro_android").removeSuffix("_libretro").lowercase(Locale.ROOT)
+
+        /** Zapisy w grze wspólne dla rdzeni o zgodnym formacie (surowy SRAM) — jak
+         *  savebundles.SAVE_GROUPS na komputerze. Stany zostają per rdzeń. */
+        val SAVE_GROUPS = mapOf(
+            "sram-snes" to setOf("snes9x", "snes9x2002", "snes9x2005", "snes9x2005_plus", "snes9x2010", "bsnes",
+                                 "bsnes_hd_beta", "bsnes2014_accuracy", "bsnes2014_balanced", "bsnes2014_performance",
+                                 "bsnes_mercury_accuracy", "bsnes_mercury_balanced", "bsnes_mercury_performance",
+                                 "bsnes_cplusplus98", "mesen-s"),
+            "sram-nes" to setOf("fceumm", "nestopia", "mesen", "quicknes"))
+
+        /** Rdzeń paczki zapisów w grze: grupa zgodnych rdzeni albo sam rdzeń. */
+        fun saveCore(core: String): String {
+            val c = core.lowercase(Locale.ROOT)
+            return SAVE_GROUPS.entries.firstOrNull { c in it.value }?.key ?: c
+        }
     }
 
     // ── stan lokalny (osobno dla każdego konta) ──
@@ -101,7 +117,7 @@ class SaveSync(ctx: Context, private val server: Server) {
     private fun remember(account: String, plat: String, gid: String, b: Bundle, rev: Int, content: String, dirty: Boolean = false) {
         val o = readState(account)
         o.put(skey(plat, gid, b), JSONObject().put("rev", rev).put("content", content).put("dirty", dirty)
-            .put("time", System.currentTimeMillis() / 1000.0))
+            .put("time", System.currentTimeMillis() / 1000.0).put("tag", b.tag))
         writeState(account, o)
     }
 
@@ -304,6 +320,38 @@ class SaveSync(ctx: Context, private val server: Server) {
         }
     }
 
+    /** Metki paczek znanych na telefonie dla konta (gra, rodzina) — do pobrania po zalogowaniu. */
+    fun known(account: String): List<JSONObject> {
+        val o = readState(account)
+        return o.keys().asSequence().mapNotNull { o.optJSONObject(it)?.optJSONObject("tag") }
+            .filter { it.has("game") }.toList()
+    }
+
+    /** Po zalogowaniu i przy starcie: nowsze wersje paczek z serwera, gdy w telefonie bez zmian.
+     *  Nic nie wysyła i nie rozstrzyga konfliktów (zostają do decyzji przy uruchomieniu gry). */
+    fun pull(account: String, es: String, name: String, bundles: List<Bundle>): Result {
+        val res = Result()
+        if (bundles.isEmpty()) return res
+        val plat = es.lowercase(Locale.ROOT)
+        val gid = gameId(es, name)
+        val man = try { json(account, "GET", "/v1/savesync/$plat/$gid/manifest") } catch (e: Offline) {
+            res.offline = e.message ?: ""; return res
+        } catch (e: Rejected) { return res }
+        for (b in bundles) {
+            try {
+                val srv = serverBundle(man, b)
+                val st = state(account, plat, gid, b) ?: continue
+                val revS = srv.optInt("revision")
+                if (revS == 0 || revS == st.optInt("rev")) continue
+                if (localHash(b) != st.optString("content")) { res.conflicts += Conflict(b, srv, newest(b)); continue }
+                download(account, plat, gid, b, srv)
+                res.downloaded++
+            } catch (e: Offline) { res.offline = e.message ?: ""; break }
+            catch (e: Exception) { Log.w(tag, "zapisy ${b.key}: $e") }
+        }
+        return res
+    }
+
     /** Decyzja gracza: local — wersja z telefonu zostaje (serwerowa w historii na serwerze),
      *  remote — pliki z serwera (bieżące do kopii zapasowej), skip — bez zmian. */
     fun resolve(account: String, es: String, name: String, conflicts: List<Conflict>, choice: String): Result {
@@ -319,6 +367,40 @@ class SaveSync(ctx: Context, private val server: Server) {
         }
         Log.i(tag, "zapisy $plat/$gid: konflikt rozstrzygnięty — $choice")
         return res
+    }
+
+    /** Stany tej gry z innych rdzeni RetroArcha (z serwera, rozpakowane do pamięci podręcznej) —
+     *  w „Wczytaj zapis” z oznaczeniem, że w bieżącym rdzeniu się nie wczytają. (rdzeń, plik). */
+    fun otherCoreStates(account: String, es: String, name: String, core: String): List<Pair<String, File>> {
+        val plat = es.lowercase(Locale.ROOT)
+        val gid = gameId(es, name)
+        val man = try { json(account, "GET", "/v1/savesync/$plat/$gid/manifest") } catch (e: Exception) { return emptyList() }
+        val cores = man.optJSONObject("emulators")?.optJSONObject("retroarch")?.optJSONObject("cores") ?: return emptyList()
+        val out = ArrayList<Pair<String, File>>()
+        for (c in cores.keys()) {
+            val b = cores.optJSONObject(c)?.optJSONObject("bundles")?.optJSONObject("states") ?: continue
+            if (c == core || !b.has("download_url")) continue
+            val d = File(tmpDir.parentFile, "inne-rdzenie/$plat/$gid/$c")
+            val mark = File(d, ".revision")
+            val have = try { mark.readText().trim() } catch (e: Exception) { "" }
+            if (have != b.optInt("revision").toString()) {
+                val z = try { fetch(account, b) } catch (e: Exception) { Log.i(tag, "stany rdzenia $c: $e"); continue }
+                try {
+                    d.deleteRecursively(); d.mkdirs()
+                    ZipFile(z).use { zf ->
+                        for (e in zf.entries().asSequence().filter { !it.isDirectory }) {
+                            if (e.name.contains('/') || e.name.contains('\\') || e.name.startsWith(".")) continue
+                            val t = File(d, e.name)
+                            zf.getInputStream(e).use { i -> t.outputStream().use { o -> i.copyTo(o) } }
+                            if (e.time > 0) t.setLastModified(e.time)
+                        }
+                    }
+                    mark.writeText(b.optInt("revision").toString())
+                } finally { z.delete() }
+            }
+            d.listFiles()?.filter { it.name.startsWith("game.state") && !it.name.endsWith(".png") }?.forEach { out += c to it }
+        }
+        return out
     }
 
     /** Po grze: zmienione paczki na serwer; bez połączenia — oznaczone (wyślą się później). */
