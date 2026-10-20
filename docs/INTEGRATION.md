@@ -197,6 +197,29 @@ Lumen **nie dodaje** własnej synchronizacji — używa klienta EmuStart 0.46.0 
 - koniec sesji = koniec procesu emulatora (`proc.wait()`); emulatory uruchamiane przez proces pośredni
   nie są osobno obsługiwane — **niesprawdzone**.
 
+### 6.1. Rozjazd zapisów między Lumenem, EmuStart i telefonem — diagnoza (20.10.2026)
+
+Na prawdziwej bibliotece (Chrono Trigger MSU-1) każdy program widział inne zapisy. Przyczyny z logów:
+
+1. **Wzajemne wylogowywanie na jednym komputerze.** Serwer trzyma jedną rejestrację na sprzęt
+   (`devices.replace_same_hw`); Lumen i samodzielny EmuStart wysyłały ten sam skrót sprzętu, więc
+   zalogowanie jednego unieważniało drugiego (EmuStart: „nieznane urządzenie”, 401; potem odwrotnie).
+   **Naprawione w Lumen 0.4.3**: Lumen to osobne urządzenie (skrót sprzętu + „lumen”,
+   `lumen.install_device_identity`); po aktualizacji Lumen trzeba raz zalogować ponownie.
+2. **Stare zapisy (EmuStart ≤ 0.45) nie przeszły do paczek 0.46.** 0.45 trzymało zapisy w folderze
+   profilu na serwerze (`<profil>/save/retroarch/…`, stany `<profil>/states/shared/retroarch/<rdzeń>/…`);
+   0.46 synchronizuje RetroArch tylko paczkami (`savesync`) i pomija te foldery — nikt (serwer, PC,
+   telefon) ich nie przenosi. Lumen (0.46) przy pierwszej grze nie miał czego pobrać (serwer: brak
+   paczki → `rev 1` wysłana z Lumena). **Do zrobienia w EmuStart Server** (jedna migracja dla wszystkich
+   programów) — prompt w rozmowie z 20.10.2026.
+3. **Paczka per rdzeń.** Klucz paczki: gra + emulator + rdzeń + rodzaj — bsnes na PC i Snes9x na
+   telefonie to osobne zapisy. Wybór rdzenia idzie z kontem tylko Windows↔Windows (0.46.1). **Do
+   decyzji w EmuStart** (zapisy w grze wspólne dla zgodnych rdzeni, stany per rdzeń).
+4. Samodzielny EmuStart był do 20.10 14:29 w wersji 0.45.1 (synchronizacja folderami, bez paczek).
+
+Tryb pulpitu i tryb TV Lumena to ten sam silnik i ta sama synchronizacja — różnica była między
+programami (Lumen ↔ samodzielny EmuStart ↔ telefon), nie między widokami.
+
 ## 6a. Dane w folderze programu
 
 Wersje zbudowane trzymają wszystko w `LumenData\` obok `Lumen.exe` (`src/main/dataDir.ts`): dane Lumen,
@@ -270,8 +293,18 @@ poziomo), a nie plakaty 2:3, więc w siatce trybu pulpitu były przycinane. Tera
   rozmytym tle z tej samej okładki, zamiast przycięta;
 - „Grafika z serwera EmuStart” w oknie „Grafiki” wraca do okładki z serwera dla danej gry.
 
-LaunchBox Games DB ma też okładki („Box - Front”), ale to te same pudełka co na serwerze (EmuStart bierze
-je stamtąd) — plakatów 2:3 tam nie ma; z LaunchBox Lumen bierze tylko nazwę gry do wyszukiwania.
+**Grafiki z LaunchBox Games DB** (od 0.4.3): lokalna baza LaunchBox (Ustawienia → Opisy gier spoza
+Steama) trzyma listę grafik gier (`images`: pudełka wg regionu, tła „Fanart - Background”, zrzuty, logo,
+bannery, kartridże; ~1 mln wpisów, baza ~270 MB); baza zbudowana przez starszy Lumen przebudowuje się
+sama raz w tle. Gry EmuStart są dopasowane po `lb_id` z metadanych serwera (bez zgadywania po tytule),
+obrazki pobierają się z images.launchbox-app.com dopiero przy wyświetleniu (i zostają w pamięci grafik):
+- **tło**: wybór gracza → SteamGridDB → LaunchBox „Fanart - Background” → zrzut z serwera → zrzut z LaunchBox;
+- **plakat**: wybór gracza → SteamGridDB → okładka z serwera → „Box - Front” z LaunchBox (region wersji
+  pokazywanej, potem preferencja regionu);
+- **logo**: z serwera → LaunchBox → SteamGridDB;
+- okno „Grafiki” ma sekcję **LaunchBox Games DB** z grafikami tego rodzaju do wyboru (padem).
+
+LaunchBox nie ma plakatów 2:3 — pudełka mają kształt pudełek (te same, które ma serwer).
 
 ## 6e. Aktualizacja programu (jak EmuStart)
 
