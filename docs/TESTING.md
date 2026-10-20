@@ -2,7 +2,7 @@
 
 ## Automatyczne (`npm test`)
 
-97 testów (vitest), bez sieci i bez prawdziwego Steama (fixture'y w `tests/fixtures`):
+102 testy (vitest), bez sieci i bez prawdziwego Steama (fixture'y w `tests/fixtures`):
 
 - `tests/steam.test.ts` — parser VDF (zagnieżdżenia, escape, BOM, błędy), mapowanie StateFlags → stan,
   postęp tylko z prawdziwych liczników, filtr narzędzi, `libraryfolders.vdf` (nowy i stary format),
@@ -67,7 +67,10 @@ Aplikacja sterowana przez Chrome DevTools Protocol (`scripts/cdp.mjs`: zrzuty ek
       i Lumen przywrócił okno z fokusem po ~3 s. Test wykrył i pozwolił naprawić błąd: skan wywołany przez
       przepisanie manifestu „połykał” zmianę stanu gry, przez co okno nie wracało.
       Uwaga: TIS-100 ignoruje WM_CLOSE, więc zamknięto ją wymuszenie; zwykłe wyjście z menu gry nie było testowane.
-- [~] Kontroler: Chromium wykrył „Xbox 360 Controller (XInput STANDARD GAMEPAD)” i interfejs przełączył się
+- [x] Pad przez XInput: odczyt `XInputGetState` działa w Electronie (dev i spakowany, `koffi.node` rozpakowany z asar),
+      pad w gnieździe 0 widoczny; mapowanie przycisków/triggerów/gałki pokryte testami. **Do sprawdzenia przez Ciebie:**
+      włączenie pada przy działającym Lumen (wcześniejszy problem z samoczynnym wyłączaniem).
+- [~] (wcześniej, Gamepad API) Kontroler: Chromium wykrył „Xbox 360 Controller (XInput STANDARD GAMEPAD)” i interfejs przełączył się
       na glify pada (wejście z pada zostało obsłużone). Pełnej ścieżki padem nie przechodziłem — nie mam
       fizycznego dostępu do urządzenia.
 

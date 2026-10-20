@@ -6,6 +6,7 @@ import type {
   CacheStats,
   DetailsResult,
   LaunchBoxStatus,
+  PadState,
   LibrarySnapshot,
   Prefs,
   SecretName,
@@ -70,6 +71,8 @@ export interface LumenApi {
     openExternal(url: string): Promise<void>
     quit(): Promise<void>
     onFocusChange(cb: (focused: boolean) => void): () => void
+    /** XInput controller state from the main process (see main/input/xinput.ts) */
+    onPadState(cb: (pads: PadState[]) => void): () => void
     platform: string
   }
 }
@@ -108,7 +111,8 @@ export const IPC = {
   launchboxStatus: 'launchbox:status',
   launchboxUpdate: 'launchbox:update',
   launchboxCancel: 'launchbox:cancel',
-  launchboxChanged: 'launchbox:changed'
+  launchboxChanged: 'launchbox:changed',
+  padState: 'pad:state'
 } as const
 
 export const ART_SCHEME = 'lumen-art'

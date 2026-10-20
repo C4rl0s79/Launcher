@@ -384,6 +384,18 @@ function BehaviourSection() {
   return (
     <Section title="Zachowanie">
       <Toggle
+        label="Pad przez XInput (zalecane)"
+        desc={
+          settings.xinputAvailable === false
+            ? 'XInput niedostępny na tym komputerze — używany jest Gamepad API przeglądarki.'
+            : settings.gamepadBackend === 'xinput'
+              ? 'Lumen tylko odczytuje stan pada, jak gry, i nie inicjalizuje urządzeń. Działa z padami Xbox i padami widzianymi jako Xbox (Steam Input, tryb X).'
+              : 'Gamepad API przeglądarki: obsługuje też pady PlayStation/Switch bez Steam Input, ale może zakłócać podłączanie pada w trakcie działania Lumen.'
+        }
+        value={settings.gamepadBackend === 'xinput' && settings.xinputAvailable !== false}
+        onChange={(v) => void patch({ gamepadBackend: v ? 'xinput' : 'chromium' })}
+      />
+      <Toggle
         label="Minimalizuj po uruchomieniu gry"
         desc="Lumen schodzi z drogi grze i nie reaguje na kontroler, gdy nie ma fokusu."
         value={settings.afterLaunch === 'minimize'}

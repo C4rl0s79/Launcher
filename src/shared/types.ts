@@ -179,6 +179,18 @@ export interface Prefs {
 
 export type ArtSourcePriority = 'sgdbFirst' | 'steamFirst'
 export type AfterLaunch = 'minimize' | 'keep'
+/** xinput = passive XInput polling in the main process (default); chromium = browser Gamepad API */
+/** One connected XInput pad (raw XINPUT_GAMEPAD values). */
+export interface PadState {
+  index: number
+  buttons: number
+  lt: number
+  rt: number
+  lx: number
+  ly: number
+}
+
+export type GamepadBackend = 'xinput' | 'chromium'
 
 export interface Settings {
   version: 1
@@ -189,6 +201,9 @@ export interface Settings {
   startFullscreen: boolean
   showTools: boolean
   demoMode: boolean
+  gamepadBackend: GamepadBackend
+  /** filled in by the main process: XInput could be loaded on this PC */
+  xinputAvailable?: boolean
   language: string
   hasSgdbKey: boolean
   hasSteamWebKey: boolean
@@ -198,7 +213,7 @@ export interface Settings {
 export type SettingsPatch = Partial<
   Pick<
     Settings,
-    'steamIdOverride' | 'artPriority' | 'afterLaunch' | 'restoreAfterGame' | 'startFullscreen' | 'showTools' | 'demoMode'
+    'steamIdOverride' | 'artPriority' | 'afterLaunch' | 'restoreAfterGame' | 'startFullscreen' | 'showTools' | 'demoMode' | 'gamepadBackend'
   >
 >
 

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { api, groupTab, sortedCategories, tabCategoryId, useStore, type Tab } from './store'
-import { installGamepad, installKeyboard, useActions } from './nav/input'
+import { installGamepad, installKeyboard, installXInputGamepad, useActions } from './nav/input'
 import { focusFirst } from './nav/engine'
 import { TopBar } from './components/TopBar'
 import { HintsBar } from './components/Hints'
@@ -40,11 +40,17 @@ export function App() {
       a.prefs.onChange(s.setPrefs),
       a.settings.onChange(s.setSettings),
       a.art.onChanged(s.bumpArt),
-      installKeyboard(),
-      installGamepad()
+      installKeyboard()
     ]
     return () => offs.forEach((off) => off())
   }, [])
+
+  // controller backend: XInput from the main process (default) or the Chromium Gamepad API
+  const backend = useStore((s) => (s.settings?.gamepadBackend === 'chromium' || s.settings?.xinputAvailable === false ? 'chromium' : s.settings ? 'xinput' : null))
+  useEffect(() => {
+    if (!backend) return
+    return backend === 'xinput' ? installXInputGamepad() : installGamepad()
+  }, [backend])
 
   // a tab that is no longer pinned (or a stale saved one) falls back to Start
   useEffect(() => {

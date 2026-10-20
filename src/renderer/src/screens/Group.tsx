@@ -62,6 +62,9 @@ export function GroupScreen({ category, active }: { category: Category; active: 
   }, [category.id, filter, sort])
 
   const all = useMemo(() => gamesForCategory(category, snapshot.games, prefs, snapshot.collections), [category, snapshot, prefs])
+  // emulator shortcuts are always installed — the install filter only matters when Steam games are in the group
+  const hasInstallState = all.some((g) => g.source !== 'shortcut')
+  const effectiveFilter: Filter = hasInstallState ? filter : 'all'
   const has = {
     recent: all.some((g) => g.lastPlayed),
     added: all.some((g) => g.addedAt),
@@ -70,8 +73,8 @@ export function GroupScreen({ category, active }: { category: Category; active: 
 
   const games = useMemo(() => {
     let list = all
-    if (filter === 'installed') list = list.filter((g) => g.installed)
-    if (filter === 'notInstalled') list = list.filter((g) => !g.installed)
+    if (effectiveFilter === 'installed') list = list.filter((g) => g.installed)
+    if (effectiveFilter === 'notInstalled') list = list.filter((g) => !g.installed)
     const q = norm(query.trim())
     if (q) list = list.filter((g) => norm(g.name).includes(q))
     const byName = (a: Game, b: Game): number => a.sortName.localeCompare(b.sortName, 'pl')
@@ -81,7 +84,7 @@ export function GroupScreen({ category, active }: { category: Category; active: 
     if (sort === 'added') sorted.sort((a, b) => (b.addedAt ?? 0) - (a.addedAt ?? 0) || byName(a, b))
     if (sort === 'playtime') sorted.sort((a, b) => (b.playtimeMinutes ?? -1) - (a.playtimeMinutes ?? -1) || byName(a, b))
     return sorted
-  }, [all, filter, query, sort])
+  }, [all, effectiveFilter, query, sort])
 
   const favs = useMemo(() => new Set(prefs.favorites), [prefs.favorites])
 
@@ -92,6 +95,7 @@ export function GroupScreen({ category, active }: { category: Category; active: 
         return true
       },
       view: () => {
+        if (!hasInstallState) return true
         const i = FILTERS.findIndex(([f]) => f === filter)
         setFilter(FILTERS[(i + 1) % FILTERS.length][0])
         return true
@@ -112,7 +116,7 @@ export function GroupScreen({ category, active }: { category: Category; active: 
         { action: 'confirm', label: 'Otwórz' },
         { action: 'x', label: 'Ulubiona' },
         { action: 'y', label: 'Szukaj' },
-        { action: 'view', label: 'Filtr' },
+        ...(hasInstallState ? [{ action: 'view' as const, label: 'Filtr' }] : []),
         { action: 'lb', label: 'Poprzednia grupa' },
         { action: 'rb', label: 'Następna' },
         { action: 'back', label: query ? 'Wyczyść' : 'Start' }
@@ -132,6 +136,9 @@ export function GroupScreen({ category, active }: { category: Category; active: 
         <h1>{category.name}</h1>
         <span className="group__count">{gameCountLabel(games.length)}</span>
         {category.kind === 'steam' && <span className="pill">kolekcja Steam</span>}
+        {(category.smart === 'all' || category.smart === 'installed' || category.smart === 'notInstalled') && (
+          <span className="pill">tylko gry Steam</span>
+        )}
       </header>
       <div className="toolbar" data-nav-group={`toolbar-${category.id}`}>
         <div className="toolbar__search">
@@ -151,6 +158,7 @@ export function GroupScreen({ category, active }: { category: Category; active: 
             }}
           />
         </div>
+        {hasInstallState && (
         <div className="segmented" role="group" aria-label="Status instalacji">
           {FILTERS.map(([f, label]) => (
             <button key={f} data-nav data-key={`filter-${f}`} className={`seg ${filter === f ? 'is-on' : ''}`} onClick={() => setFilter(f)}>
@@ -158,6 +166,7 @@ export function GroupScreen({ category, active }: { category: Category; active: 
             </button>
           ))}
         </div>
+        )}
         <button className="btn btn--ghost" data-nav data-key="sort" onClick={nextSort}>
           Sortuj: <strong>{SORTS.find(([s]) => s === sort)![1]}</strong>
         </button>

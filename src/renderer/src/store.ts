@@ -99,6 +99,15 @@ export async function attempt<T>(p: Promise<T>): Promise<T | undefined> {
 
 // ---------- selectors ----------
 
+/**
+ * Games with a real install state (Steam apps, demo data). Shortcuts to emulated games are always
+ * "installed" and never downloaded, so the built-in all / installed / to-install groups leave them
+ * out; they live in their Steam collections (one per platform), favourites and the home screen.
+ */
+export function storeGames(games: Game[]): Game[] {
+  return games.filter((g) => g.source !== 'shortcut')
+}
+
 export function gamesForCategory(cat: Category, games: Game[], prefs: Prefs, collections: SteamCollection[] | null): Game[] {
   if (cat.kind === 'steam') {
     const col = collections?.find((c) => c.id === cat.steamCollectionId)
@@ -114,13 +123,13 @@ export function gamesForCategory(cat: Category, games: Game[], prefs: Prefs, col
         .sort((a, b) => (b.lastPlayed ?? 0) - (a.lastPlayed ?? 0))
         .slice(0, 24)
     case 'installed':
-      return games.filter((g) => g.installed).sort((a, b) => (b.lastPlayed ?? 0) - (a.lastPlayed ?? 0) || a.sortName.localeCompare(b.sortName, 'pl'))
+      return storeGames(games).filter((g) => g.installed).sort((a, b) => (b.lastPlayed ?? 0) - (a.lastPlayed ?? 0) || a.sortName.localeCompare(b.sortName, 'pl'))
     case 'favorites':
       return games.filter((g) => favs.has(g.id))
     case 'notInstalled':
-      return games.filter((g) => !g.installed)
+      return storeGames(games).filter((g) => !g.installed)
     case 'all':
-      return games
+      return storeGames(games)
     default:
       return games.filter((g) => prefs.gameCategories[g.id]?.includes(cat.id))
   }

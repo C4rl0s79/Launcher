@@ -14,6 +14,7 @@ const defaults = (): StoredSettings => ({
   startFullscreen: false,
   showTools: false,
   demoMode: false,
+  gamepadBackend: 'xinput',
   language: 'polish'
 })
 
@@ -29,7 +30,8 @@ function migrate(raw: unknown): StoredSettings {
     restoreAfterGame: r.restoreAfterGame !== false,
     startFullscreen: r.startFullscreen === true,
     showTools: r.showTools === true,
-    demoMode: r.demoMode === true
+    demoMode: r.demoMode === true,
+    gamepadBackend: r.gamepadBackend === 'chromium' ? 'chromium' : 'xinput'
   }
 }
 
@@ -70,8 +72,16 @@ export class SettingsStore {
       ...this.value,
       hasSgdbKey: !!this.secrets.sgdbApiKey,
       hasSteamWebKey: !!this.secrets.steamWebApiKey,
-      secretsEncrypted: safeStorage.isEncryptionAvailable()
+      secretsEncrypted: safeStorage.isEncryptionAvailable(),
+      ...this.runtime
     }
+  }
+
+  private runtime: Partial<Settings> = {}
+
+  /** Facts about this PC reported alongside the settings (not persisted). */
+  setRuntimeInfo(info: Partial<Settings>): void {
+    this.runtime = { ...this.runtime, ...info }
   }
 
   async patch(p: SettingsPatch): Promise<Settings> {

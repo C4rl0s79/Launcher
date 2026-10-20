@@ -2,6 +2,7 @@ import { useEffect, useRef, useSyncExternalStore } from 'react'
 import { currentFocus, move } from './engine'
 import type { Dir } from './spatial'
 import { useStore, type InputMode } from '../store'
+import type { PadState } from '@shared/types'
 
 // Unified input layer. Keyboard and gamepad are translated into the same abstract actions,
 // then dispatched through a stack of handler layers (screens, modals). A modal layer stops
@@ -229,22 +230,52 @@ export function readPadActions(pads: (Gamepad | null)[]): Set<Action> {
   return active
 }
 
-export function installGamepad(): () => void {
-  const held = new Map<Action, { since: number; last: number }>()
-  /** Buttons already held when the window regained focus are ignored until released. */
-  const suppressed = new Set<Action>()
-  let raf = 0
-  let hadFocus = document.hasFocus()
-  let connected = 0
+// XInput button bits (XINPUT_GAMEPAD_*)
+const XI: [number, Action][] = [
+  [0x0001, 'up'],
+  [0x0002, 'down'],
+  [0x0004, 'left'],
+  [0x0008, 'right'],
+  [0x0010, 'menu'],
+  [0x0020, 'view'],
+  [0x0100, 'lb'],
+  [0x0200, 'rb'],
+  [0x1000, 'confirm'],
+  [0x2000, 'back'],
+  [0x4000, 'x'],
+  [0x8000, 'y']
+]
+const XI_TRIGGER = 100 // of 255
+const XI_STICK = 0.55 * 32767
 
-  const loop = (t: number): void => {
-    raf = requestAnimationFrame(loop)
-    if (!connected) return
+/** Actions held on XInput pads (state polled by the main process). */
+export function xinputActions(pads: PadState[]): Set<Action> {
+  const active = new Set<Action>()
+  for (const p of pads) {
+    for (const [bit, a] of XI) if (p.buttons & bit) active.add(a)
+    if (p.lt > XI_TRIGGER) active.add('lt')
+    if (p.rt > XI_TRIGGER) active.add('rt')
+    if (Math.abs(p.lx) > XI_STICK || Math.abs(p.ly) > XI_STICK) {
+      // XInput Y axis points up
+      if (Math.abs(p.lx) > Math.abs(p.ly)) active.add(p.lx > 0 ? 'right' : 'left')
+      else active.add(p.ly > 0 ? 'up' : 'down')
+    }
+  }
+  return active
+}
+
+/**
+ * Turns "currently held actions" into dispatches with key-repeat. Shared by both backends.
+ * Buttons already held when the window regains focus are ignored until released, so the
+ * button that closed a game does not also trigger something in Lumen.
+ */
+function createPadProcessor(): (active: Set<Action>, t: number) => void {
+  const held = new Map<Action, { since: number; last: number }>()
+  const suppressed = new Set<Action>()
+  let hadFocus = document.hasFocus()
+  return (active, t) => {
     const focused = document.hasFocus() && !document.hidden
-    const pads = navigator.getGamepads?.() ?? []
-    const active = readPadActions(pads)
     if (!focused) {
-      // never react to the controller while a game (or anything else) has focus
       hadFocus = false
       held.clear()
       return
@@ -271,7 +302,42 @@ export function installGamepad(): () => void {
       }
     }
   }
+}
 
+/**
+ * Default backend: XInput read passively by the main process. The page never touches the
+ * Gamepad API, so Chromium never opens or initialises controllers (see main/input/xinput.ts).
+ */
+export function installXInputGamepad(): () => void {
+  const process = createPadProcessor()
+  let active = new Set<Action>()
+  let seen = false
+  const off = window.lumen.app.onPadState((pads) => {
+    active = xinputActions(pads)
+    if (pads.length && !seen) {
+      seen = true
+      useStore.getState().setInputMode('gamepad')
+    }
+  })
+  const timer = setInterval(() => process(active, performance.now()), 16)
+  return () => {
+    off()
+    clearInterval(timer)
+  }
+}
+
+/** Fallback backend: Chromium Gamepad API (also sees PlayStation/Switch pads without Steam Input). */
+export function installGamepad(): () => void {
+  const process = createPadProcessor()
+  let raf = 0
+  let connected = 0
+
+  const loop = (t: number): void => {
+    raf = requestAnimationFrame(loop)
+    if (!connected) return
+    const pads = navigator.getGamepads?.() ?? []
+    process(readPadActions(pads), t)
+  }
   const onConnect = (e: GamepadEvent): void => {
     connected++
     console.info(`[lumen] gamepad connected: ${e.gamepad.id} (mapping=${e.gamepad.mapping || 'none'})`)

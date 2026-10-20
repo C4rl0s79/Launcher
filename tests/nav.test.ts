@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => undefined })
 
 const { pickInDirection } = await import('../src/renderer/src/nav/spatial')
-const { keyToAction, readPadActions } = await import('../src/renderer/src/nav/input')
+const { keyToAction, readPadActions, xinputActions } = await import('../src/renderer/src/nav/input')
 const { steamUri } = await import('../src/main/steam/actions')
 
 const box = (left: number, top: number, w = 100, h = 150) => ({ left, top, right: left + w, bottom: top + h })
@@ -73,6 +73,35 @@ describe('gamepad mapping', () => {
   })
   it('ignores disconnected pads', () => {
     expect(readPadActions([null, { ...pad([0]), connected: false } as Gamepad]).size).toBe(0)
+  })
+})
+
+describe('XInput mapping (main-process polling backend)', () => {
+  const pad = (over: Partial<{ index: number; buttons: number; lt: number; rt: number; lx: number; ly: number }> = {}) => ({
+    index: 0,
+    buttons: 0,
+    lt: 0,
+    rt: 0,
+    lx: 0,
+    ly: 0,
+    ...over
+  })
+  it('maps XINPUT_GAMEPAD button bits', () => {
+    expect([...xinputActions([pad({ buttons: 0x1000 | 0x0001 })])].sort()).toEqual(['confirm', 'up'])
+    expect([...xinputActions([pad({ buttons: 0x2000 })])]).toEqual(['back'])
+    expect([...xinputActions([pad({ buttons: 0x0010 | 0x0020 })])].sort()).toEqual(['menu', 'view'])
+    expect([...xinputActions([pad({ buttons: 0x0100 | 0x0200 })])].sort()).toEqual(['lb', 'rb'])
+  })
+  it('maps triggers and the left stick (Y axis up) with a dead zone', () => {
+    expect([...xinputActions([pad({ lt: 200, rt: 30 })])]).toEqual(['lt'])
+    expect([...xinputActions([pad({ ly: 30000 })])]).toEqual(['up'])
+    expect([...xinputActions([pad({ ly: -30000 })])]).toEqual(['down'])
+    expect([...xinputActions([pad({ lx: 28000, ly: 5000 })])]).toEqual(['right'])
+    expect(xinputActions([pad({ lx: -536, ly: -49 })]).size).toBe(0) // resting drift
+  })
+  it('combines several pads and ignores an empty list', () => {
+    expect(xinputActions([]).size).toBe(0)
+    expect([...xinputActions([pad({ buttons: 0x1000 }), pad({ index: 1, buttons: 0x4000 })])].sort()).toEqual(['confirm', 'x'])
   })
 })
 

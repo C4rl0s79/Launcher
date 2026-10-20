@@ -66,6 +66,7 @@ const api: LumenApi = {
     openExternal: (url) => invoke(IPC.appOpenExternal, url),
     quit: () => invoke(IPC.appQuit),
     onFocusChange: (cb) => subscribe(IPC.appFocus, cb),
+    onPadState: (cb) => subscribe(IPC.padState, cb),
     platform: process.platform
   }
 }

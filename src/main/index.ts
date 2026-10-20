@@ -12,6 +12,7 @@ import { StoreMetadataProvider } from './steam/storeMeta'
 import { openSteam, openSteamUri, shortcutRunUri } from './steam/actions'
 import { pickBestMatch, SgdbAuthError, SgdbClient } from './art/sgdb'
 import { LaunchBoxService } from './launchbox/service'
+import { XInputPoller } from './input/xinput'
 import { platformForTags } from './launchbox/match'
 import { ArtworkService } from './art/artwork'
 import { isPlayable } from './steam/manifests'
@@ -51,6 +52,7 @@ const prefs = new PrefsStore(paths.prefs)
 const library = new LibraryService(settings, paths.account, path.join(userData, 'first-seen.json'))
 const meta = new StoreMetadataProvider(paths.metaCache, () => settings.get().language)
 const launchbox = new LaunchBoxService(paths.launchbox)
+const pads = new XInputPoller()
 const sgdb = new SgdbClient(() => settings.getSecret('sgdbApiKey'))
 const artwork = new ArtworkService({
   cacheDir: paths.artCache,
@@ -421,6 +423,12 @@ app.whenReady().then(async () => {
     launchedAppId = undefined
   })
   createWindow()
+  // controller: passive XInput polling, only while Lumen has focus (never while a game runs)
+  settings.setRuntimeInfo({ xinputAvailable: pads.available })
+  pads.start(
+    () => settings.get().gamepadBackend === 'xinput' && !!win && !win.isDestroyed() && win.isFocused() && !win.isMinimized(),
+    (state) => send(IPC.padState, state)
+  )
   library.start().catch((e) => log.error('library', 'start failed', e))
 })
 

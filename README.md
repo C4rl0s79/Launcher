@@ -123,6 +123,8 @@ Klucze nigdy nie trafiają do repozytorium ani do logów.
 Mysz działa wszędzie. Pola tekstowe przy obsłudze padem otwierają klawiaturę ekranową
 (A — wpisz, X — usuń, Y — spacja, LB — wielkie litery, Start — gotowe).
 
+**Pad:** domyślnie Lumen tylko odczytuje stan padów przez XInput (jak gry) i nie inicjalizuje urządzeń — pady Xbox i widziane jako Xbox (Steam Input, tryb X). Pady PlayStation/Switch bez Steam Input: Ustawienia → Zachowanie → wyłącz „Pad przez XInput” (Gamepad API przeglądarki; może przeszkadzać w podłączaniu pada przy działającym Lumen).
+
 **Steam Input:** jeśli kontroler jednocześnie porusza kursorem myszy (konfiguracja pulpitu Steam),
 wyłącz ją w Steam → Ustawienia → Kontroler albo dodaj `Lumen.exe` jako grę spoza Steam
 i ustaw dla niej układ „Gamepad”.

@@ -15,7 +15,9 @@ dokładnego postępu pobierania na żywo, co zostało uczciwie odzwierciedlone w
 
 **Electron 44 + React 19 + TypeScript, budowane electron-vite, pakowane electron-builder.**
 
-- Chromium daje gotowe **Gamepad API** (XInput, DualShock 4 / DualSense w mapowaniu „standard”),
+- Chromium daje **Gamepad API**, ale na Windows otwiera i inicjalizuje urządzenia samodzielnie (Raw Input/HID, WGI), co
+  wyłączało pad podłączany przy działającym Lumen. Dlatego domyślnie proces główny odpytuje **XInput** przez `koffi`
+  (`main/input/xinput.ts`, tylko przy fokusie okna), a Gamepad API zostaje jako opcja w ustawieniach.
   sprzętowo akcelerowane renderowanie dużej liczby obrazów i dojrzałą wirtualizację (`@tanstack/react-virtual`).
 - Proces główny Node.js ma natywny dostęp do plików, `reg.exe`, `steam://` (`shell.openExternal`), DPAPI (`safeStorage`).
 - Rozważane alternatywy: **Tauri** (mniejszy pakiet, ale w środowisku nie było Rusta), **WPF/Avalonia (.NET 10)**

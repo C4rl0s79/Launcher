@@ -37,6 +37,7 @@
     "zustand": "^5.0.15"
   },
   "dependencies": {
+    "koffi": "^3.3.3",
     "sax": "^1.6.1",
     "yauzl": "^3.4.0"
   }
