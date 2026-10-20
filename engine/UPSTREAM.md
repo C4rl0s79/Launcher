@@ -1,7 +1,7 @@
 # engine/ — klient EmuStart w Lumen
 
 Ten katalog to `git subtree` repozytorium EmuStart (github.com/C4rl0s79/EmuStart). Obecnie:
-**`main`, v0.48.0** (commit fde2b37). Launcher nie zmienia repozytorium EmuStart — własne dodatki są tylko tutaj.
+**`main`, v0.48.1** (commit 143e29d). Launcher nie zmienia repozytorium EmuStart — własne dodatki są tylko tutaj.
 Historia EmuStart jest zachowana w historii tego repozytorium.
 
 Zmiany na potrzeby Lumen są opisane w `CHANGELOG.md` → `[Nieopublikowane]` → „Lumen — EmuStart jako
