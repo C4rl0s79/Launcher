@@ -153,3 +153,15 @@ def test_lumen_device_name():
     lumen.install_device_name(mod)                     # bez podwójnego dopisku
     assert mod.socket.gethostname() == f"{socket.gethostname()} (Lumen)"
     assert mod.socket.AF_INET == socket.AF_INET         # reszta modułu bez zmian
+
+
+def test_play_id_follows_the_chosen_variant(monkeypatch):
+    """Uruchamia się wersja wybrana w profilu (tłumaczenie), jak playId w interfejsie EmuStart."""
+    api = lumen.LumenApi.__new__(lumen.LumenApi)
+    games = {7: {"id": 7, "es": "snes", "rel": "a.sfc"}}
+    monkeypatch.setattr(lumen.library, "game", lambda gid: games.get(int(gid)))
+    monkeypatch.setattr(lumen.LumenApi, "_variant_choice", lambda self, g, variants=None: None)
+    assert api.lumen_play_id(7) == 7
+    monkeypatch.setattr(lumen.LumenApi, "_variant_choice", lambda self, g, variants=None: {"id": 42, "rel": "pl.sfc"})
+    assert api.lumen_play_id(7) == 42
+    assert api.lumen_play_id(99) == 99                  # nieznana gra — bez zmian

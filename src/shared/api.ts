@@ -1,4 +1,4 @@
-import type { EmuSystemInfo, LbArtOptionsResult, EmuSaves,
+import type { EmuServerArt, EmuMetaField, EmuSettingsChange, EmuGameOptions, EmuSystemInfo, LbArtOptionsResult, EmuSaves,
   ActionResult,
   ArtKind,
   ArtOption,
@@ -94,6 +94,27 @@ export interface LumenApi {
     launch(gameId: string, state?: string, takeover?: boolean): Promise<EmuActionResult>
     /** a state of another RetroArch core: switch this game to that core (downloads it if missing) */
     playOtherCore(gameId: string, core: string): Promise<EmuActionResult>
+    /** "Opcje gry": versions, emulator, settings, metadata (one call) */
+    gameOptions(gameId: string): Promise<EmuGameOptions>
+    /** version of the game for this profile (translation id, 0 = original) */
+    setVariant(gameId: string, variantId: number): Promise<EmuActionResult>
+    /** emulator for this game only; null = the system's emulator */
+    setGameEmulator(gameId: string, emulator: EmuEmulatorOption | null): Promise<EmuActionResult>
+    /** the game's emulator without the game — change its settings in the player's profile */
+    configureEmulator(gameId: string): Promise<EmuActionResult>
+    emuSettingsHistory(gameId: string): Promise<EmuSettingsChange[]>
+    /** settings from before this change */
+    emuSettingsRestore(gameId: string, changeId: string): Promise<EmuActionResult>
+    /** RetroArch in this system without the shader */
+    setShaderOff(es: string, off: boolean): Promise<EmuActionResult>
+    /** administrator: correct metadata on the server ({} = back to downloaded data) */
+    metaSave(gameId: string, edits: Partial<Record<EmuMetaField, string>>): Promise<EmuActionResult>
+    /** administrator: the server fetches the description from the web */
+    metaFetchFull(gameId: string): Promise<EmuActionResult>
+    /** administrator: art candidates on the server (box / snap / logo) */
+    serverArt(gameId: string, kind: 'box' | 'snap' | 'logo', query?: string): Promise<EmuServerArt[]>
+    serverArtChoose(gameId: string, kind: 'box' | 'snap' | 'logo', url: string): Promise<EmuActionResult>
+    serverArtClear(gameId: string, kind: 'box' | 'snap' | 'logo'): Promise<EmuActionResult>
     /** platform description for the TV system carousel (pending = being fetched, ask again) */
     systemInfo(es: string): Promise<EmuSystemInfo>
     /** sync status, save states on this PC, PS2 states of all devices */
@@ -211,6 +232,18 @@ export const IPC = {
   padState: 'pad:state',
   emuLaunch: 'emu:launch',
   emuSaves: 'emu:saves',
+  emuGameOptions: 'emu:gameOptions',
+  emuSetVariant: 'emu:setVariant',
+  emuSetGameEmulator: 'emu:setGameEmulator',
+  emuConfigure: 'emu:configure',
+  emuSettingsHistory: 'emu:settingsHistory',
+  emuSettingsRestore: 'emu:settingsRestore',
+  emuShaderOff: 'emu:shaderOff',
+  emuMetaSave: 'emu:metaSave',
+  emuMetaFetch: 'emu:metaFetch',
+  emuServerArt: 'emu:serverArt',
+  emuServerArtChoose: 'emu:serverArtChoose',
+  emuServerArtClear: 'emu:serverArtClear',
   emuSystemInfo: 'emu:systemInfo',
   emuPlayOtherCore: 'emu:playOtherCore',
   emuCopyState: 'emu:copyState',

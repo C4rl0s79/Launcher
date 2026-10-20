@@ -1995,3 +1995,54 @@ p.card__desc[data-nav]:focus {
   flex-wrap: wrap;
   gap: 6px;
 }
+
+/* ---------- "Opcje gry" (EmuStart game options, both layouts) ---------- */
+.gopt__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 62vh;
+  overflow: auto;
+}
+.gopt__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 2em;
+  width: 100%;
+  padding: 0.7em 1em;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.gopt__row:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.gopt__row:focus,
+.gopt__row:hover:not(:disabled) {
+  outline: none;
+  background: linear-gradient(90deg, #4f8cff, color-mix(in srgb, #4f8cff 35%, transparent));
+  color: #fff;
+}
+.gopt__value {
+  color: var(--text-dim, #8d97ab);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 55%;
+}
+.gopt__row:focus .gopt__value {
+  color: rgba(255, 255, 255, 0.85);
+}
+.gopt__desc {
+  margin-top: 1em;
+  line-height: 1.5;
+  max-height: 30vh;
+  overflow: auto;
+  color: var(--text-dim, #8d97ab);
+}

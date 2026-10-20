@@ -471,6 +471,56 @@ export interface EmuSaveSync {
   last: number
 }
 
+/** Metadata fields of an EmuStart game (server metadata; an administrator can correct them) */
+export type EmuMetaField = 'title' | 'developer' | 'publisher' | 'year' | 'genre' | 'players' | 'description'
+
+/** Everything the "Opcje gry" window shows for an EmuStart game (lumen_game_options) */
+export interface EmuGameOptions {
+  /** engine number of the version that plays (translation or the game itself) */
+  playId: number
+  /** translations / versions of this game chosen per profile; empty = only the original */
+  variants: { id: number; label: string; lang?: string }[]
+  variant: number
+  variantLabel: string
+  meta: Partial<Record<EmuMetaField, string>>
+  /** fields corrected by hand on the server */
+  metaEdits: Partial<Record<EmuMetaField, string>>
+  cached: boolean
+  pinned: boolean
+  /** bytes on this PC */
+  local: number
+  /** emulator of this game; own = chosen for this game (not the system's) */
+  emulator: { label: string; exe: string; args: string; own: boolean }
+  /** emulators found on this PC for the system */
+  emulators: EmuEmulatorOption[]
+  retroarch: boolean
+  shaderOff: boolean
+  system: string
+  es: string
+  sync: EmuSaveSync
+  /** save states in the game's bundle */
+  states: number
+  /** this device's account administers the server (edit metadata and server art) */
+  admin: boolean
+}
+
+/** One change of emulator settings in the profile (restore = settings from before it) */
+export interface EmuSettingsChange {
+  id: string
+  time: number
+  label?: string
+  files: string[]
+}
+
+/** Art candidate on the EmuStart server (administrator: box / snap / logo of a game) */
+export interface EmuServerArt {
+  url: string
+  thumb: string
+  source?: string
+  width?: number
+  height?: number
+}
+
 /** A save state of a game on this PC (EmuStart's "Wczytaj zapis" list) */
 export interface EmuLocalState {
   path: string

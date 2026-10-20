@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { ArtKind, ArtOptionsResult, Game, LbArtOptionsResult, SgdbGame } from '@shared/types'
+import type { ArtKind, ArtOptionsResult, EmuServerArt, Game, LbArtOptionsResult, SgdbGame } from '@shared/types'
 import { api, attempt, useStore, pickPath } from '../store'
 import { Modal } from '../components/Modal'
 import { TextField } from '../components/TextField'
@@ -19,7 +19,8 @@ const CHOICE_LABEL: Record<string, string> = {
   none: 'brak'
 }
 
-export function ArtPicker({ game, onClose }: { game: Game; onClose: () => void }) {
+/** admin: this device's account administers the EmuStart server (art on the server, all devices) */
+export function ArtPicker({ game, onClose, admin }: { game: Game; onClose: () => void; admin?: boolean }) {
   const prefs = useStore((s) => s.prefs)!
   const hasKey = useStore((s) => s.settings?.hasSgdbKey)
   const [kind, setKind] = useState<ArtKind>('grid')
@@ -118,6 +119,7 @@ export function ArtPicker({ game, onClose }: { game: Game; onClose: () => void }
         </div>
       )}
       {isEmu && kind !== 'icon' && <LaunchBoxThumbs game={game} kind={kind} chosen={current?.type === 'launchbox' ? current.url : undefined} />}
+      {isEmu && admin && kind !== 'icon' && <ServerArt game={game} kind={kind} />}
       <div className="modal__footer">
         <button className="btn btn--primary" data-nav onClick={onClose}>
           Gotowe
@@ -128,6 +130,59 @@ export function ArtPicker({ game, onClose }: { game: Game; onClose: () => void }
 }
 
 /** LaunchBox Games DB images of an EmuStart game: box fronts (by region), backgrounds, logos… */
+const SERVER_KIND: Record<'grid' | 'hero' | 'logo', 'box' | 'snap' | 'logo'> = { grid: 'box', hero: 'snap', logo: 'logo' }
+const SERVER_LABEL = { box: 'okładka', snap: 'zrzut ekranu', logo: 'logo gry' }
+
+/**
+ * Administrator of the EmuStart server: the game's art on the server (box / screenshot / logo) —
+ * every device sees it; EmuStart's own art sources (SteamGridDB, IGDB, TheGamesDB…).
+ */
+function ServerArt({ game, kind }: { game: Game; kind: ArtKind }) {
+  const sk = SERVER_KIND[kind as 'grid' | 'hero' | 'logo']
+  const [list, setList] = useState<EmuServerArt[] | null>(null)
+  useEffect(() => {
+    let alive = true
+    setList(null)
+    void api()
+      .emustart.serverArt(game.id, sk)
+      .then((r) => alive && setList(r))
+      .catch(() => alive && setList([]))
+    return () => {
+      alive = false
+    }
+  }, [game.id, sk])
+  const done = (msg: string) => (r: { ok: boolean; message?: string; error?: string } | null | undefined) =>
+    r && useStore.getState().toast(r.ok ? (r.message ?? msg) : (r.error ?? 'Nie udało się.'), r.ok ? 'info' : 'error')
+  return (
+    <>
+      <h3 className="saves__h">Serwer EmuStart — {SERVER_LABEL[sk]} dla wszystkich urządzeń (administrator)</h3>
+      <div className="modal__row">
+        <button className="btn" data-nav onClick={() => void attempt(api().emustart.serverArtClear(game.id, sk)).then(done('Usunięto'))}>
+          Usuń z serwera
+        </button>
+      </div>
+      {!list && <p className="details__loading">Szukam grafik na serwerze…</p>}
+      {list?.length === 0 && <p className="details__muted">Serwer nie znalazł grafik tego rodzaju.</p>}
+      {!!list?.length && (
+        <div className={`thumbs thumbs--${kind}`} data-nav-group={`srv-${kind}`}>
+          {list.slice(0, 48).map((o) => (
+            <button
+              key={o.url}
+              className="thumb thumb--fit"
+              data-nav
+              title={o.source}
+              onClick={() => void attempt(api().emustart.serverArtChoose(game.id, sk, o.url)).then(done('Zapisano na serwerze'))}
+            >
+              {o.thumb ? <img src={o.thumb} alt="" loading="lazy" decoding="async" /> : <span className="thumb__tag">{o.source ?? 'grafika'}</span>}
+              {o.source && <span className="thumb__tag">{o.source}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </>
+  )
+}
+
 function LaunchBoxThumbs({ game, kind, chosen }: { game: Game; kind: ArtKind; chosen?: string }) {
   const [res, setRes] = useState<LbArtOptionsResult | null>(null)
   useEffect(() => {

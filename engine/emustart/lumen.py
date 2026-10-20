@@ -236,6 +236,29 @@ class LumenApi(api_mod.Api):
                 "lib_version": getattr(self, "_lib_version", 0),
                 "cache": cache.usage(self._cfg)}     # zmiana = gra pobrana / usunięta (odśwież bibliotekę)
 
+    # ── opcje gry dla interfejsu Lumen (oba układy) ──
+    def lumen_play_id(self, game_id: int) -> int:
+        """Gra, którą się uruchamia, pobiera i usuwa: wersja wybrana w profilu gracza (tłumaczenie)
+        albo sama gra — jak `playId` w interfejsie EmuStart (silnik nie podstawia jej sam)."""
+        g = library.game(int(game_id))
+        if not g:
+            return int(game_id)
+        v = self._variant_choice(g)
+        return int(v["id"]) if v else int(g["id"])
+
+    def lumen_game_options(self, game_id: int) -> dict:
+        """Wszystko do „Opcji gry” w jednym wywołaniu: szczegóły (wersje, metadane, pamięć podręczna),
+        opcje wybranej wersji (emulator, emulatory do wyboru, shader, stan zapisów, liczba stanów)
+        i czy konto urządzenia jest administratorem serwera (edycja metadanych i grafik)."""
+        det = self.game_detail(int(game_id))
+        if not det:
+            return {"ok": False, "reason": "Nie ma takiej gry w bibliotece."}
+        pid = int(det.get("variant") or det["id"])
+        opts = self.game_options(pid) or {}
+        states = opts.pop("states", []) or []
+        return {"ok": True, "detail": det, "play_id": pid, "options": opts, "states": len(states),
+                "admin": self._is_admin() if self._cfg.get("server_key") else False}
+
     def lumen_readiness(self, game_id: int) -> dict:
         """Czego brakuje przed uruchomieniem: emulator (i co z serwera go zainstaluje)."""
         from pathlib import Path

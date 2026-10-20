@@ -361,10 +361,16 @@ Od Lumen 0.6.0 (plan: `docs/PLAN-TV-REACT.md`, etap 1) — **jeden interfejs, dw
 - Przełączenie: F10, View + Start, przycisk „⛶ Tryb TV”, menu TV → „Tryb pulpitu”. Zaznaczona gra
   przechodzi między układami (pulpit → TV: jej system i gra; TV → pulpit: jej szczegóły).
 - **Interfejs EmuStart (osobny widok) — tymczasowo** dla funkcji, których układ TV jeszcze nie ma
-  (etapy 2–3): logowanie, konto, profile, PIN, RetroAchievements („Konto, profile i logowanie
-  (EmuStart)” w menu TV, „Zaloguj / Konto i logowanie” w Ustawieniach) i opcje emulatora gry
-  („Opcje gry EmuStart” w szczegółach). Ustawienia → Tryb interfejsu → „Tryb TV: dotychczasowy
+  (etap 3): logowanie, konto, profile, PIN, RetroAchievements („Konto, profile i logowanie
+  (EmuStart)” w menu TV, „Zaloguj / Konto i logowanie” w Ustawieniach). Ustawienia → Tryb interfejsu → „Tryb TV: dotychczasowy
   interfejs EmuStart” przywraca poprzedni tryb TV w całości.
+- **Opcje gry** (Lumen 0.7.0, `components/GameOptions.tsx`) — jedno okno dla obu układów (TV: X na
+  grze EmuStart; pulpit: szczegóły → „Opcje gry”), strony jak w EmuStart: Graj / Graj od początku,
+  wersja (tłumaczenie, `set_variant` — uruchamia się wybrana wersja: `lumen_play_id`), emulator dla
+  gry albo systemu, ustawienia emulatora (zmiana w emulatorze bez gry, shader, historia zmian i
+  przywracanie), zapisy, metadane i opis (administrator serwera: edycja, „Przywróć dane pobrane”,
+  „Pobierz opis z sieci”), grafiki (administrator: okładka / zrzut / logo na serwerze — dla wszystkich
+  urządzeń), ulubiona, zachowaj / usuń z dysku. Dane: `lumen_game_options` (jedno wywołanie).
 - Fokus klawiatury i pada zawsze w widocznym interfejsie (ukryty widok EmuStart oddaje fokus).
 - Menu w grze (A + Y nad emulatorem) obsługuje nadal silnik EmuStart (etap 4).
 

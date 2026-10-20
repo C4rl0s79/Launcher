@@ -762,10 +762,17 @@ function registerIpc(): void {
       void emu.refresh()
       modes?.emuContents?.send(EMU_UI.open, 'refresh')
     },
+    artChanged: (gameId) => {
+      emuArtCache.clear()
+      bumpArt(gameId)
+    },
     engineImage: async (url) => {
-      if (!engine.baseUrl || !/^\/media\//.test(url)) return undefined
+      // engine media and server previews through the engine; art sources' previews (https) directly
+      const external = /^https:\/\//.test(url)
+      if (!external && (!engine.baseUrl || !/^\/(media|serwer)\//.test(url))) return undefined
       try {
-        const res = await fetch(new URL(url, engine.baseUrl), { signal: AbortSignal.timeout(15_000) })
+        const res = await fetch(external ? url : new URL(url, engine.baseUrl!), { signal: AbortSignal.timeout(15_000) })
+        if (external && !(res.headers.get('content-type') ?? '').startsWith('image/')) return undefined
         if (!res.ok) return undefined
         return `data:${res.headers.get('content-type') ?? 'image/png'};base64,${Buffer.from(await res.arrayBuffer()).toString('base64')}`
       } catch {

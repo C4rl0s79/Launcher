@@ -4,6 +4,7 @@ import { api, useStore } from '../store'
 import { useActions } from '../nav/input'
 import { Art } from '../components/Art'
 import { OnScreenKeyboard } from '../components/TextField'
+import { GameOptions } from '../components/GameOptions'
 import { usePrimaryAction } from '../lib/primary'
 import { formatBytes, formatLastPlayed, plural, formatPlaytime, htmlToParagraphs, stateLabel, versionCountLabel } from '../lib/format'
 import type { TvSystem } from './data'
@@ -49,6 +50,7 @@ export function TvGames({ system, onBack, onMenu, active }: { system: TvSystem; 
   const opened = useStore((s) => s.uiSelection)
   const [query, setQuery] = useState('')
   const [osk, setOsk] = useState(false)
+  const [options, setOptions] = useState(false)
   const games = useMemo(() => {
     const q = query.trim().toLowerCase()
     return q ? system.games.filter((g) => g.name.toLowerCase().includes(q)) : system.games
@@ -124,7 +126,9 @@ export function TvGames({ system, onBack, onMenu, active }: { system: TvSystem; 
       rt: () => jumpLetter(1),
       confirm: play,
       x: () => {
-        if (sel) useStore.getState().openDetails(sel.id)
+        // EmuStart games: game options (the same window as on the desktop); Steam: details
+        if (sel?.emu) setOptions(true)
+        else if (sel) useStore.getState().openDetails(sel.id)
         return true
       },
       y: () => {
@@ -143,7 +147,7 @@ export function TvGames({ system, onBack, onMenu, active }: { system: TvSystem; 
       }
     },
     {
-      enabled: active && !osk,
+      enabled: active && !osk && !options,
       hints: [
         { action: 'confirm', label: primary?.label ?? 'Graj' },
         { action: 'x', label: 'Opcje gry' },
@@ -176,6 +180,7 @@ export function TvGames({ system, onBack, onMenu, active }: { system: TvSystem; 
         </div>
       </div>
       {sel && <TvPreview game={sel} details={d} note={primary?.note} />}
+      {options && sel && <GameOptions game={sel} onClose={() => setOptions(false)} />}
       {osk && (
         <OnScreenKeyboard
           label={`Szukaj — ${system.display}`}

@@ -8,6 +8,7 @@ import { Art } from '../components/Art'
 import { CategoryPicker } from '../modals/CategoryPicker'
 import { ArtPicker } from '../modals/ArtPicker'
 import { EmuSaves } from '../components/EmuSaves'
+import { GameOptions } from '../components/GameOptions'
 import { usePrimaryAction } from '../lib/primary'
 import { formatBytes, formatEta, formatLastPlayed, formatPlaytime, htmlToParagraphs, STATE_LABEL, stateLabel, versionCountLabel } from '../lib/format'
 
@@ -17,7 +18,7 @@ export function DetailsScreen({ gameId }: { gameId: string }) {
   const collections = useStore((s) => s.snapshot?.collections ?? null)
   const close = (): void => useStore.getState().openDetails(null)
   const [details, setDetails] = useState<DetailsResult | null>(null)
-  const [modal, setModal] = useState<'categories' | 'art' | 'saves' | null>(null)
+  const [modal, setModal] = useState<'categories' | 'art' | 'saves' | 'options' | null>(null)
   const [logoOk, setLogoOk] = useState(true)
   const isEmu = game?.source === 'emustart'
   const emuSummary = useStore((s) => s.snapshot?.emustart)
@@ -219,8 +220,8 @@ export function DetailsScreen({ gameId }: { gameId: string }) {
               <button className="btn" data-nav data-key="saves" onClick={() => setModal('saves')}>
                 Zapisy
               </button>
-              <button className="btn" data-nav data-key="tv" onClick={() => void api().ui.setMode('fullscreen', 'game')}>
-                Opcje gry EmuStart (emulator, metadane)
+              <button className="btn" data-nav data-key="options" onClick={() => setModal('options')}>
+                Opcje gry
               </button>
             </>
           )}
@@ -291,6 +292,7 @@ export function DetailsScreen({ gameId }: { gameId: string }) {
       {modal === 'categories' && <CategoryPicker gameId={gameId} onClose={() => setModal(null)} />}
       {modal === 'art' && <ArtPicker game={game} onClose={() => setModal(null)} />}
       {modal === 'saves' && <EmuSaves game={game} onClose={() => setModal(null)} />}
+      {modal === 'options' && <GameOptions game={game} onClose={() => setModal(null)} />}
     </div>,
     document.body
   )

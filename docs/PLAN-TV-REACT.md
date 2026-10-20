@@ -100,7 +100,7 @@ Legenda — pulpit Lumena dziś: ✔ jest, ◐ częściowo, ✘ brak.
 1. ✔ **(Lumen 0.6.0) Fundament układu TV** — przełączanie pulpit ↔ TV w jednym rendererze (bez `WebContentsView`),
    ekran systemów, lista gier w stylu EmuStart, Steam jako system, okno uruchamiania, menu,
    klawiatura ekranowa. Stary tryb TV dostępny przełącznikiem.
-2. **Opcje gry** — emulator dla gry, ustawienia emulatora z historią, bez shadera, metadane i
+2. ✔ **(Lumen 0.7.0) Opcje gry** — emulator dla gry, ustawienia emulatora z historią, bez shadera, metadane i
    opis, grafiki z serwera EmuStart, „Graj od początku”, warianty.
 3. **Konto i profile** — logowanie / wylogowanie, zatwierdzanie urządzeń, ekran profili, PIN i
    hasła, wybór gracza przy starcie, RetroAchievements.

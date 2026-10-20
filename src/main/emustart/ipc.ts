@@ -1,7 +1,7 @@
 import { stat } from 'node:fs/promises'
 import type { BrowserWindow } from 'electron'
 import { IPC } from '@shared/api'
-import type { EmuActionResult, EmuEmulatorOption, EmuSystemInfo, EmuLocalState, EmuRemoteState, EmuSaves, EmuSaveSync, EmuOptions, EmuOptionsPatch, EmuReadiness, EmuSettings, JobsSnapshot } from '@shared/types'
+import type { EmuServerArt, EmuSettingsChange, EmuGameOptions, EmuActionResult, EmuEmulatorOption, EmuSystemInfo, EmuLocalState, EmuRemoteState, EmuSaves, EmuSaveSync, EmuOptions, EmuOptionsPatch, EmuReadiness, EmuSettings, JobsSnapshot } from '@shared/types'
 import type { EmustartEngine } from './engine'
 import type { EmustartProvider } from './provider'
 
@@ -17,6 +17,8 @@ interface Ctx {
   changed: () => void
   /** a picture served by the engine (state thumbnails) as a data: URL; undefined when missing */
   engineImage: (url: string) => Promise<string | undefined>
+  /** server art of a game changed — the interface reloads its images */
+  artChanged: (gameId: string) => void
 }
 
 /** EmuStart's get_settings → the shared options (engine keys stay in the engine). */
@@ -69,11 +71,20 @@ export function registerEmustartIpc(handle: Handle, ctx: Ctx): void {
     return id
   }
   const call = <T>(method: string, args: unknown[] = [], timeout?: number): Promise<T> => engine.call<T>(method, args, timeout)
+  /** the version that plays / downloads / is removed: the translation chosen in the profile or the game */
+  const playIdOf = (gameId: string): Promise<number> => call<number>('lumen_play_id', [idOf(gameId)])
+  const KINDS = new Set(['box', 'snap', 'logo'])
+  const kindOf = (k: string): string => {
+    if (!KINDS.has(k)) throw new Error('Nieznany rodzaj grafiki.')
+    return k
+  }
+  const done = (r: { ok?: boolean; reason?: string } | null | undefined, msg?: string): EmuActionResult =>
+    r?.ok ? { ok: true, message: msg } : fail(r?.reason ?? 'Nie udało się.')
 
   handle(IPC.emuLaunch, async (gameId: string, state?: string, takeover?: boolean): Promise<EmuActionResult> => {
     const r = await call<{ ok: boolean; reason?: string; warning?: string; need_install?: { es: string; system: string; steps: string[] }; profile_pin?: boolean }>(
       'launch',
-      [idOf(gameId), typeof state === 'string' ? state : '', takeover === true],
+      [await playIdOf(gameId), typeof state === 'string' ? state : '', takeover === true],
       60_000
     )
     if (r.need_install) return { ok: false, error: `Brak emulatora: ${r.need_install.system}.`, needInstall: r.need_install }
@@ -82,7 +93,7 @@ export function registerEmustartIpc(handle: Handle, ctx: Ctx): void {
     return { ok: true, message: r.warning }
   })
   handle(IPC.emuSaves, async (gameId: string): Promise<EmuSaves> => {
-    const id = idOf(gameId)
+    const id = await playIdOf(gameId)
     // game_options: states in the emulator's folder of this profile (after taking the newest from the
     // server) and the sync status; save_manager: PS2 states of this PC and the phone (server only)
     const [opts, mgr] = await Promise.all([
@@ -119,13 +130,13 @@ export function registerEmustartIpc(handle: Handle, ctx: Ctx): void {
     }
   })
   handle(IPC.emuPlayOtherCore, async (gameId: string, core: string): Promise<EmuActionResult> => {
-    const r = await call<{ ok: boolean; reason?: string; label?: string }>('play_other_core', [idOf(gameId), String(core)], 600_000)
+    const r = await call<{ ok: boolean; reason?: string; label?: string }>('play_other_core', [await playIdOf(gameId), String(core)], 600_000)
     if (!r.ok) return fail(r.reason ?? 'Nie udało się przełączyć rdzenia.')
     ctx.changed()
     return { ok: true, message: r.label ? `Emulator tej gry: ${r.label}` : undefined }
   })
   handle(IPC.emuCopyState, async (gameId: string, rel: string, platform: string, emu: string): Promise<EmuActionResult> => {
-    const r = await call<{ ok: boolean; reason?: string; same?: boolean; local?: boolean }>('save_copy', [idOf(gameId), String(rel), String(platform), String(emu)], 120_000)
+    const r = await call<{ ok: boolean; reason?: string; same?: boolean; local?: boolean }>('save_copy', [await playIdOf(gameId), String(rel), String(platform), String(emu)], 120_000)
     if (!r.ok) return fail(r.reason ?? 'Nie udało się skopiować.')
     if (r.same) return { ok: true, message: 'Ten stan już tam jest.' }
     return { ok: true, message: platform === 'windows' ? (r.local ? 'Skopiowano — stan jest na liście tego komputera.' : 'Skopiowano — pobierze się przy następnej grze.') : 'Skopiowano — telefon pobierze go przy następnym uruchomieniu gry.' }
@@ -138,17 +149,127 @@ export function registerEmustartIpc(handle: Handle, ctx: Ctx): void {
     return call<boolean>('launch_choice', [choice])
   })
   handle(IPC.emuToggleKeep, async (gameId: string): Promise<EmuActionResult> => {
-    const r = await call<{ ok: boolean; pinned?: boolean }>('toggle_pin', [idOf(gameId)])
+    const r = await call<{ ok: boolean; pinned?: boolean }>('toggle_pin', [await playIdOf(gameId)])
     void provider.refresh()
     if (!r.ok) return fail('Nie udało się zmienić ustawienia gry.')
     return { ok: true, message: r.pinned ? 'Gra zostanie pobrana i zostanie na tym komputerze.' : 'Gra nie jest już trzymana na stałe (wraca do limitu ostatnich gier).' }
   })
   handle(IPC.emuRemoveLocal, async (gameId: string): Promise<EmuActionResult> => {
-    const r = await call<{ ok: boolean; reason?: string }>('remove_local', [idOf(gameId)], 60_000)
+    const r = await call<{ ok: boolean; reason?: string }>('remove_local', [await playIdOf(gameId)], 60_000)
     void provider.refresh()
     return r.ok ? { ok: true, message: 'Usunięto lokalną kopię. Gra zostaje na serwerze.' } : fail(r.reason ?? 'Nie udało się usunąć.')
   })
-  handle(IPC.emuReadiness, (gameId: string) => call<EmuReadiness>('lumen_readiness', [idOf(gameId)], 30_000))
+  handle(IPC.emuReadiness, async (gameId: string) => call<EmuReadiness>('lumen_readiness', [await playIdOf(gameId)], 30_000))
+
+  // ---- "Opcje gry" (both layouts; EmuStart's game options: options.js) ----
+  handle(IPC.emuGameOptions, async (gameId: string): Promise<EmuGameOptions> => {
+    type Raw = {
+      ok: boolean
+      reason?: string
+      play_id: number
+      admin: boolean
+      states: number
+      detail: {
+        variants?: { id: number; label: string; lang?: string }[]
+        variant?: number
+        variant_label?: string
+        meta?: Record<string, string>
+        meta_edits?: Record<string, string>
+        cached?: boolean
+        pinned?: boolean
+        local?: number
+        title?: string
+      }
+      options: {
+        emulator?: { label?: string; exe?: string; args?: string; own?: boolean }
+        options?: EmuEmulatorOption[]
+        retroarch?: boolean
+        shader_off?: boolean
+        system?: string
+        es?: string
+        sync?: EmuSaveSync
+      }
+    }
+    const r = await call<Raw>('lumen_game_options', [idOf(gameId)], 90_000)
+    if (!r.ok) throw new Error(r.reason ?? 'Nie udało się odczytać opcji gry.')
+    const d = r.detail
+    const o = r.options
+    const meta: Record<string, string> = { ...(d.meta ?? {}) }
+    if (!meta.title && d.title) meta.title = d.title
+    return {
+      playId: r.play_id,
+      variants: d.variants ?? [],
+      variant: d.variant ?? 0,
+      variantLabel: d.variant_label ?? '',
+      meta,
+      metaEdits: d.meta_edits ?? {},
+      cached: !!d.cached,
+      pinned: !!d.pinned,
+      local: d.local ?? 0,
+      emulator: { label: o.emulator?.label ?? '', exe: o.emulator?.exe ?? '', args: o.emulator?.args ?? '', own: !!o.emulator?.own },
+      emulators: o.options ?? [],
+      retroarch: !!o.retroarch,
+      shaderOff: !!o.shader_off,
+      system: o.system ?? '',
+      es: o.es ?? '',
+      sync: o.sync ?? { state: 'never', last: 0 },
+      states: r.states ?? 0,
+      admin: !!r.admin
+    }
+  })
+  handle(IPC.emuSetVariant, async (gameId: string, variantId: number): Promise<EmuActionResult> => {
+    const r = await call<{ ok: boolean; reason?: string; label?: string }>('set_variant', [idOf(gameId), Number(variantId) || 0])
+    if (r.ok) ctx.changed()
+    return done(r, r.ok ? (variantId ? `Grasz w: ${r.label}. Zapisy tej wersji są osobne od oryginału.` : 'Grasz w oryginał.') : undefined)
+  })
+  handle(IPC.emuSetGameEmulator, async (gameId: string, e: EmuEmulatorOption | null): Promise<EmuActionResult> => {
+    const opt = e ? { label: String(e.label), exe: String(e.exe), args: String(e.args ?? '') } : null
+    const r = await call<{ ok: boolean; reason?: string }>('set_game_emulator', [idOf(gameId), opt])
+    return done(r, opt ? `Ta gra: ${opt.label}` : 'Gra używa emulatora systemu.')
+  })
+  handle(IPC.emuConfigure, async (gameId: string): Promise<EmuActionResult> =>
+    done(await call<{ ok: boolean; reason?: string }>('configure_emulator', [await playIdOf(gameId)], 60_000), 'Zmień ustawienia i zamknij emulator — zapiszą się w Twoim profilu.')
+  )
+  handle(IPC.emuSettingsHistory, async (gameId: string): Promise<EmuSettingsChange[]> => {
+    const r = await call<{ ok: boolean; list?: EmuSettingsChange[] }>('emu_settings_history', [idOf(gameId)])
+    return r.ok ? (r.list ?? []) : []
+  })
+  handle(IPC.emuSettingsRestore, async (gameId: string, hid: string): Promise<EmuActionResult> => {
+    const r = await call<{ ok: boolean; reason?: string; files?: number }>('emu_settings_restore', [idOf(gameId), String(hid)])
+    return done(r, `Przywrócono ustawienia (${r.files ?? 0} plików) — działają od następnej gry.`)
+  })
+  handle(IPC.emuShaderOff, async (es: string, off: boolean): Promise<EmuActionResult> =>
+    done(await call<{ ok: boolean }>('set_shader_off', [String(es), !!off]), off ? 'Gry tego systemu bez shadera.' : 'Shader jak w ustawieniach RetroArcha.')
+  )
+  handle(IPC.emuMetaSave, async (gameId: string, edits: Record<string, string>): Promise<EmuActionResult> => {
+    const clean: Record<string, string> = {}
+    for (const [k, v] of Object.entries(edits ?? {})) if (typeof v === 'string') clean[k] = v
+    const r = await call<{ ok: boolean; reason?: string }>('meta_save', [idOf(gameId), clean], 30_000)
+    if (r.ok) ctx.changed()
+    return done(r, 'Zapisano na serwerze.')
+  })
+  handle(IPC.emuMetaFetch, async (gameId: string): Promise<EmuActionResult> =>
+    done(await call<{ ok: boolean; reason?: string }>('meta_fetch_full', [idOf(gameId)], 30_000), 'Serwer pobiera opis — pojawi się za chwilę.')
+  )
+  handle(IPC.emuServerArt, async (gameId: string, kind: string, q?: string): Promise<EmuServerArt[]> => {
+    const list = await call<{ url: string; thumb?: string; source?: string; width?: number; height?: number }[]>('art_candidates', [idOf(gameId), kindOf(kind), String(q ?? '')], 60_000)
+    const out: EmuServerArt[] = []
+    for (const c of list ?? []) {
+      if (!c?.url) continue
+      out.push({ url: c.url, thumb: (c.thumb && (await ctx.engineImage(c.thumb))) || '', source: c.source, width: c.width, height: c.height })
+    }
+    return out
+  })
+  handle(IPC.emuServerArtChoose, async (gameId: string, kind: string, url: string): Promise<EmuActionResult> => {
+    const r = await call<{ ok: boolean; reason?: string }>('art_choose', [idOf(gameId), kindOf(kind), String(url)], 60_000)
+    if (r.ok) ctx.artChanged(gameId)
+    return done(r, 'Zapisano na serwerze — widać na wszystkich urządzeniach.')
+  })
+  handle(IPC.emuServerArtClear, async (gameId: string, kind: string): Promise<EmuActionResult> => {
+    const r = await call<{ ok: boolean; reason?: string }>('art_clear', [idOf(gameId), kindOf(kind)], 30_000)
+    if (r.ok) ctx.artChanged(gameId)
+    return done(r, 'Usunięto grafikę na serwerze.')
+  })
   handle(IPC.emuInstall, async (systems: string[]): Promise<EmuActionResult> => {
     const r = await call<{ ok: boolean; reason?: string }>('install_start', [systems.filter((s) => typeof s === 'string')], 60_000)
     return r.ok ? { ok: true, message: 'Pobieranie emulatora z serwera EmuStart rozpoczęte.' } : fail(r.reason ?? 'Nie udało się rozpocząć pobierania.')
