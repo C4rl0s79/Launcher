@@ -16,6 +16,7 @@ const defaults = (): StoredSettings => ({
   demoMode: false,
   gamepadBackend: 'xinput',
   startMode: 'desktop',
+  tvInterface: 'lumen',
   regionOrder: 'europe',
   emustartEnabled: true,
   language: 'polish'
@@ -38,6 +39,7 @@ function migrate(raw: unknown): StoredSettings {
     demoMode: r.demoMode === true,
     gamepadBackend: r.gamepadBackend === 'chromium' ? 'chromium' : 'xinput',
     startMode: r.startMode === 'fullscreen' ? 'fullscreen' : 'desktop',
+    tvInterface: r.tvInterface === 'emustart' ? 'emustart' : 'lumen',
     regionOrder: r.regionOrder === 'usa' || r.regionOrder === 'japan' ? r.regionOrder : 'europe',
     emustartEnabled: r.emustartEnabled !== false,
     emustartHome: cleanPath(r.emustartHome),

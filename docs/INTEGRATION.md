@@ -350,14 +350,23 @@ z działającym silnikiem, zadanie usunięte. Instalator (`/S`) — niesprawdzon
 
 ## 7. Tryby interfejsu
 
-- Jedno okno, dwa widoki: renderer Lumen i `WebContentsView` z UI EmuStart (ładowany w tle przy starcie).
-  Przełączenie: F10, View + Start na padzie, przycisk „⛶ Tryb TV”, Menu EmuStart → „Tryb pulpitu (Lumen)”.
-- Zachowanie kontekstu: zaznaczona gra przechodzi między trybami (pulpit → TV: system i gra na liście;
-  TV → pulpit: ekran szczegółów tej gry).
-- Pad: XInput czyta tylko proces główny Lumen (jak dotąd) i kieruje zdarzenia do widocznego trybu
-  (w TV — akcje EmuStart z tym samym powtarzaniem co w EmuStart). Menu w grze (A + Y nad emulatorem)
-  obsługuje nadal silnik EmuStart.
-- „Wyjdź” w menu EmuStart zamyka Lumen (silnik kończy wysyłanie zapisów przed wyjściem).
+Od Lumen 0.6.0 (plan: `docs/PLAN-TV-REACT.md`, etap 1) — **jeden interfejs, dwa układy**:
+- **pulpit** i **TV** to ten sam renderer React (`src/renderer`), ta sama biblioteka, akcje i okna
+  (uruchamianie, konflikt zapisów, profil na innym urządzeniu, szczegóły, zadania). Układ TV
+  (`src/renderer/src/tv/`) ma wygląd EmuStart: karuzela systemów (logo z serwera, opis platformy z
+  silnika), lista gier (okładka | szczegóły | zrzut, opis), Steam jako system, menu Start,
+  wyszukiwanie klawiaturą ekranową. Akcja „Graj / Pobierz i graj / Zainstaluj emulator” — wspólna
+  (`lib/primary.ts`). Pad: A graj, X opcje gry (szczegóły), Y szukaj, LB/RB strona, LT/RT litera,
+  B wstecz, Start menu.
+- Przełączenie: F10, View + Start, przycisk „⛶ Tryb TV”, menu TV → „Tryb pulpitu”. Zaznaczona gra
+  przechodzi między układami (pulpit → TV: jej system i gra; TV → pulpit: jej szczegóły).
+- **Interfejs EmuStart (osobny widok) — tymczasowo** dla funkcji, których układ TV jeszcze nie ma
+  (etapy 2–3): logowanie, konto, profile, PIN, RetroAchievements („Konto, profile i logowanie
+  (EmuStart)” w menu TV, „Zaloguj / Konto i logowanie” w Ustawieniach) i opcje emulatora gry
+  („Opcje gry EmuStart” w szczegółach). Ustawienia → Tryb interfejsu → „Tryb TV: dotychczasowy
+  interfejs EmuStart” przywraca poprzedni tryb TV w całości.
+- Fokus klawiatury i pada zawsze w widocznym interfejsie (ukryty widok EmuStart oddaje fokus).
+- Menu w grze (A + Y nad emulatorem) obsługuje nadal silnik EmuStart (etap 4).
 
 ## 8. Co sprawdzono, a co nie (20.10.2026)
 

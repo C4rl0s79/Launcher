@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { LumenApi, PickPathOptions } from '@shared/api'
-import type { Category, Game, JobsSnapshot, LibrarySnapshot, Prefs, Settings, SteamCollection } from '@shared/types'
+import type { UiMode, Category, Game, JobsSnapshot, LibrarySnapshot, Prefs, Settings, SteamCollection } from '@shared/types'
 
 declare global {
   interface Window {
@@ -38,6 +38,11 @@ interface State {
   detailsId: string | null
   inputMode: InputMode
   toasts: Toast[]
+  /** desktop layout or the TV layout (fullscreen) of the one interface */
+  uiMode: UiMode
+  /** the game selected when the mode switched (the TV layout opens on its system) */
+  uiSelection: string | null
+  setUiMode(mode: UiMode, selection?: string | null): void
   setSnapshot(s: LibrarySnapshot): void
   setJobs(j: JobsSnapshot): void
   setJobsOpen(open: boolean): void
@@ -80,6 +85,9 @@ export const useStore = create<State>((set) => ({
   detailsId: null,
   inputMode: 'keyboard',
   toasts: [],
+  uiMode: 'desktop',
+  uiSelection: null,
+  setUiMode: (uiMode, uiSelection = null) => set({ uiMode, uiSelection }),
   setSnapshot: (snapshot) => set({ snapshot }),
   setJobs: (jobs) => set({ jobs }),
   setJobsOpen: (jobsOpen) => set({ jobsOpen }),

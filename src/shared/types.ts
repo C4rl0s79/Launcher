@@ -172,6 +172,19 @@ export interface EmuSystem {
   games: number
   cached: number
   emulator: string
+  /** the server has a logo of this platform (lumen-art: emusys:<es> / logo) */
+  hasLogo?: boolean
+}
+
+/** Platform description for the TV system carousel (EmuStart system_info) */
+export interface EmuSystemInfo {
+  pending?: boolean
+  manufacturer?: string
+  release?: string
+  end?: string
+  media?: string
+  controllers?: string
+  description?: string
 }
 
 export interface EmustartSummary {
@@ -305,6 +318,12 @@ export interface Settings {
   gamepadBackend: GamepadBackend
   /** interface shown at start: desktop (Lumen look) or fullscreen (EmuStart look) */
   startMode: UiMode
+  /**
+   * TV (fullscreen) interface: "lumen" — the TV layout of Lumen's own interface (one interface,
+   * EmuStart look); "emustart" — EmuStart's own interface in a separate view (until the TV layout
+   * has every function, docs/PLAN-TV-REACT.md)
+   */
+  tvInterface: 'lumen' | 'emustart'
   /** regional version shown by default for games with several versions */
   regionOrder: RegionOrder
   /** run the EmuStart engine (emulated games from an EmuStart server) */
@@ -333,6 +352,7 @@ export type SettingsPatch = Partial<
     | 'demoMode'
     | 'gamepadBackend'
     | 'startMode'
+    | 'tvInterface'
     | 'regionOrder'
     | 'emustartEnabled'
     | 'emustartHome'

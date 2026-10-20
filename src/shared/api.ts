@@ -1,4 +1,4 @@
-import type { LbArtOptionsResult, EmuSaves,
+import type { EmuSystemInfo, LbArtOptionsResult, EmuSaves,
   ActionResult,
   ArtKind,
   ArtOption,
@@ -94,6 +94,8 @@ export interface LumenApi {
     launch(gameId: string, state?: string, takeover?: boolean): Promise<EmuActionResult>
     /** a state of another RetroArch core: switch this game to that core (downloads it if missing) */
     playOtherCore(gameId: string, core: string): Promise<EmuActionResult>
+    /** platform description for the TV system carousel (pending = being fetched, ask again) */
+    systemInfo(es: string): Promise<EmuSystemInfo>
     /** sync status, save states on this PC, PS2 states of all devices */
     saves(gameId: string): Promise<EmuSaves>
     /** copy a PS2 state to the other platform (or here) */
@@ -142,8 +144,11 @@ export interface LumenApi {
   /** desktop (Lumen look) ⇄ fullscreen (EmuStart look); both use the same core */
   ui: {
     getMode(): Promise<UiMode>
-    /** `then` — what to open in the fullscreen interface (EmuStart settings: login, profiles, emulators) */
-    setMode(mode: UiMode, then?: 'settings'): Promise<void>
+    /**
+     * `then` opens EmuStart's own interface for what the TV layout does not have yet:
+     * "settings" — login, account, profiles; "game" — options of the selected game
+     */
+    setMode(mode: UiMode, then?: 'settings' | 'game'): Promise<void>
     /** the game the user is looking at (kept when switching modes) */
     select(gameId: string | null): void
     onMode(cb: (mode: UiMode, selection: string | null) => void): () => void
@@ -206,6 +211,7 @@ export const IPC = {
   padState: 'pad:state',
   emuLaunch: 'emu:launch',
   emuSaves: 'emu:saves',
+  emuSystemInfo: 'emu:systemInfo',
   emuPlayOtherCore: 'emu:playOtherCore',
   emuCopyState: 'emu:copyState',
   emuCancelLaunch: 'emu:cancelLaunch',

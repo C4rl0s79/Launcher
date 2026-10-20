@@ -151,6 +151,11 @@ export class EmustartProvider extends EventEmitter {
     this.shown = new Map(g.games.filter((x) => x.emu?.shownVersion).map((x) => [x.id, x.emu!.shownVersion!]))
   }
 
+  /** engine media path of a platform logo (TV system carousel) */
+  systemLogo(es: string): string | undefined {
+    return this.lib.systems.find((s) => s.es === es)?.logo || undefined
+  }
+
   summary(): EmustartSummary {
     const e = this.engine
     return {
@@ -159,7 +164,7 @@ export class EmustartProvider extends EventEmitter {
       version: e.version,
       server: this.status?.server ?? this.lib.server,
       profile: this.lib.profile?.name,
-      systems: this.lib.systems.map((s) => ({ es: s.es, display: s.display, games: s.games, cached: s.cached, emulator: s.emulator })),
+      systems: this.lib.systems.map((s) => ({ es: s.es, display: s.display, games: s.games, cached: s.cached, emulator: s.emulator, hasLogo: !!s.logo })),
       fromCache: this.fromCache,
       configured: this.lib.configured
     }

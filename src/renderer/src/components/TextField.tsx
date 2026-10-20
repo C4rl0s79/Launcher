@@ -77,7 +77,7 @@ const ROWS = [
   ['ą', 'ć', 'ę', 'ł', 'ń', 'ó', 'ś', 'ź', 'ż', "'"]
 ]
 
-function OnScreenKeyboard({
+export function OnScreenKeyboard({
   label,
   initial,
   secret,

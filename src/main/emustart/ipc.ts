@@ -1,7 +1,7 @@
 import { stat } from 'node:fs/promises'
 import type { BrowserWindow } from 'electron'
 import { IPC } from '@shared/api'
-import type { EmuActionResult, EmuEmulatorOption, EmuLocalState, EmuRemoteState, EmuSaves, EmuSaveSync, EmuOptions, EmuOptionsPatch, EmuReadiness, EmuSettings, JobsSnapshot } from '@shared/types'
+import type { EmuActionResult, EmuEmulatorOption, EmuSystemInfo, EmuLocalState, EmuRemoteState, EmuSaves, EmuSaveSync, EmuOptions, EmuOptionsPatch, EmuReadiness, EmuSettings, JobsSnapshot } from '@shared/types'
 import type { EmustartEngine } from './engine'
 import type { EmustartProvider } from './provider'
 
@@ -130,6 +130,7 @@ export function registerEmustartIpc(handle: Handle, ctx: Ctx): void {
     if (r.same) return { ok: true, message: 'Ten stan już tam jest.' }
     return { ok: true, message: platform === 'windows' ? (r.local ? 'Skopiowano — stan jest na liście tego komputera.' : 'Skopiowano — pobierze się przy następnej grze.') : 'Skopiowano — telefon pobierze go przy następnym uruchomieniu gry.' }
   })
+  handle(IPC.emuSystemInfo, (es: string) => call<EmuSystemInfo>('system_info', [String(es)], 30_000))
   handle(IPC.emuCancelLaunch, () => call('launch_cancel'))
   handle(IPC.emuDismiss, () => call('launch_dismiss'))
   handle(IPC.emuResolve, (choice: string) => {

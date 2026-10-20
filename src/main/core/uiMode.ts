@@ -9,7 +9,9 @@ import { log } from '../logger'
 /**
  * Two presentation layers in one window, over one core:
  *  - desktop: Lumen's React UI (the window's own webContents),
- *  - fullscreen: EmuStart's UI (engine/web) in a WebContentsView on top.
+ *  - fullscreen: the TV layout of the same React UI (default), or — while the TV layout does not
+ *    have every function yet (docs/PLAN-TV-REACT.md) — EmuStart's UI (engine/web) in a
+ *    WebContentsView on top (settings: tvInterface 'emustart').
  * Switching only shows/hides the view — no reload, no restart; running jobs live in the core
  * and the engine, so they are unaffected. The selected game travels with the switch.
  * Emits "mode" (mode, selection).
@@ -22,6 +24,9 @@ export class UiModeManager extends EventEmitter {
   /** what the fullscreen UI should show once it can: a settings page or the selected game */
   private pending: 'settings' | 'game' | null = null
   private loaded = false
+  /** EmuStart's own interface is shown in fullscreen mode (setting, or opened for a function the
+   *  TV layout does not have yet: login, profiles, emulator of a game…) */
+  private legacyNow = false
 
   constructor(
     private readonly win: BrowserWindow,
@@ -31,6 +36,8 @@ export class UiModeManager extends EventEmitter {
       locate: (gameId: string) => { es: string; id: string | number } | null
       /** keyboard shortcuts of the window (F10 switches the interface) */
       onInput?: (input: Electron.Input, wc: Electron.WebContents) => void
+      /** fullscreen mode shows EmuStart's own interface instead of Lumen's TV layout */
+      legacyTv: () => boolean
     }
   ) {
     super()
@@ -47,9 +54,14 @@ export class UiModeManager extends EventEmitter {
     return this.selection
   }
 
+  /** the fullscreen mode shows EmuStart's own interface (separate view) */
+  get legacyShown(): boolean {
+    return this._mode === 'fullscreen' && this.legacyNow && !!this.view
+  }
+
   /** webContents of the visible interface (input, focus) */
   get activeContents(): Electron.WebContents {
-    return this._mode === 'fullscreen' && this.view ? this.view.webContents : this.win.webContents
+    return this.legacyShown ? this.view!.webContents : this.win.webContents
   }
 
   get emuContents(): Electron.WebContents | null {
@@ -62,7 +74,7 @@ export class UiModeManager extends EventEmitter {
 
   /** create the fullscreen view in the background, so the first switch is instant */
   preload(): void {
-    this.ensureView()
+    if (this.opts.legacyTv()) this.ensureView()
   }
 
   private ensureView(): WebContentsView {
@@ -84,7 +96,7 @@ export class UiModeManager extends EventEmitter {
     wc.on('focus', () => {
       // not inside the event: Chromium finishes moving focus to this view afterwards
       setTimeout(() => {
-        if (this._mode !== 'fullscreen' && !this.win.isDestroyed()) this.win.webContents.focus()
+        if (!this.legacyShown && !this.win.isDestroyed()) this.win.webContents.focus()
       }, 0)
     })
     wc.setWindowOpenHandler(() => ({ action: 'deny' }))
@@ -128,20 +140,32 @@ export class UiModeManager extends EventEmitter {
     this.view.setBounds({ x: 0, y: 0, width: b.width, height: b.height })
   }
 
-  setMode(mode: UiMode, then?: 'settings'): void {
+  /**
+   * `then` opens EmuStart's own interface (until the TV layout has these functions,
+   * docs/PLAN-TV-REACT.md): "settings" — login, account, profiles; "game" — options of the
+   * selected game (emulator, metadata…).
+   */
+  setMode(mode: UiMode, then?: 'settings' | 'game'): void {
     if (mode === this._mode) {
-      if (then && mode === 'fullscreen') this.view?.webContents.send(EMU_UI.open, then)
+      if (then && mode === 'fullscreen') this.showLegacy(then)
       return
     }
     this._mode = mode
-    if (mode === 'fullscreen') {
+    this.legacyNow = mode === 'fullscreen' && (this.opts.legacyTv() || !!then)
+    if (mode === 'fullscreen' && !this.legacyNow) {
+      // Lumen's TV layout: the same interface, another layout — the renderer switches on "mode"
+      this.view?.setVisible(false)
+      this.wasFullScreen = this.win.isFullScreen()
+      if (!this.wasFullScreen) this.win.setFullScreen(true)
+      this.win.webContents.focus()
+    } else if (mode === 'fullscreen') {
       const view = this.ensureView()
       this.wasFullScreen = this.win.isFullScreen()
       if (!this.wasFullScreen) this.win.setFullScreen(true)
       view.setVisible(true)
       this.layout()
       view.webContents.focus()
-      this.pending = then ?? (this.selection ? 'game' : null)
+      this.pending = then === 'settings' ? 'settings' : this.selection ? 'game' : null
       this.sendPending()
     } else {
       this.view?.setVisible(false)
@@ -150,6 +174,18 @@ export class UiModeManager extends EventEmitter {
     }
     log.info('ui', `mode ${mode}${this.selection ? ` (gra ${this.selection})` : ''}`)
     this.emit('mode', mode, this.selection)
+  }
+
+  /** already in fullscreen mode (TV layout): show EmuStart's interface on top */
+  private showLegacy(then: 'settings' | 'game'): void {
+    const view = this.ensureView()
+    this.legacyNow = true
+    view.setVisible(true)
+    this.layout()
+    view.webContents.focus()
+    this.pending = then === 'settings' ? 'settings' : this.selection ? 'game' : null
+    this.sendPending()
+    log.info('ui', `EmuStart interface (${then})`)
   }
 
   toggle(): void {

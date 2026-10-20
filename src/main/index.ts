@@ -210,7 +210,8 @@ function createWindow(): void {
       const row = emu.row(gameId)
       return row ? { es: row.es, id: row.id } : null
     },
-    onInput: (input, wc) => hotkeys(input, wc)
+    onInput: (input, wc) => hotkeys(input, wc),
+    legacyTv: () => settings.get().tvInterface === 'emustart'
   })
   modes.on('mode', (mode: UiMode, selection: string | null) => send(IPC.uiMode, mode, selection))
 }
@@ -264,6 +265,12 @@ function registerArtProtocol(): void {
       const [, rawId, kind] = u.pathname.split('/')
       const gameId = decodeURIComponent(rawId ?? '')
       if (!ART_KINDS.includes(kind as ArtKind)) return new Response('bad kind', { status: 400 })
+      if (gameId.startsWith('emusys:')) {
+        // platform logo from the EmuStart server (TV system carousel)
+        const logo = kind === 'logo' ? emu.systemLogo(gameId.slice(7)) : undefined
+        if (!logo || !engine.baseUrl) return new Response('not found', { status: 404 })
+        return (await engineMedia(logo)) ?? new Response('not found', { status: 404 })
+      }
       if (isEmuGameId(gameId)) return await emuArt(gameId, kind)
       const game = findGame(gameId)
       const shortcutId = /^shortcut:(\d+)$/.exec(gameId)
@@ -364,6 +371,27 @@ async function emuArt(gameId: string, kind: string): Promise<Response> {
     if (f) return fileResponse(f)
   }
   return new Response('not found', { status: 404 })
+}
+
+/** A file from the engine's media (offline copy of the server's media), cached in memory. */
+async function engineMedia(url: string): Promise<Response | null> {
+  if (!engine.baseUrl) return null
+  const full = new URL(url, engine.baseUrl).toString()
+  let hit = emuArtCache.get(full)
+  if (!hit) {
+    try {
+      hit = await emuArtLimit.run(async () => {
+        const res = await fetch(full, { signal: AbortSignal.timeout(60_000) })
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        return { type: res.headers.get('content-type') ?? 'image/webp', body: Buffer.from(await res.arrayBuffer()) }
+      })
+    } catch {
+      return null
+    }
+    emuArtCache.set(full, hit)
+    if (emuArtCache.size > 400) emuArtCache.delete(emuArtCache.keys().next().value!)
+  }
+  return new Response(new Uint8Array(hit.body), { status: 200, headers: { 'Content-Type': hit.type, 'Cache-Control': 'max-age=86400' } })
 }
 
 /** The engine's offline copy of the server's media (box art, screenshot, Clear Logo). */
@@ -763,8 +791,8 @@ function registerIpc(): void {
   handle(IPC.updateApply, () => updater.apply())
 
   handle(IPC.uiGetMode, () => modes?.mode ?? 'desktop')
-  handle(IPC.uiSetMode, (mode: UiMode, then?: 'settings') =>
-    modes?.setMode(mode === 'fullscreen' ? 'fullscreen' : 'desktop', then === 'settings' ? 'settings' : undefined)
+  handle(IPC.uiSetMode, (mode: UiMode, then?: 'settings' | 'game') =>
+    modes?.setMode(mode === 'fullscreen' ? 'fullscreen' : 'desktop', then === 'settings' || then === 'game' ? then : undefined)
   )
   ipcMain.on(IPC.uiSelect, (_e, gameId: unknown) => modes?.select(typeof gameId === 'string' ? gameId : null))
 
@@ -890,7 +918,7 @@ app.whenReady().then(async () => {
     () =>
       // LUMEN_NO_PAD=1: automated UI tests ignore controllers connected to this PC
       process.env.LUMEN_NO_PAD !== '1' &&
-      (settings.get().gamepadBackend === 'xinput' || modes?.mode === 'fullscreen') &&
+      (settings.get().gamepadBackend === 'xinput' || !!modes?.legacyShown) &&
       !!win &&
       !win.isDestroyed() &&
       win.isFocused() &&
@@ -901,7 +929,7 @@ app.whenReady().then(async () => {
       if (nowCombo && !combo) modes?.toggle()
       combo = nowCombo
       if (nowCombo) return
-      if (modes?.mode === 'fullscreen') modes.emuContents?.send(EMU_UI.pad, state)
+      if (modes?.legacyShown) modes.emuContents?.send(EMU_UI.pad, state)
       else send(IPC.padState, state)
     }
   )

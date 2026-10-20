@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import type { DetailsResult, EmuReadiness, EmustartSummary, Game, Job } from '@shared/types'
+import type { DetailsResult, Game, Job } from '@shared/types'
 import { api, attempt, steamCollectionsOf, useStore } from '../store'
 import { useActions } from '../nav/input'
 import { focusEl, focusFirst } from '../nav/engine'
@@ -8,44 +8,22 @@ import { Art } from '../components/Art'
 import { CategoryPicker } from '../modals/CategoryPicker'
 import { ArtPicker } from '../modals/ArtPicker'
 import { EmuSaves } from '../components/EmuSaves'
+import { usePrimaryAction } from '../lib/primary'
 import { formatBytes, formatEta, formatLastPlayed, formatPlaytime, htmlToParagraphs, STATE_LABEL, stateLabel, versionCountLabel } from '../lib/format'
-
-interface PrimaryAction {
-  label: string
-  run?: () => Promise<void>
-  disabled?: boolean
-  note?: string
-}
 
 export function DetailsScreen({ gameId }: { gameId: string }) {
   const game = useStore((s) => s.snapshot?.games.find((g) => g.id === gameId))
-  const steamStatus = useStore((s) => s.snapshot?.steam.status)
   const prefs = useStore((s) => s.prefs)!
   const collections = useStore((s) => s.snapshot?.collections ?? null)
   const close = (): void => useStore.getState().openDetails(null)
   const [details, setDetails] = useState<DetailsResult | null>(null)
   const [modal, setModal] = useState<'categories' | 'art' | 'saves' | null>(null)
   const [logoOk, setLogoOk] = useState(true)
-  const [busy, setBusy] = useState(false)
   const isEmu = game?.source === 'emustart'
   const emuSummary = useStore((s) => s.snapshot?.emustart)
   const allJobs = useStore((s) => s.jobs.jobs)
   const gameJobs = useMemo(() => allJobs.filter((j) => j.gameId === gameId && j.kind !== 'emuLaunch'), [allJobs, gameId])
-  const installing = allJobs.some((j) => j.kind === 'emuInstall')
-  const [ready, setReady] = useState<EmuReadiness | null>(null)
-
-  // EmuStart: what is missing before the game can start (emulator) — re-checked after installs
-  useEffect(() => {
-    if (!isEmu || emuSummary?.engine !== 'ready' || installing) return
-    let alive = true
-    void api()
-      .emustart.readiness(gameId)
-      .then((r) => alive && setReady(r))
-      .catch(() => alive && setReady(null))
-    return () => {
-      alive = false
-    }
-  }, [isEmu, gameId, emuSummary?.engine, installing])
+  const { primary, busy, ready } = usePrimaryAction(game)
   const ref = useRef<HTMLDivElement>(null)
   const opener = useRef<HTMLElement | null>(document.activeElement as HTMLElement | null)
 
@@ -99,44 +77,7 @@ export function DetailsScreen({ gameId }: { gameId: string }) {
     }
   )
 
-  const primary = useMemo<PrimaryAction | null>(() => {
-    if (!game) return null
-    const wrap = (fn: () => Promise<{ ok: boolean; message?: string; error?: string }>) => async () => {
-      setBusy(true)
-      const r = await attempt(fn())
-      setBusy(false)
-      if (r) useStore.getState().toast(r.ok ? (r.message ?? 'Gotowe') : (r.error ?? 'Błąd'), r.ok ? 'info' : 'error')
-    }
-    if (game.source === 'demo') return { label: 'Gra demonstracyjna', disabled: true, note: 'Dane demonstracyjne — akcje są wyłączone.' }
-    if (game.emu) return emuPrimary(game, emuSummary, ready, installing, setBusy)
-    if (steamStatus === 'notInstalled') return { label: 'Steam niedostępny', disabled: true, note: 'Nie znaleziono klienta Steam na tym komputerze.' }
-    const play = wrap(() => api().game.play(gameId))
-    const downloads = wrap(() => api().game.openInSteam(gameId, 'downloads'))
-    const steamNote = steamStatus === 'notRunning' ? 'Steam jest wyłączony — zostanie uruchomiony automatycznie.' : undefined
-    switch (game.installState) {
-      case 'installed':
-        return { label: game.running ? 'Gra działa' : 'Graj', run: play, note: game.running ? 'Steam zgłasza, że gra jest uruchomiona.' : steamNote }
-      case 'updateRequired':
-        return { label: 'Graj', run: play, note: 'Steam zainstaluje aktualizację przed uruchomieniem.' }
-      case 'notInstalled':
-        return { label: 'Zainstaluj', run: wrap(() => api().game.install(gameId)), note: steamNote ?? 'Instalację przeprowadzi klient Steam.' }
-      case 'installing':
-      case 'updating':
-        return { label: 'Pokaż pobieranie w Steam', run: downloads }
-      case 'updatePaused':
-        return { label: 'Wznów w Steam', run: downloads, note: 'Pobieranie jest wstrzymane w kliencie Steam.' }
-      case 'uninstalling':
-        return { label: 'Odinstalowywanie…', disabled: true }
-      case 'broken':
-        if (game.shortcut)
-          return { label: 'Brak programu', disabled: true, note: `Nie znaleziono pliku: ${game.shortcut.exe}` }
-        return {
-          label: 'Otwórz w Steam',
-          run: wrap(() => api().game.openInSteam(gameId, 'details')),
-          note: 'Pliki gry wymagają weryfikacji lub naprawy w kliencie Steam.'
-        }
-    }
-  }, [game, gameId, steamStatus, emuSummary, ready, installing])
+
 
   if (!game) {
     return createPortal(
@@ -278,8 +219,8 @@ export function DetailsScreen({ gameId }: { gameId: string }) {
               <button className="btn" data-nav data-key="saves" onClick={() => setModal('saves')}>
                 Zapisy
               </button>
-              <button className="btn" data-nav data-key="tv" onClick={() => void api().ui.setMode('fullscreen')}>
-                Opcje gry w trybie TV
+              <button className="btn" data-nav data-key="tv" onClick={() => void api().ui.setMode('fullscreen', 'game')}>
+                Opcje gry EmuStart (emulator, metadane)
               </button>
             </>
           )}
@@ -384,62 +325,6 @@ function DownloadStatus({ game }: { game: Game }) {
       )}
     </div>
   )
-}
-
-/** EmuStart: the one action that fits the game's state, as EmuStart itself would do it. */
-function emuPrimary(
-  game: Game,
-  emu: EmustartSummary | undefined,
-  ready: EmuReadiness | null,
-  installing: boolean,
-  setBusy: (b: boolean) => void
-): PrimaryAction {
-  const g = game.emu!
-  if (!emu || emu.engine !== 'ready')
-    return {
-      label: emu?.engine === 'starting' ? 'Uruchamianie EmuStart…' : 'EmuStart nie działa',
-      disabled: true,
-      note: emu?.message ?? 'Silnik EmuStart nie działa — gry z serwera są chwilowo niedostępne (szczegóły w Ustawieniach → EmuStart).'
-    }
-  const missing = ready?.ok ? ready.missing.find((m) => m.kind === 'emulator') : undefined
-  if (installing) return { label: 'Instalowanie emulatora…', disabled: true, note: 'Emulator pobiera się z serwera EmuStart (lista zadań u góry).' }
-  if (missing) {
-    if (!missing.installable)
-      return { label: 'Brak emulatora', disabled: true, note: `Nie ma emulatora dla ${missing.system} na tym komputerze, a serwer EmuStart go nie udostępnia. Wskaż emulator w Ustawieniach → Biblioteka EmuStart → Systemy.` }
-    return {
-      label: 'Zainstaluj emulator',
-      note: `Brak emulatora dla ${missing.system} — pobierze się z serwera EmuStart: ${missing.steps.join(', ')}.`,
-      run: async () => {
-        setBusy(true)
-        const r = await attempt(api().emustart.installEmulators([missing.es]))
-        setBusy(false)
-        if (r) useStore.getState().toast(r.ok ? (r.message ?? 'Instalacja rozpoczęta') : (r.error ?? 'Błąd'), r.ok ? 'info' : 'error')
-      }
-    }
-  }
-  const serverOk = !!emu.server?.ok
-  if (!g.cached && !serverOk)
-    return {
-      label: 'Serwer niedostępny',
-      disabled: true,
-      note: emu.server
-        ? 'Ta gra nie jest pobrana, a serwer EmuStart nie odpowiada. Pobrane gry działają bez serwera.'
-        : 'To urządzenie nie jest zalogowane do serwera EmuStart (Ustawienia → EmuStart).'
-    }
-  const run = async (): Promise<void> => {
-    setBusy(true)
-    const r = await attempt(api().emustart.launch(game.id))
-    setBusy(false)
-    if (!r) return
-    if (!r.ok) useStore.getState().toast(r.error ?? 'Nie udało się uruchomić gry.', 'error')
-    else if (r.message) useStore.getState().toast(r.message, 'info')
-  }
-  if (g.cached) return { label: 'Graj', run, note: `${g.system}${ready?.ok && ready.emulator ? ` · ${ready.emulator}` : ''}` }
-  return {
-    label: 'Pobierz i graj',
-    run,
-    note: `Gra pobierze się z serwera EmuStart (${formatBytes(g.size) ?? '?'}) i uruchomi. Zapisy synchronizuje EmuStart przed i po grze.`
-  }
 }
 
 function EmuJobStatus({ job }: { job: Job }) {

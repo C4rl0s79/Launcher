@@ -97,7 +97,7 @@ Legenda — pulpit Lumena dziś: ✔ jest, ◐ częściowo, ✘ brak.
 
 ## Etapy (każdy = wydanie)
 
-1. **Fundament układu TV** — przełączanie pulpit ↔ TV w jednym rendererze (bez `WebContentsView`),
+1. ✔ **(Lumen 0.6.0) Fundament układu TV** — przełączanie pulpit ↔ TV w jednym rendererze (bez `WebContentsView`),
    ekran systemów, lista gier w stylu EmuStart, Steam jako system, okno uruchamiania, menu,
    klawiatura ekranowa. Stary tryb TV dostępny przełącznikiem.
 2. **Opcje gry** — emulator dla gry, ustawienia emulatora z historią, bez shadera, metadane i
@@ -113,7 +113,12 @@ Legenda — pulpit Lumena dziś: ✔ jest, ◐ częściowo, ✘ brak.
 Każdy etap: testy jednostkowe komponentów i mapowań API, przejście klawiaturą/padem w obu
 układach (zrzuty ekranu), lista zgodności z tabelą powyżej.
 
-## Do decyzji
+## Decyzje (20.10.2026)
+
+Stały wygląd EmuStart bez edytora (na razie); bez lokalnych folderów z grami; samodzielny EmuStart
+zostaje na tym komputerze jako zapas.
+
+Pierwotne pytania:
 
 1. **Edytor wyglądu EmuStart** (logo, czcionki, kolory układu TV) — przenieść, czy układ TV ma
    stały wygląd EmuStart (+ jasny/ciemny z Lumena)? Propozycja: stały wygląd, edytor później.

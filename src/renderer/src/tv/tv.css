@@ -1,0 +1,465 @@
+/* TV layout — EmuStart's look (engine/web/app.css), scoped to .tv so it never touches the desktop layout */
+
+.tv {
+  --tv-bg: #0b0d12;
+  --tv-line: rgba(255, 255, 255, 0.08);
+  --tv-panel: rgba(20, 24, 36, 0.94);
+  --tv-text: #e9edf5;
+  --tv-dim: #8d97ab;
+  --tv-accent: #4f8cff;
+  --tv-accent2: color-mix(in srgb, var(--tv-accent), white 35%);
+  --tv-accent-soft: color-mix(in srgb, var(--tv-accent) 35%, transparent);
+  --tv-ok: #3fbf7f;
+  --tv-warn: #e6b450;
+  --tv-err: #ef5f5f;
+  --tv-row: max(28px, 4.6vh);
+  --tv-row-px: max(28px, 4.6vh);
+  --tv-media-h: 44vh;
+  --tv-list-w: 42%;
+  --tv-car-h: 34%;
+  --tv-car-w: 26vw;
+  --tv-fs: clamp(14px, 1.55vh, 20px);
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(120% 90% at 50% 0%, #1b2236 0%, var(--tv-bg) 60%) fixed, var(--tv-bg);
+  color: var(--tv-text);
+  font-family: 'Segoe UI Variable Display', 'Segoe UI', system-ui, sans-serif;
+  font-size: var(--tv-fs);
+  user-select: none;
+  overflow: hidden;
+}
+.tv img {
+  display: block;
+}
+
+/* top bar */
+.tv-top {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 7vh;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 3vw;
+  z-index: 5;
+}
+.tv-brand {
+  font-size: 1.5em;
+  letter-spacing: 0.04em;
+  color: var(--tv-dim);
+}
+.tv-brand b {
+  color: var(--tv-text);
+  font-weight: 600;
+}
+.tv-status {
+  display: flex;
+  gap: 1em;
+  align-items: center;
+  color: var(--tv-dim);
+}
+.tv-pill {
+  padding: 0.25em 0.8em;
+  border-radius: 99px;
+  background: var(--tv-line);
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+.tv-pill.ok {
+  color: var(--tv-ok);
+}
+.tv-pill.warn {
+  color: var(--tv-warn);
+}
+.tv-pill.err {
+  color: var(--tv-err);
+}
+.tv-clock {
+  font-variant-numeric: tabular-nums;
+  font-size: 1.1em;
+  color: var(--tv-text);
+}
+
+.tv-screen {
+  position: absolute;
+  inset: 7vh 0 7vh 0;
+}
+.tv-dim {
+  color: var(--tv-dim);
+}
+.tv-empty {
+  position: absolute;
+  inset: 30% 20% auto;
+  text-align: center;
+  color: var(--tv-dim);
+}
+.tv-empty h2 {
+  color: var(--tv-text);
+}
+
+/* system carousel */
+.tv-carousel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(35% - var(--tv-car-h) / 2);
+  height: var(--tv-car-h);
+  overflow: hidden;
+}
+.tv-syscard {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--tv-car-w);
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 0.28s,
+    filter 0.28s;
+  will-change: transform;
+  cursor: pointer;
+}
+.tv-syscard img {
+  max-width: 92%;
+  max-height: 80%;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 30px rgba(0, 0, 0, 0.6));
+}
+.tv-syscard .txt {
+  font-size: 3.4vw;
+  font-weight: 700;
+  text-align: center;
+  letter-spacing: 0.02em;
+}
+.tv-sysinfo {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 60%;
+  text-align: center;
+}
+.tv-sysinfo h1 {
+  font-size: 2.6em;
+  margin: 0 0 0.2em;
+  font-weight: 600;
+}
+.tv-sysinfo p {
+  color: var(--tv-dim);
+  margin: 0;
+  font-size: 1.15em;
+}
+.tv-sysabout {
+  margin: 1.4em auto 0;
+  max-width: 70vw;
+}
+.tv-sysfacts b {
+  color: var(--tv-text);
+}
+.tv-sysinfo .tv-sysdesc {
+  margin-top: 0.4em;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* game list */
+.tv-games {
+  display: grid;
+  grid-template-columns: minmax(300px, var(--tv-list-w)) 1fr;
+  gap: 2.5vw;
+  padding: 0 3vw;
+}
+.tv-gamelist {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.tv-listhead {
+  display: flex;
+  align-items: center;
+  gap: 1.2vw;
+  height: calc(6.5vh + 2.5vh);
+  flex: 0 0 auto;
+}
+.tv-listhead img {
+  height: 6.5vh;
+  max-width: 22vw;
+  object-fit: contain;
+  object-position: left center;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.8));
+}
+.tv-listhead h2 {
+  margin: 0;
+  font-size: 1.6em;
+}
+.tv-lhtext {
+  margin-left: auto;
+  text-align: right;
+  color: var(--tv-dim);
+}
+.tv-lhtext p {
+  margin: 0;
+}
+.tv-rows {
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+.tv-row {
+  height: var(--tv-row);
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  padding: 0 1em;
+  border-radius: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  cursor: pointer;
+}
+.tv-row .t {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tv-row .g {
+  color: var(--tv-dim);
+  font-size: 0.8em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 3;
+}
+.tv-row .ic {
+  margin-left: auto;
+  display: flex;
+  gap: 0.4em;
+  flex-shrink: 0;
+  font-size: 0.8em;
+}
+.tv-row.sel {
+  background: linear-gradient(90deg, var(--tv-accent), var(--tv-accent-soft));
+  color: #fff;
+}
+.tv-row.sel .g {
+  color: rgba(255, 255, 255, 0.8);
+}
+.tv-tag {
+  padding: 0.05em 0.5em;
+  border-radius: 5px;
+  background: var(--tv-line);
+  color: var(--tv-dim);
+}
+.tv-tag.c {
+  color: var(--tv-ok);
+}
+.tv-tag.p,
+.tv-tag.f {
+  color: var(--tv-warn);
+}
+.tv-tag.d {
+  color: var(--tv-accent2);
+}
+.tv-row.sel .tv-tag {
+  background: rgba(0, 0, 0, 0.25);
+  color: #fff;
+}
+
+/* preview: cover | details | screenshot, description below */
+.tv-preview {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-rows: var(--tv-media-h) minmax(0, 1fr);
+  gap: 2.5vh 1.6vw;
+  padding-top: 1.25vh;
+  overflow: hidden;
+  min-height: 0;
+}
+.tv-box,
+.tv-snap {
+  height: var(--tv-media-h);
+  position: relative;
+  align-self: start;
+}
+.tv-box .tv-boxart {
+  height: var(--tv-media-h);
+  width: auto;
+  max-width: 30vw;
+  object-fit: contain;
+  border-radius: 6px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+  background: none;
+}
+.tv-noart {
+  height: var(--tv-media-h);
+  width: calc(var(--tv-media-h) * 0.75);
+  border: 2px dashed var(--tv-line);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--tv-dim);
+  font-size: 0.85em;
+}
+.tv-snap .tv-snapart {
+  height: var(--tv-media-h);
+  width: auto;
+  max-width: calc(var(--tv-media-h) * 16 / 9);
+  object-fit: contain;
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  background: #000;
+}
+.tv-meta {
+  min-width: 0;
+  height: var(--tv-media-h);
+  overflow: hidden;
+}
+.tv-meta h1 {
+  margin: -0.15em 0 0;
+  font-size: 1.45em;
+  line-height: 1.15;
+  font-weight: 600;
+}
+.tv-meta .tags {
+  color: var(--tv-dim);
+  margin: 0.3em 0 1em;
+}
+.tv-meta dl {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.45em 1.2em;
+  margin: 0;
+  font-size: 0.92em;
+}
+.tv-dlrow {
+  display: contents;
+}
+.tv-meta dt {
+  color: var(--tv-dim);
+}
+.tv-meta dd {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tv-meta .st-c {
+  color: var(--tv-ok);
+}
+.tv-meta .st-n {
+  color: var(--tv-accent2);
+}
+.tv-note {
+  margin: 1em 0 0;
+  color: var(--tv-dim);
+  font-size: 0.85em;
+  line-height: 1.4;
+}
+.tv-desc {
+  grid-column: 1 / -1;
+  color: var(--tv-dim);
+  font-size: 0.95em;
+  line-height: 1.45;
+  overflow: hidden;
+  min-height: 0;
+}
+.tv-desc p {
+  margin: 0 0 0.6em;
+}
+
+/* button hints */
+.tv-hints {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 7vh;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2em;
+  padding: 0 3vw;
+  color: var(--tv-dim);
+}
+.tv-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5em;
+  white-space: nowrap;
+}
+.tv-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.7em;
+  height: 1.7em;
+  padding: 0 0.35em;
+  border-radius: 99px;
+  font-weight: 700;
+  font-size: 0.85em;
+  color: #fff;
+}
+.tv-btn--a {
+  background: #3f9b48;
+}
+.tv-btn--b {
+  background: #c8443c;
+}
+.tv-btn--x {
+  background: #3b6fd0;
+}
+.tv-btn--y {
+  background: #c99a1d;
+}
+.tv-btn--sq {
+  background: #3a4153;
+  border-radius: 6px;
+  padding: 0 0.5em;
+}
+
+/* menu */
+.tv-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(5, 7, 12, 0.6);
+  backdrop-filter: blur(6px);
+}
+.tv-panel {
+  min-width: 34vw;
+  background: var(--tv-panel);
+  border: 1px solid var(--tv-line);
+  border-radius: 16px;
+  padding: 2.5vh 2vw;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.6);
+}
+.tv-panel h2 {
+  margin: 0 0 1.2vh;
+  font-weight: 600;
+}
+.tv-menulist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.tv-menulist li {
+  padding: 0.7em 1em;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.tv-menulist li.sel {
+  background: linear-gradient(90deg, var(--tv-accent), var(--tv-accent-soft));
+  color: #fff;
+}
+
+/* Lumen's settings inside the TV frame */
+.tv-settings {
+  overflow: auto;
+  padding: 0 6vw;
+}

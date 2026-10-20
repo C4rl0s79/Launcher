@@ -11,6 +11,7 @@ import { SettingsScreen } from './screens/Settings'
 import { DetailsScreen } from './screens/Details'
 import { EmuLaunchOverlay, JobsPanel } from './components/Jobs'
 import { PathPicker } from './modals/PathPicker'
+import { TvApp } from './tv/TvApp'
 
 /** Start, the pinned groups (in their order), Settings. */
 export function useTabs(): Tab[] {
@@ -27,6 +28,7 @@ export function App() {
   const detailsId = useStore((s) => s.detailsId)
   const loaded = useStore((s) => !!s.snapshot && !!s.prefs && !!s.settings)
   const tabs = useTabs()
+  const tvLayout = useStore((s) => s.uiMode === 'fullscreen' && s.settings?.tvInterface !== 'emustart')
   const rootRef = useRef<HTMLDivElement>(null)
   // group screens are mounted on first visit and then kept, so scroll position and focus survive tab switches
   const [visited, setVisited] = useState<Set<string>>(() => new Set([tab]))
@@ -38,11 +40,13 @@ export function App() {
     void a.prefs.get().then(s.setPrefs)
     void a.settings.get().then(s.setSettings)
     void a.jobs.get().then(s.setJobs)
+    void a.ui.getMode().then((m) => s.setUiMode(m))
     const offs = [
       a.library.onSnapshot(s.setSnapshot),
       a.jobs.onChange(s.setJobs),
       // back from the fullscreen interface: show the game that was selected there
       a.ui.onMode((mode, selection) => {
+        useStore.getState().setUiMode(mode, selection)
         const st = useStore.getState()
         if (mode !== 'desktop' || !selection || st.detailsId === selection) return
         if (st.snapshot?.games.some((g) => g.id === selection)) st.openDetails(selection)
@@ -121,7 +125,7 @@ export function App() {
       )
       return true
     }
-  })
+  }, { enabled: !tvLayout })
 
   if (!loaded || !prefs) {
     return (
@@ -133,6 +137,19 @@ export function App() {
   }
 
   const categories = sortedCategories(prefs)
+
+  // the TV layout of the same interface (fullscreen mode; docs/PLAN-TV-REACT.md)
+  if (tvLayout)
+    return (
+      <>
+        <TvApp />
+        {detailsId && <DetailsScreen key={detailsId} gameId={detailsId} />}
+        <JobsPanel />
+        <EmuLaunchOverlay />
+        <PathPicker />
+        <Toasts />
+      </>
+    )
 
   return (
     <>
