@@ -206,6 +206,14 @@ Na prawdziwej bibliotece (Chrono Trigger MSU-1) każdy program widział inne zap
    zalogowanie jednego unieważniało drugiego (EmuStart: „nieznane urządzenie”, 401; potem odwrotnie).
    **Naprawione w Lumen 0.4.3**: Lumen to osobne urządzenie (skrót sprzętu + „lumen”,
    `lumen.install_device_identity`); po aktualizacji Lumen trzeba raz zalogować ponownie.
+   **Lumen 0.4.4** — także nazwa urządzenia „<komputer> (Lumen)” (`lumen.install_device_name`) tam,
+   gdzie EmuStart rozpoznaje urządzenie po nazwie komputera: blokada profilu na czas gry (inaczej
+   Lumen brał blokadę samodzielnego EmuStart z tego komputera za własną), nazwa przy logowaniu (panel,
+   „z którego urządzenia” w konflikcie zapisów), znaczniki synchronizacji, kopie zapasowe.
+   Przegląd pozostałych wspólnych zasobów: klucze TPM — osobne (losowe nazwy), dane, emulatory, TEMP —
+   w `LumenData`, dysk strumieniowy — wolna litera, aktualizator EmuStart — wyłączony (menu „Aktualizuj
+   Lumen”); Xenia instalowana bez `portable.txt` (katalog emulatorów serwera) używa `Dokumenty\Xenia`
+   jak każda Xenia na tym komputerze.
 2. **Stare zapisy (EmuStart ≤ 0.45) nie przeszły do paczek 0.46.** 0.45 trzymało zapisy w folderze
    profilu na serwerze (`<profil>/save/retroarch/…`, stany `<profil>/states/shared/retroarch/<rdzeń>/…`);
    0.46 synchronizuje RetroArch tylko paczkami (`savesync`) i pomija te foldery — nikt (serwer, PC,

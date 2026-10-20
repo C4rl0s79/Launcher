@@ -28,6 +28,8 @@ Plan najbliższych zmian: [ROADMAP.md](ROADMAP.md).
   logowaniu = skrót EmuStart + „lumen”. Serwer trzyma jedną rejestrację na sprzęt
   (`devices.replace_same_hw`), więc Lumen i samodzielny EmuStart na jednym komputerze wylogowywały
   się nawzajem (401, „nieznane urządzenie”). Kod EmuStart bez zmian.
+- **Nazwa urządzenia Lumen: „<komputer> (Lumen)”** (`lumen.install_device_name`) w `profiles`
+  (blokada profilu, znaczniki, kopie zapasowe), `api` (logowanie, menedżer zapisów) i `savemgr`.
 
 ## [0.46.2] — 2026-10-20
 

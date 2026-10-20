@@ -138,3 +138,14 @@ def test_lumen_is_its_own_device(monkeypatch):
     empty = types.SimpleNamespace(hw_id=lambda: "")
     lumen.install_device_identity(empty)
     assert empty.hw_id() == ""
+
+
+def test_lumen_device_name():
+    """Blokada profilu, logowanie i kopie zapasowe widzą „<komputer> (Lumen)”, nie samodzielny EmuStart."""
+    import socket
+    import types
+    mod = types.SimpleNamespace(socket=socket)
+    lumen.install_device_name(mod)
+    lumen.install_device_name(mod)                     # bez podwójnego dopisku
+    assert mod.socket.gethostname() == f"{socket.gethostname()} (Lumen)"
+    assert mod.socket.AF_INET == socket.AF_INET         # reszta modułu bez zmian

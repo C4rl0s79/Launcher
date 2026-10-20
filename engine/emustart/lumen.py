@@ -82,6 +82,31 @@ def install_device_identity(netsrc_mod) -> None:
     netsrc_mod.hw_id = hw_id
 
 
+class _LumenHost:
+    """`socket` z nazwą urządzenia „<komputer> (Lumen)” — reszta bez zmian."""
+
+    def __init__(self, real):
+        self._real = real
+
+    def __getattr__(self, name):
+        return getattr(self._real, name)
+
+    def gethostname(self) -> str:
+        return f"{self._real.gethostname()} (Lumen)"
+
+
+def install_device_name(*modules) -> None:
+    """Lumen przedstawia się jako „<komputer> (Lumen)” tam, gdzie EmuStart rozpoznaje urządzenie po
+    nazwie komputera: blokada profilu na czas gry (profiles: inaczej Lumen brał blokadę samodzielnego
+    EmuStart z tego komputera za własną — dwie gry naraz na jednym profilu albo zdjęcie cudzej
+    blokady), nazwa przy logowaniu (panel serwera, „z którego urządzenia” w konflikcie zapisów),
+    znaczniki synchronizacji i kopie zapasowe. Sieć i certyfikaty — prawdziwa nazwa."""
+    import socket as real
+    for mod in modules:
+        if not isinstance(getattr(mod, "socket", None), _LumenHost):
+            mod.socket = _LumenHost(real)
+
+
 def disc_counts(es: str | None = None) -> dict:
     """{id gry: liczba płyt} dla gier wielopłytowych (płyty „(Disc N)” bez .m3u albo playlisty .m3u)."""
     import json
@@ -122,6 +147,8 @@ class LumenApi(api_mod.Api):
         # w zapisanej kopii biblioteki — przed startem Api, które zaczyna synchronizację w tle
         lumen_discs.install(netsrc, libsync, library)
         install_device_identity(netsrc)
+        from emustart import savemgr
+        install_device_name(profiles, api_mod, savemgr)
         try:
             lumen_discs.merge(library.db())
         except Exception:
