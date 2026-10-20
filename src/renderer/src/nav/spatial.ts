@@ -58,3 +58,25 @@ export function pickInDirection(from: Box, candidates: Box[], dir: Dir): number 
   for (const e of pool) if (score(e) < score(best)) best = e
   return best.i
 }
+
+/**
+ * The focused element disappeared (unpinned row moved to another list, deleted item): the
+ * candidate closest to where it was — usually the element that took its place.
+ */
+export function nearestTo(from: Box, candidates: Box[]): number {
+  const fcx = (from.left + from.right) / 2
+  const fcy = (from.top + from.bottom) / 2
+  let best = -1
+  let bestD = Infinity
+  candidates.forEach((c, i) => {
+    const dx = (c.left + c.right) / 2 - fcx
+    const dy = (c.top + c.bottom) / 2 - fcy
+    // rows matter more than columns: stay in the same row when possible
+    const d = Math.abs(dy) * 2 + Math.abs(dx)
+    if (d < bestD) {
+      bestD = d
+      best = i
+    }
+  })
+  return best
+}

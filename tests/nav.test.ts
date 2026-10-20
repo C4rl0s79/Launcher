@@ -3,13 +3,26 @@ import { describe, expect, it, vi } from 'vitest'
 // input.ts pulls in the zustand store which touches localStorage lazily; stub what node lacks.
 vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => undefined })
 
-const { pickInDirection } = await import('../src/renderer/src/nav/spatial')
+const { pickInDirection, nearestTo } = await import('../src/renderer/src/nav/spatial')
 const { keyToAction, readPadActions, xinputActions } = await import('../src/renderer/src/nav/input')
 const { steamUri } = await import('../src/main/steam/actions')
 
 const box = (left: number, top: number, w = 100, h = 150) => ({ left, top, right: left + w, bottom: top + h })
 
 describe('spatial navigation', () => {
+  it('after the focused element disappears, continues from the element that took its place', () => {
+    // rows of "Odepnij" buttons: the focused one (y=100) was removed, the next row moved up into its place
+    const gone = { left: 0, top: 100, right: 80, bottom: 130 }
+    const rows = [
+      { left: 0, top: 60, right: 80, bottom: 90 },
+      { left: 0, top: 100, right: 80, bottom: 130 },
+      { left: 90, top: 100, right: 120, bottom: 130 },
+      { left: 0, top: 140, right: 80, bottom: 170 }
+    ]
+    expect(nearestTo(gone, rows)).toBe(1)
+    expect(nearestTo(gone, [])).toBe(-1)
+  })
+
   // two rows of posters: row A at y=0 (x = 0,120,240), row B at y=200 (x = 0,120)
   const items = [box(0, 0), box(120, 0), box(240, 0), box(0, 200), box(120, 200)]
 

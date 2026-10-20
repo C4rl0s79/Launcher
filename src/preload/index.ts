@@ -71,7 +71,11 @@ const api: LumenApi = {
     refreshLibrary: () => invoke(IPC.emuRefresh),
     restartEngine: () => invoke(IPC.emuRestart),
     clearConflicts: () => invoke(IPC.emuClearConflicts),
-    chooseVersion: (id, version) => invoke(IPC.emuChooseVersion, id, version)
+    chooseVersion: (id, version) => invoke(IPC.emuChooseVersion, id, version),
+    options: () => invoke(IPC.emuOptions),
+    setOptions: (patch) => invoke(IPC.emuSetOptions, patch),
+    emulatorOptions: (es) => invoke(IPC.emuEmulatorOptions, es),
+    setSystem: (es, change) => invoke(IPC.emuSetSystem, es, change)
   },
   jobs: {
     get: () => invoke(IPC.jobsGet),

@@ -8,6 +8,7 @@ import type { ActionResult, ArtKind, ArtOption, FsEntry, FsListOptions, Game, Jo
 import { initLogger, log } from './logger'
 import { chooseDataDir, migrateDataDir } from './dataDir'
 import { listDir } from './fsBrowse'
+import { Limiter } from './net'
 import { detectFlavor, Updater } from './updater'
 import { ops, PrefsError, PrefsStore } from './store/prefs'
 import { SettingsStore } from './store/settings'
@@ -255,16 +256,32 @@ function registerArtProtocol(): void {
   })
 }
 
-/** EmuStart game art comes from the engine (its offline copy of the server's media). */
+/**
+ * EmuStart game art comes from the engine (its offline copy of the server's media). Requests go
+ * through Node with a limit — a poster grid asked Chromium's network service for dozens at once
+ * (net::ERR_INSUFFICIENT_RESOURCES, posters stayed empty) — and recent images stay in memory.
+ */
+const emuArtLimit = new Limiter(6, 'emustart-art')
+const emuArtCache = new Map<string, { type: string; body: Buffer }>()
 async function emuArt(gameId: string, kind: string): Promise<Response> {
   const field = emuArtField(kind)
-  const url = field ? emu.row(gameId)?.[field] : undefined
+  const row = emu.row(gameId)
+  // a game with several versions: art of the shown version, else of any version that has it
+  const url = (field && (row?.[field] || emu.versionsOf(gameId).map((v) => emu.row(v.id)?.[field]).find(Boolean))) || ''
   if (!url || !engine.baseUrl) return new Response('not found', { status: 404 })
-  const res = await net.fetch(new URL(url, engine.baseUrl).toString())
-  if (!res.ok) return new Response('not found', { status: 404 })
-  const headers = new Headers(res.headers)
-  headers.set('Cache-Control', 'max-age=86400')
-  return new Response(res.body, { status: 200, headers })
+  const full = new URL(url, engine.baseUrl).toString()
+  let hit = emuArtCache.get(full)
+  if (!hit) {
+    hit = await emuArtLimit.run(async () => {
+      // the engine is local — also in the "no network" test mode (LUMEN_OFFLINE)
+      const res = await fetch(full, { signal: AbortSignal.timeout(60_000) })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      return { type: res.headers.get('content-type') ?? 'image/webp', body: Buffer.from(await res.arrayBuffer()) }
+    })
+    emuArtCache.set(full, hit)
+    if (emuArtCache.size > 400) emuArtCache.delete(emuArtCache.keys().next().value!)
+  }
+  return new Response(new Uint8Array(hit.body), { status: 200, headers: { 'Content-Type': hit.type, 'Cache-Control': 'max-age=86400' } })
 }
 
 const UI_TYPES: Record<string, string> = {
@@ -582,7 +599,11 @@ function registerIpc(): void {
     provider: emu,
     win: () => win,
     jobs: () => unified.jobs,
-    dataDir: () => settings.get().emustartHome || paths.emustartHome
+    dataDir: () => settings.get().emustartHome || paths.emustartHome,
+    changed: () => {
+      void emu.refresh()
+      modes?.emuContents?.send(EMU_UI.open, 'refresh')
+    }
   })
 
   handle(IPC.emuChooseVersion, async (gameId: string, versionId: string | null) => {
@@ -628,6 +649,8 @@ function registerFullscreenBridge(): void {
     openInSteam,
     toggleFavorite: async (id) => (await updatePrefs((p) => ops.toggleFavorite(p, id))).favorites.includes(id),
     updater,
+    // settings changed in the TV interface (filters, system emulator, profile) → the desktop library follows
+    onEmuChanged: () => void emu.refresh(),
     isFavorite: (id) => prefs.get().favorites.includes(id),
     runningAppId: () => library.current.steam.runningAppId,
     steamJobs: () => unified.jobs.jobs.filter((j) => j.source === 'steam'),

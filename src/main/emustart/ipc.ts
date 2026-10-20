@@ -1,7 +1,7 @@
 import { stat } from 'node:fs/promises'
 import type { BrowserWindow } from 'electron'
 import { IPC } from '@shared/api'
-import type { EmuActionResult, EmuReadiness, EmuSettings, JobsSnapshot } from '@shared/types'
+import type { EmuActionResult, EmuEmulatorOption, EmuOptions, EmuOptionsPatch, EmuReadiness, EmuSettings, JobsSnapshot } from '@shared/types'
 import type { EmustartEngine } from './engine'
 import type { EmustartProvider } from './provider'
 
@@ -13,6 +13,47 @@ interface Ctx {
   win: () => BrowserWindow | null
   jobs: () => JobsSnapshot
   dataDir: () => string
+  /** shared settings changed here — refresh the library and the TV interface */
+  changed: () => void
+}
+
+/** EmuStart's get_settings → the shared options (engine keys stay in the engine). */
+export function toOptions(s: Record<string, unknown>, profiles: { id: number; name: string }[]): EmuOptions {
+  const b = (k: string, d = false): boolean => (s[k] === undefined ? d : !!s[k])
+  const systems = Array.isArray(s.systems) ? (s.systems as Record<string, unknown>[]) : []
+  return {
+    hide: { beta: b('hide_beta'), demo: b('hide_demo'), pirate: b('hide_pirate'), unl: b('hide_unl'), program: b('hide_program') },
+    arcadeClones: b('hide_arcade_clones', true),
+    cacheRecent: Number(s.cache_recent ?? 10),
+    streamPlay: b('stream_play', true),
+    streamMinSeconds: Number(s.stream_min_seconds ?? 0),
+    winfsp: String(s.winfsp ?? ''),
+    askProfile: b('ask_profile'),
+    profileSettings: b('profile_settings', true),
+    machineProfile: s.machine_profile === undefined ? undefined : Number(s.machine_profile),
+    profiles,
+    systems: systems.map((x) => ({
+      es: String(x.es),
+      display: String(x.display ?? x.es),
+      enabled: x.enabled !== false,
+      emulator: String(x.label ?? ''),
+      known: x.known !== false
+    }))
+  }
+}
+
+/** shared options patch → EmuStart save_settings keys (only these may be changed from here) */
+export function toEngineSettings(p: EmuOptionsPatch): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(p.hide ?? {})) if (typeof v === 'boolean') out[`hide_${k}`] = v
+  if (typeof p.arcadeClones === 'boolean') out.hide_arcade_clones = p.arcadeClones
+  if (typeof p.cacheRecent === 'number') out.cache_recent = Math.max(1, Math.min(100, Math.round(p.cacheRecent)))
+  if (typeof p.streamPlay === 'boolean') out.stream_play = p.streamPlay
+  if (typeof p.streamMinSeconds === 'number') out.stream_min_seconds = Math.max(0, Math.min(600, Math.round(p.streamMinSeconds)))
+  if (typeof p.askProfile === 'boolean') out.ask_profile = p.askProfile
+  if (typeof p.profileSettings === 'boolean') out.profile_settings = p.profileSettings
+  if (typeof p.machineProfile === 'number') out.machine_profile = p.machineProfile
+  return out
 }
 
 const fail = (error: string): EmuActionResult => ({ ok: false, error })
@@ -84,6 +125,37 @@ export function registerEmustartIpc(handle: Handle, ctx: Ctx): void {
     await call('save_settings', [{ [key]: folder }])
     void provider.refresh()
     return settings()
+  })
+  const options = async (): Promise<EmuOptions> => {
+    const s = await call<Record<string, unknown>>('get_settings', [], 30_000)
+    const p = await call<{ profiles: { id: number; name: string }[] }>('profiles_list', [], 30_000).catch(() => null)
+    return toOptions(s, (p?.profiles ?? []).map((x) => ({ id: x.id, name: x.name })))
+  }
+  handle(IPC.emuOptions, options)
+  handle(IPC.emuSetOptions, async (patch: EmuOptionsPatch) => {
+    const data = toEngineSettings(patch ?? {})
+    if (Object.keys(data).length) {
+      await call('save_settings', [data], 30_000)
+      ctx.changed()
+    }
+    return options()
+  })
+  handle(IPC.emuEmulatorOptions, (es: string) => call<EmuEmulatorOption[]>('emulator_options', [String(es)], 60_000))
+  handle(IPC.emuSetSystem, async (es: string, change: { enabled?: boolean; emulator?: EmuEmulatorOption }) => {
+    const sc: Record<string, unknown> = {}
+    if (typeof change?.enabled === 'boolean') sc.enabled = change.enabled
+    if (change?.emulator) {
+      // only an emulator EmuStart itself found for this system on this PC
+      const found = await call<EmuEmulatorOption[]>('emulator_options', [String(es)], 60_000)
+      const o = found.find((x) => x.exe === change.emulator!.exe && x.args === change.emulator!.args)
+      if (!o) throw new Error('Nie ma takiego emulatora dla tego systemu.')
+      Object.assign(sc, { label: o.label, exe: o.exe, args: o.args, enabled: true })
+    }
+    if (Object.keys(sc).length) {
+      await call('save_settings', [{ systems: { [String(es)]: sc } }], 30_000)
+      ctx.changed()
+    }
+    return options()
   })
   handle(IPC.emuRefresh, async (): Promise<EmuActionResult> => {
     const r = await call<{ ok: boolean }>('rescan')

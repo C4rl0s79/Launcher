@@ -30,6 +30,8 @@ export interface BridgeDeps {
   emuLumenId(engineId: number): string | undefined
   quit(): void
   log(msg: string): void
+  /** EmuStart settings / profile changed from the TV interface (the desktop library re-reads) */
+  onEmuChanged?: () => void
   /** Lumen's own updater (TV menu "Aktualizuj Lumen" — EmuStart's update screens, Lumen's update) */
   updater?: { state: UpdateState; check(): Promise<UpdateState>; download(): Promise<UpdateState>; apply(): Promise<UpdateState> }
   now?: () => number
@@ -462,6 +464,16 @@ export function createFullscreenBridge(deps: BridgeDeps) {
       case 'copy_status': {
         const emu = (await engine(name, args)) as unknown[]
         return [...(Array.isArray(emu) && deps.engineReady() ? emu : []), ...steamCopies()]
+      }
+      case 'save_settings':
+      case 'system_set':
+      case 'set_game_emulator':
+      case 'profile_select':
+      case 'profile_login':
+      case 'profile_unlock': {
+        const r = await engine(name, args)
+        deps.onEmuChanged?.()
+        return r
       }
       default:
         return engine(name, args)

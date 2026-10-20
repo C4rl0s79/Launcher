@@ -105,3 +105,20 @@ def test_disc_counts(tmp_path, monkeypatch):
     assert lumen.disc_counts() == {1: 3, 2: 2}
     assert lumen.disc_counts("snes") == {}
     library._local.con = None
+
+
+def test_launchbox_ids(tmp_path, monkeypatch):
+    """Id LaunchBox z metadanych serwera — Lumen łączy po nim wydania jednej gry."""
+    import json as _json
+    from emustart import library
+    monkeypatch.setattr(paths, "DATA", tmp_path / "data")
+    monkeypatch.setattr(paths, "DB_PATH", tmp_path / "data" / "lib.sqlite")
+    library._local.con = None
+    con = library.db()
+    for gid, data in ((1, {"lb_id": 4879}), (2, {"lb_id": 4879}), (3, {}), (4, {"lb_id": "x"})):
+        con.execute("INSERT INTO game_meta(game_id, data, edits, online, updated) VALUES(?,?,?,?,?)",
+                    (gid, _json.dumps(data), "{}", 1, 0))
+    con.execute("INSERT INTO game_meta(game_id, data, edits, online, updated) VALUES(5, 'zepsute', '{}', 1, 0)")
+    con.commit()
+    assert lumen.launchbox_ids() == {1: 4879, 2: 4879}
+    library._local.con = None

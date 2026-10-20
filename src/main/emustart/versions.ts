@@ -79,26 +79,45 @@ export interface Grouped {
  * they are; groups get `emugrp:<hash>` and look like the shown version, with `emu.versions`.
  */
 export function groupVersions(games: Game[], order: RegionOrder, choices: Record<string, string>): Grouped {
-  const buckets = new Map<string, Game[]>()
+  // one game = same platform and (same title OR same LaunchBox id): releases with other titles
+  // ("Daedalus Encounter" / "…Episode 1 - Nanpasen no Alien", "D" / "D no Shokutaku") join too
   const out: Game[] = []
-  for (const g of games) {
-    const key = groupKey(g)
-    if (!key) {
-      out.push(g)
-      continue
-    }
-    const list = buckets.get(key)
-    if (list) list.push(g)
-    else buckets.set(key, [g])
+  const emu: Game[] = []
+  for (const g of games) (groupKey(g) ? emu : out).push(g)
+  const parent = emu.map((_, i) => i)
+  const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])))
+  const union = (a: number, b: number): void => {
+    const ra = find(a)
+    const rb = find(b)
+    if (ra !== rb) parent[Math.max(ra, rb)] = Math.min(ra, rb)
   }
+  const firstBy = new Map<string, number>()
+  emu.forEach((g, i) => {
+    const keys = [groupKey(g)!]
+    if (g.emu!.lb) keys.push(`${g.emu!.es}\u0000lb:${g.emu!.lb}`)
+    for (const k of keys) {
+      const j = firstBy.get(k)
+      if (j === undefined) firstBy.set(k, i)
+      else union(i, j)
+    }
+  })
+  const buckets = new Map<number, Game[]>()
+  emu.forEach((g, i) => {
+    const r = find(i)
+    const list = buckets.get(r)
+    if (list) list.push(g)
+    else buckets.set(r, [g])
+  })
   const members = new Map<string, Game[]>()
   const displayOf = new Map<string, string>()
-  for (const [key, list] of buckets) {
+  for (const list of buckets.values()) {
     if (list.length === 1) {
       out.push(list[0])
       continue
     }
-    const id = groupId(key)
+    // stable id: the LaunchBox id when the game has one, else platform + title
+    const lbs = list.map((m) => m.emu!.lb).filter((x): x is number => !!x)
+    const id = groupId(lbs.length ? `${list[0].emu!.es}\u0000lb:${Math.min(...lbs)}` : groupKey(list[0])!)
     const shown = pickVersion(list, order, choices[id])
     const versions: EmuVersion[] = [...list]
       .sort((a, b) => regionRank(a.emu!.tags, order) - regionRank(b.emu!.tags, order) || a.emu!.tags.localeCompare(b.emu!.tags))

@@ -1,4 +1,4 @@
-import { pickInDirection, type Dir } from './spatial'
+import { nearestTo, pickInDirection, type Dir } from './spatial'
 
 // DOM side of the focus system.
 //  - Focusable elements carry `data-nav`.
@@ -11,6 +11,8 @@ import { pickInDirection, type Dir } from './spatial'
 
 const FOCUSABLE = '[data-nav]'
 const groupMemory = new Map<string, string>()
+/** where focus was last (and in which layer) — used when the focused element disappears */
+let lastFocus: { rect: DOMRect; layer: HTMLElement } | null = null
 
 export function activeLayer(): HTMLElement {
   const layers = Array.from(document.querySelectorAll<HTMLElement>('[data-layer]')).filter((l) => !l.closest('[inert]'))
@@ -77,7 +79,20 @@ export function currentFocus(): HTMLElement | null {
 
 export function move(dir: Dir, smooth = true): boolean {
   const cur = currentFocus()
-  if (!cur) return focusFirst()
+  if (!cur) {
+    // the focused element was removed (e.g. an unpinned group moved to the other list): continue
+    // from the same place instead of jumping to the top of the screen
+    const layer = activeLayer()
+    if (lastFocus && lastFocus.layer === layer && layer.isConnected) {
+      const list = focusables(layer)
+      const i = nearestTo(lastFocus.rect, list.map((e) => e.getBoundingClientRect()))
+      if (i >= 0) {
+        focusEl(list[i], smooth)
+        return true
+      }
+    }
+    return focusFirst()
+  }
   const list = focusables().filter((e) => e !== cur)
   const from = cur.getBoundingClientRect()
   const idx = pickInDirection(from, list.map((e) => e.getBoundingClientRect()), dir)
@@ -97,6 +112,18 @@ export function move(dir: Dir, smooth = true): boolean {
 if (typeof document !== 'undefined') {
   document.addEventListener('focusin', (e) => {
     const t = e.target as HTMLElement
-    if (t?.matches?.(FOCUSABLE)) rememberFocus(t)
+    if (t?.matches?.(FOCUSABLE)) {
+      rememberFocus(t)
+      lastFocus = { rect: t.getBoundingClientRect(), layer: activeLayer() }
+    }
   })
+  // the page scrolls while moving through long lists — keep the remembered spot in view coordinates
+  document.addEventListener(
+    'scroll',
+    () => {
+      const a = document.activeElement as HTMLElement | null
+      if (a?.matches?.(FOCUSABLE)) lastFocus = { rect: a.getBoundingClientRect(), layer: activeLayer() }
+    },
+    true
+  )
 }

@@ -1441,6 +1441,13 @@ if (LUMEN) {
   window.lumenEmu.onOpen(async (what) => {
     for (let i = 0; i < 40 && !S.state; i++) await new Promise((r) => setTimeout(r, 250));
     if (what === "settings" && !S.modal) openSettings();
+    if (what === "refresh") {                  // ustawienia zmienione w trybie pulpitu (te same dane)
+      await refreshState();
+      if (S.modal) return;
+      if (S.screen === "games") openSystem(true);
+      else if (S.screen === "settings") { S.settings = await api().get_settings(); buildSetRows(); renderSettings(); }
+      else if (S.screen === "systems") renderSystems();
+    }
   });
   document.body.classList.add("lumen");
   uiReady();

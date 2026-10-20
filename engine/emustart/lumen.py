@@ -78,6 +78,21 @@ def disc_counts(es: str | None = None) -> dict:
     return out
 
 
+def launchbox_ids() -> dict:
+    """{id gry: id LaunchBox Games DB} z metadanych serwera — ten sam dla wszystkich wydań gry
+    (regiony, tytuły japońskie / europejskie), więc Lumen łączy po nim wersje gry."""
+    import json
+    out = {}
+    for r in library.db().execute("SELECT game_id, data FROM game_meta"):
+        try:
+            v = json.loads(r["data"] or "{}").get("lb_id")
+        except (ValueError, TypeError):
+            continue
+        if isinstance(v, int) and v > 0:
+            out[r["game_id"]] = v
+    return out
+
+
 class LumenApi(api_mod.Api):
     """`Api` EmuStart + zestawienia dla widoku pulpitowego Lumen."""
 
@@ -115,6 +130,7 @@ class LumenApi(api_mod.Api):
         """Wszystkie widoczne gry wszystkich systemów (te same filtry co lista gier EmuStart)."""
         systems = self.list_systems()
         discs = disc_counts()
+        lb = launchbox_ids()
         games = []
         for s in systems:
             try:
@@ -131,7 +147,8 @@ class LumenApi(api_mod.Api):
                     "box": r.get("box", ""), "snap": r.get("snap", ""), "logo": r.get("logo", ""),
                     "genre": r.get("genre", ""), "year": r.get("year", ""),
                     "developer": r.get("developer", ""), "publisher": r.get("publisher", ""),
-                    "players": r.get("players", ""), "discs": discs.get(r["id"], 1)})
+                    "players": r.get("players", ""), "discs": discs.get(r["id"], 1),
+                    "lb": lb.get(r["id"], 0)})
         prof = profiles.get(self._profile) or {}
         return {"systems": systems, "games": games, "lib_version": getattr(self, "_lib_version", 0),
                 "profile": {"id": prof.get("id"), "name": prof.get("name", "")},   # bez PIN-u / tokenu

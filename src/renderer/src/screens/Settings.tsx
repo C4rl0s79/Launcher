@@ -7,6 +7,7 @@ import { TextField } from '../components/TextField'
 import { Modal } from '../components/Modal'
 import { formatBytes, gameCountLabel } from '../lib/format'
 import { UpdateSection } from '../components/Update'
+import { EmuLibraryOptions } from '../components/EmuOptions'
 
 export function SettingsScreen({ active }: { active: boolean }) {
   useActions(
@@ -23,6 +24,12 @@ export function SettingsScreen({ active }: { active: boolean }) {
       <InterfaceSection />
       <SteamSection />
       <EmustartSection />
+      <Section
+        title="Biblioteka EmuStart"
+        desc="Te same ustawienia co w EmuStart (tryb TV → Ustawienia) — zapisane raz, działają w obu trybach."
+      >
+        <EmuLibraryOptions />
+      </Section>
       <ArtSection />
       <LaunchBoxSection />
       <CategoriesSection />
@@ -533,7 +540,7 @@ function EmustartSection() {
       )}
       <div className="modal__row">
         <button className="btn btn--primary" data-nav onClick={() => void api().ui.setMode('fullscreen', 'settings')}>
-          {emu?.server ? 'Konto, profile i emulatory systemów (tryb TV)' : 'Zaloguj do serwera (tryb TV)'}
+          {emu?.server ? 'Konto i logowanie (tryb TV)' : 'Zaloguj do serwera (tryb TV)'}
         </button>
         {emu?.engine !== 'disabled' && (
           <button className="btn" data-nav onClick={() => void api().emustart.restartEngine()}>
@@ -542,8 +549,8 @@ function EmustartSection() {
         )}
       </div>
       <p className="card__desc">
-        Logowanie (kod z panelu serwera albo adres), profile graczy z PIN-em i wybór emulatora dla każdego systemu są w ustawieniach EmuStart
-        w trybie TV — to te same ekrany co w programie EmuStart.
+        Logowanie do serwera (kod z panelu albo adres), konta i PIN-y profili są w ustawieniach EmuStart w trybie TV —
+        pozostałe ustawienia EmuStart są niżej, w sekcji „Biblioteka EmuStart”.
       </p>
       <PathRow
         label="Folder danych EmuStart"

@@ -221,8 +221,12 @@ Wersje regionalne (Europe / Japan / USA…) to osobne gry na serwerze — łącz
 
 ## 6d. Wersje regionalne — jedna pozycja w trybie pulpitu
 
-Gry o tym samym tytule na tej samej platformie (regiony, rewizje: „Defcon 5 (Europe)”, „(Japan)”, „(Korea)”)
-są w trybie pulpitu **jednym plakatem** z odznaką „N wersji” (`main/emustart/versions.ts`). Pozycja pokazuje
+Wydania jednej gry na tej samej platformie — **ten sam tytuł albo ten sam identyfikator LaunchBox**
+(`lb_id` z metadanych serwera; łączy też wydania o innych tytułach: „Daedalus Encounter” / „…Episode 1 -
+Nanpasen no Alien”, „D” / „D no Shokutaku”, „Ghosts'n Goblins” / „Makaimura”) — są w trybie pulpitu
+**jednym plakatem** z odznaką „N wersji” (`main/emustart/versions.ts`). Okładka: wersji pokazywanej, a gdy
+jej nie ma — dowolnej innej wersji. Grafiki z silnika są pobierane z limitem (6 naraz) i trzymane w pamięci
+— siatka setek plakatów przekraczała limit zapytań Chromium (`ERR_INSUFFICIENT_RESOURCES`). Pozycja pokazuje
 i uruchamia jedną wersję: wybraną przez gracza w szczegółach gry (zapamiętaną w `prefs.json` → `versions`),
 a bez wyboru — ostatnio graną, potem pobraną, potem wg preferowanego regionu (Ustawienia → EmuStart:
 Polska/Europa, USA, Japonia); wersje beta/demo/nielicencjonowane nigdy nie są domyślne. Gry z jedną wersją
@@ -238,6 +242,15 @@ skróty, dyski z etykietami, foldery, pliki z dozwolonymi rozszerzeniami). Wybó
 w procesie głównym (`emustart.setFolder`, `art.useFile`). Tryb TV: przeglądarka folderów EmuStart
 (`folderBrowse`); opcja „Okno Windows (mysz)” EmuStart jest w Lumen ukryta, a `pick_folder` zwraca pusty
 wynik.
+
+## 6f. Jedne ustawienia EmuStart dla obu trybów
+
+Ustawienia biblioteki EmuStart (ukrywanie wersji beta/demo/pirackich/nielicencjonowanych/programów i klonów
+arcade, pamięć podręczna gier, granie w trakcie pobierania, profile, emulator i włączenie każdego systemu)
+są w trybie pulpitu w Ustawieniach → „Biblioteka EmuStart” i w trybie TV w ustawieniach EmuStart — to te same
+wartości (`save_settings` silnika, per profil tam, gdzie EmuStart trzyma je per profil). Zmiana w jednym
+trybie odświeża bibliotekę i ekran drugiego od razu. W trybie TV zostaje tylko to, czego pulpit nie ma:
+logowanie do serwera, konta i PIN-y.
 
 ## 6e. Aktualizacja programu (jak EmuStart)
 

@@ -8,6 +8,9 @@ import type {
   EmuActionResult,
   EmuReadiness,
   EmuSettings,
+  EmuOptions,
+  EmuOptionsPatch,
+  EmuEmulatorOption,
   UpdateState,
   FsListing,
   FsListOptions,
@@ -99,6 +102,12 @@ export interface LumenApi {
     refreshLibrary(): Promise<EmuActionResult>
     restartEngine(): Promise<void>
     clearConflicts(): Promise<void>
+    /** library settings shared with the TV interface: hiding, cache, streaming, profiles, systems */
+    options(): Promise<EmuOptions>
+    setOptions(patch: EmuOptionsPatch): Promise<EmuOptions>
+    /** emulators found on this PC for a system */
+    emulatorOptions(es: string): Promise<EmuEmulatorOption[]>
+    setSystem(es: string, change: { enabled?: boolean; emulator?: EmuEmulatorOption }): Promise<EmuOptions>
     /** game with several versions (regions): which one to show and play; null = automatic */
     chooseVersion(gameId: string, versionId: string | null): Promise<Prefs>
   }
@@ -194,6 +203,10 @@ export const IPC = {
   emuRestart: 'emu:restart',
   emuClearConflicts: 'emu:clearConflicts',
   emuChooseVersion: 'emu:chooseVersion',
+  emuOptions: 'emu:options',
+  emuSetOptions: 'emu:setOptions',
+  emuEmulatorOptions: 'emu:emulatorOptions',
+  emuSetSystem: 'emu:setSystem',
   jobsGet: 'jobs:get',
   jobsCancel: 'jobs:cancel',
   jobsChanged: 'jobs:changed',

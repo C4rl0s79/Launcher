@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Game } from '../src/shared/types'
-import { emuArtField, emuDetails, emuGames, emuGameId, type EmuLibrary, type EmuLibraryRow } from '../src/main/emustart/mapping'
+import { emuArtField, emuDetails, emuGames, emuGameId, isEmuGameId, type EmuLibrary, type EmuLibraryRow } from '../src/main/emustart/mapping'
 import { emuJobs, steamJobs } from '../src/main/core/jobs'
+import { toEngineSettings, toOptions } from '../src/main/emustart/ipc'
 import { createFullscreenBridge, STEAM_START_TIMEOUT_MS, type BridgeDeps } from '../src/main/core/fullscreenBridge'
 import type { EmuStatusRaw } from '../src/main/emustart/provider'
 import { defaultPrefs, migratePrefs, ops } from '../src/main/store/prefs'
@@ -74,6 +75,13 @@ describe('EmuStart → unified library', () => {
     const [set, single] = emuGames(lib([row({ discs: 3 }), row({ id: 8, sid: 'gdef' })]))
     expect(set.emu?.discs).toBe(3)
     expect(single.emu?.discs).toBe(1)
+  })
+
+  it('a group of versions is an EmuStart id too (its art comes from EmuStart)', () => {
+    expect(isEmuGameId('emu:g1')).toBe(true)
+    expect(isEmuGameId('emugrp:abc')).toBe(true)
+    expect(isEmuGameId('steam:10')).toBe(false)
+    expect(emuGames(lib([row({ lb: 4879 })]))[0].emu?.lb).toBe(4879)
   })
 
   it('drops duplicate server ids', () => {
@@ -296,6 +304,46 @@ describe('fullscreen bridge (EmuStart UI)', () => {
     expect(deps.select).toHaveBeenCalledWith('emu:gabc')
     await b.call('quit')
     expect(deps.quit).toHaveBeenCalled()
+  })
+})
+
+describe('EmuStart settings shared by both interfaces', () => {
+  it('reads EmuStart settings into the desktop options', () => {
+    const o = toOptions(
+      { hide_beta: true, hide_demo: true, hide_arcade_clones: false, cache_recent: 12, stream_play: true, winfsp: 'dostępny', machine_profile: 2,
+        systems: [{ es: 'snes', display: 'Super Nintendo', enabled: true, label: 'RetroArch + bsnes' }, { es: 'x', display: 'X', enabled: false, label: '' }] },
+      [{ id: 2, name: 'Jezus' }]
+    )
+    expect(o.hide).toEqual({ beta: true, demo: true, pirate: false, unl: false, program: false })
+    expect(o).toMatchObject({ arcadeClones: false, cacheRecent: 12, streamPlay: true, machineProfile: 2 })
+    expect(o.systems).toEqual([
+      { es: 'snes', display: 'Super Nintendo', enabled: true, emulator: 'RetroArch + bsnes', known: true },
+      { es: 'x', display: 'X', enabled: false, emulator: '', known: true }
+    ])
+    expect(toOptions({}, []).arcadeClones).toBe(true) // EmuStart default
+  })
+
+  it('writes only known settings, in EmuStart keys and ranges', () => {
+    expect(toEngineSettings({ hide: { beta: false, pirate: true }, cacheRecent: 500, streamMinSeconds: -5, askProfile: true })).toEqual({
+      hide_beta: false,
+      hide_pirate: true,
+      cache_recent: 100,
+      stream_min_seconds: 0,
+      ask_profile: true
+    })
+    expect(toEngineSettings({ ...({ emu_root: 'C:\\x' } as object) })).toEqual({})
+  })
+
+  it('a setting changed in the TV interface refreshes the desktop library', async () => {
+    const changed = vi.fn()
+    const { b, deps } = bridge({ onEmuChanged: changed })
+    await b.call('save_settings', [{ hide_beta: true }])
+    expect(deps.engineCall).toHaveBeenCalledWith('save_settings', [{ hide_beta: true }])
+    expect(changed).toHaveBeenCalledTimes(1)
+    await b.call('profile_select', [2])
+    expect(changed).toHaveBeenCalledTimes(2)
+    await b.call('get_settings')
+    expect(changed).toHaveBeenCalledTimes(2)
   })
 })
 

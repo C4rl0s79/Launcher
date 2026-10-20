@@ -28,6 +28,8 @@ export interface EmuLibraryRow {
   players?: string
   /** number of discs (multi-disc games: one entry for the whole set) */
   discs?: number
+  /** LaunchBox Games DB id from the server's metadata — the same for all releases of a game */
+  lb?: number
 }
 
 export interface EmuLibrary {
@@ -43,7 +45,8 @@ export const EMU_PREFIX = 'emu:'
 
 /** Stable Lumen id of an EmuStart game: the cross-device id from the server (system + game name). */
 export const emuGameId = (sid: string): string => `${EMU_PREFIX}${sid}`
-export const isEmuGameId = (id: string): boolean => id.startsWith(EMU_PREFIX)
+/** EmuStart game or a group of its versions (emugrp:…, see versions.ts) */
+export const isEmuGameId = (id: string): boolean => id.startsWith(EMU_PREFIX) || id.startsWith('emugrp:')
 
 /** Sort key like Lumen's Steam games: lower case, leading articles dropped. */
 export function sortNameOf(title: string): string {
@@ -78,6 +81,7 @@ export function emuGame(r: EmuLibraryRow, copying: ReadonlySet<number>): Game {
       pinned: !!r.pinned,
       copying: isCopying,
       discs: r.discs && r.discs > 1 ? r.discs : 1,
+      lb: r.lb || undefined,
       genre: r.genre || undefined,
       year: r.year || undefined,
       players: r.players || undefined,

@@ -1861,3 +1861,55 @@ p.card__desc[data-nav]:focus {
 .card__desc.is-error {
   color: var(--danger);
 }
+
+/* EmuStart library settings in the desktop interface */
+.opt-group {
+  margin-top: var(--gap);
+}
+.opt-group h3 {
+  color: var(--text-3);
+  font-size: 0.78em;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin: 0 0 0.4em;
+}
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  margin: 0.4em 0;
+}
+.stepper__label {
+  flex: 1;
+}
+.stepper__value {
+  min-width: 9em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.sysrow {
+  display: flex;
+  align-items: center;
+  gap: 0.8em;
+  padding: 0.35em 0;
+  border-bottom: 1px solid var(--line);
+}
+.sysrow__name {
+  flex: 1;
+  min-width: 0;
+}
+.sysrow__name small {
+  color: var(--text-3);
+}
+.sysrow__emu {
+  color: var(--text-2);
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sysrow.is-off .sysrow__name,
+.sysrow.is-off .sysrow__emu {
+  color: var(--text-3);
+}

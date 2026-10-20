@@ -402,7 +402,7 @@ function emuPrimary(
   if (installing) return { label: 'Instalowanie emulatora…', disabled: true, note: 'Emulator pobiera się z serwera EmuStart (lista zadań u góry).' }
   if (missing) {
     if (!missing.installable)
-      return { label: 'Brak emulatora', disabled: true, note: `Nie ma emulatora dla ${missing.system} na tym komputerze, a serwer EmuStart go nie udostępnia. Wskaż emulator w ustawieniach EmuStart: tryb TV → Menu → Ustawienia → Systemy.` }
+      return { label: 'Brak emulatora', disabled: true, note: `Nie ma emulatora dla ${missing.system} na tym komputerze, a serwer EmuStart go nie udostępnia. Wskaż emulator w Ustawieniach → Biblioteka EmuStart → Systemy.` }
     return {
       label: 'Zainstaluj emulator',
       note: `Brak emulatora dla ${missing.system} — pobierze się z serwera EmuStart: ${missing.steps.join(', ')}.`,

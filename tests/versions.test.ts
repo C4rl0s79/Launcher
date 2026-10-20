@@ -41,6 +41,35 @@ describe('regional versions as one entry', () => {
     expect(g.games.map((x) => x.id)).toEqual(['steam:2280', 'emu:a', 'emu:b'])
   })
 
+  it('releases with different titles join by LaunchBox id (Daedalus Encounter, D / D no Shokutaku)', () => {
+    const g = groupVersions(
+      [
+        emu('k', 'Daedalus Encounter, The', '(Korea)', {}, '3do', { lb: 4879 }),
+        emu('u', 'Daedalus Encounter, The', '(USA, Europe)', {}, '3do', { lb: 4879 }),
+        emu('j', 'Daedalus Encounter, The - Episode 1 - Nanpasen no Alien', '(Japan)', {}, '3do', { lb: 4879 }),
+        emu('d1', 'D', '(Germany)', {}, '3do', { lb: 23990 }),
+        emu('d2', 'D no Shokutaku', '(Japan)', {}, '3do', { lb: 23990 }),
+        emu('x', 'Other', '(USA)', {}, '3do', { lb: 1 }),
+        emu('y', 'Other', '(Japan)', {}, '3do', { lb: 2 }) // same title, other LaunchBox id — still one game
+      ],
+      'europe',
+      {}
+    )
+    const sizes = g.games.map((x) => [x.name, x.emu?.versions?.length ?? 1])
+    expect(sizes).toEqual([
+      ['Daedalus Encounter, The', 3],
+      ['D', 2],
+      ['Other', 2]
+    ])
+    expect(g.games[0].emu?.tags).toBe('(USA, Europe)')
+  })
+
+  it('the id of a game with a LaunchBox id follows that id, not the title', () => {
+    const a = groupVersions([emu('k', 'Defcon 5', '(Korea)', {}, '3do', { lb: 7 }), emu('j', 'Defcon 5', '(Japan)', {}, '3do', { lb: 7 })], 'europe', {})
+    const b = groupVersions([emu('k', 'Defcon V', '(Korea)', {}, '3do', { lb: 7 }), emu('j', 'Defcon 5', '(Japan)', {}, '3do', { lb: 7 })], 'europe', {})
+    expect(a.games[0].id).toBe(b.games[0].id)
+  })
+
   it('Amiga demos with the same title are different productions — not grouped', () => {
     const g = groupVersions([emu('d1', 'Megademo', '(v1.0) (Acme)', {}, 'amigawhddemos'), emu('d2', 'Megademo', '(v1.0) (Cult)', {}, 'amigawhddemos')], 'europe', {})
     expect(g.games.map((x) => x.id)).toEqual(['emu:d1', 'emu:d2'])

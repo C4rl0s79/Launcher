@@ -80,6 +80,8 @@ export interface EmuGameInfo {
   copying: boolean
   /** discs in the set (multi-disc games are one entry); 1 = single disc / cartridge */
   discs: number
+  /** LaunchBox Games DB id (server metadata) — releases of one game share it */
+  lb?: number
   /** regional versions / revisions of this game (desktop shows them as one entry); absent = one version */
   versions?: EmuVersion[]
   /** id (emu:<sid>) of the version this entry shows and plays */
@@ -483,6 +485,39 @@ export interface EmuSettings {
 }
 
 export type UiMode = 'desktop' | 'fullscreen'
+
+/** EmuStart library settings shared by both interfaces (stored by the engine, per profile where EmuStart does so). */
+export interface EmuOptions {
+  hide: { beta: boolean; demo: boolean; pirate: boolean; unl: boolean; program: boolean }
+  arcadeClones: boolean
+  cacheRecent: number
+  streamPlay: boolean
+  streamMinSeconds: number
+  /** WinFsp state ("dostępny" = streaming possible) */
+  winfsp: string
+  askProfile: boolean
+  profileSettings: boolean
+  machineProfile?: number
+  profiles: { id: number; name: string }[]
+  systems: { es: string; display: string; enabled: boolean; emulator: string; known: boolean }[]
+}
+
+export type EmuOptionsPatch = Partial<{
+  hide: Partial<EmuOptions['hide']>
+  arcadeClones: boolean
+  cacheRecent: number
+  streamPlay: boolean
+  streamMinSeconds: number
+  askProfile: boolean
+  profileSettings: boolean
+  machineProfile: number
+}>
+
+export interface EmuEmulatorOption {
+  label: string
+  exe: string
+  args: string
+}
 
 // ---------- self-update (GitHub releases, like EmuStart) ----------
 
