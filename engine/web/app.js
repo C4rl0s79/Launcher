@@ -1188,7 +1188,8 @@ function renderSettings() {
   if (sel) sel.scrollIntoView({ block: "nearest" });
   const r = S.setRows[S.setIdx] || {};
   const h = [["dpad", "Zmień"], ["a", r.type === "action" ? "Wykonaj" : ["path", "root", "addroot"].includes(r.type) ? "Wybierz folder" : "Przełącz"]];
-  if (["path", "root", "addroot"].includes(r.type))
+  // Lumen: foldery wybiera się tylko przeglądarką folderów (pad) — bez okna Windows
+  if (["path", "root", "addroot"].includes(r.type) && !LUMEN)
     h.push(["x", S.platform === "android" ? "Wykrywaj automatycznie" : "Okno Windows (mysz)"]);
   if (r.type === "root") h.push(["y", "Usuń"]);
   h.push(["b", "Wstecz"]);
@@ -1251,7 +1252,7 @@ async function settingsInput(a) {
     if (a === "x" && S.platform === "android") {      // bez okna Windows: wyczyszczenie = wykrywanie automatyczne
       await saveSetting(r.key, ""); S.settings = await api().get_settings(); buildSetRows(); return renderSettings();
     }
-    if (a === "x") {
+    if (a === "x" && !LUMEN) {
       const p = await api().pick_folder(S.settings[r.key]);
       if (p) await saveSetting(r.key, p);
     }

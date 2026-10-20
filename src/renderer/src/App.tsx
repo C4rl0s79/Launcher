@@ -10,6 +10,7 @@ import { GroupScreen } from './screens/Group'
 import { SettingsScreen } from './screens/Settings'
 import { DetailsScreen } from './screens/Details'
 import { EmuLaunchOverlay, JobsPanel } from './components/Jobs'
+import { PathPicker } from './modals/PathPicker'
 
 /** Start, the pinned groups (in their order), Settings. */
 export function useTabs(): Tab[] {
@@ -157,6 +158,7 @@ export function App() {
       {detailsId && <DetailsScreen key={detailsId} gameId={detailsId} />}
       <JobsPanel />
       <EmuLaunchOverlay />
+      <PathPicker />
       <HintsBar />
       <Toasts />
     </>

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { LumenApi } from '@shared/api'
+import type { LumenApi, PickPathOptions } from '@shared/api'
 import type { Category, Game, JobsSnapshot, LibrarySnapshot, Prefs, Settings, SteamCollection } from '@shared/types'
 
 declare global {
@@ -28,6 +28,9 @@ interface State {
   jobs: JobsSnapshot
   /** jobs panel open */
   jobsOpen: boolean
+  /** in-app path picker request (modals/PathPicker.tsx) */
+  picker: { id: number; opts: PickPathOptions; resolve: (path: string | null) => void } | null
+  finishPick(path: string | null): void
   prefs: Prefs | null
   settings: Settings | null
   artRev: Record<string, number>
@@ -64,6 +67,12 @@ export const useStore = create<State>((set) => ({
   snapshot: null,
   jobs: { jobs: [], emu: null },
   jobsOpen: false,
+  picker: null,
+  finishPick: (path) =>
+    set((s) => {
+      s.picker?.resolve(path)
+      return { picker: null }
+    }),
   prefs: null,
   settings: null,
   artRev: {},
@@ -99,6 +108,19 @@ export const useStore = create<State>((set) => ({
     }),
   dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }))
 }))
+
+let pickerId = 0
+
+/**
+ * Choose a folder or file in the in-app picker (gamepad friendly — never the Windows dialog).
+ * Resolves with the path, or null when cancelled.
+ */
+export function pickPath(opts: PickPathOptions): Promise<string | null> {
+  return new Promise((resolve) => {
+    useStore.getState().picker?.resolve(null)
+    useStore.setState({ picker: { id: ++pickerId, opts, resolve } })
+  })
+}
 
 /** Report an error from an API call as a toast and swallow it. */
 export async function attempt<T>(p: Promise<T>): Promise<T | undefined> {

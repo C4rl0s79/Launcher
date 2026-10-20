@@ -164,7 +164,11 @@ Klucze nigdy nie trafiają do repozytorium ani do logów.
 W trybie TV obowiązuje sterowanie EmuStart (A — graj, przytrzymane A — opcje, Y — przypnij / ulubiona
 dla gier Steam, X — filtry, Start — menu, A + Y przez 2 s w grze — menu w grze).
 
-Mysz działa wszędzie. Pola tekstowe przy obsłudze padem otwierają klawiaturę ekranową
+Mysz działa wszędzie. Foldery i pliki (dane EmuStart, emulatory, pobrane gry, Python, własne grafiki)
+wybiera się we własnej przeglądarce Lumen — samym padem: gałka/D-pad, **A** otwórz, **X** wybierz ten
+folder, **B** wyżej (na pierwszej stronie: skróty i dyski). Okno wyboru Windows nie jest używane.
+W trybie TV foldery wybiera przeglądarka folderów EmuStart (A na ustawieniu ścieżki).
+Pola tekstowe przy obsłudze padem otwierają klawiaturę ekranową
 (A — wpisz, X — usuń, Y — spacja, LB — wielkie litery, Start — gotowe).
 
 **Pad:** domyślnie Lumen tylko odczytuje stan padów przez XInput (jak gry) i nie inicjalizuje urządzeń — pady Xbox i widziane jako Xbox (Steam Input, tryb X). Pady PlayStation/Switch bez Steam Input: Ustawienia → Zachowanie → wyłącz „Pad przez XInput” (Gamepad API przeglądarki; może przeszkadzać w podłączaniu pada przy działającym Lumen).

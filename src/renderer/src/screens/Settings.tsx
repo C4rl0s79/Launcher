@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import type { CacheStats, Category, EmuSettings, LaunchBoxStatus, SecretName, SettingsPatch } from '@shared/types'
 import type { PickPathOptions } from '@shared/api'
-import { api, attempt, gamesForCategory, sortedCategories, useStore } from '../store'
+import { api, attempt, gamesForCategory, pickPath, sortedCategories, useStore } from '../store'
 import { useActions } from '../nav/input'
 import { TextField } from '../components/TextField'
 import { Modal } from '../components/Modal'
@@ -490,10 +490,10 @@ function EmustartSection() {
       </dl>
       {ready && (
         <div className="modal__row">
-          <button className="btn" data-nav onClick={() => void api().emustart.pickFolder('emu_root').then(setEs)}>
+          <button className="btn" data-nav onClick={() => void chooseEmuFolder('emu_root', 'Folder emulatorów', es?.emuRoot, setEs)}>
             Folder emulatorów…
           </button>
-          <button className="btn" data-nav onClick={() => void api().emustart.pickFolder('cache_dir').then(setEs)}>
+          <button className="btn" data-nav onClick={() => void chooseEmuFolder('cache_dir', 'Folder pobranych gier', es?.cacheDir, setEs)}>
             Folder pobranych gier…
           </button>
           <button
@@ -537,7 +537,7 @@ function EmustartSection() {
         label="Python dla silnika (wersja ze źródeł)"
         value={settings.pythonPath}
         fallback="domyślny — dołączony silnik albo „py -3”"
-        pick={{ kind: 'file', title: 'Python (python.exe) dla silnika EmuStart', filters: [{ name: 'Python', extensions: ['exe'] }] }}
+        pick={{ kind: 'file', title: 'Python (python.exe) dla silnika EmuStart', extensions: ['exe'] }}
         onChange={(v) => void patch({ pythonPath: v })}
       />
     </Section>
@@ -558,7 +558,7 @@ function PathRow({
   label: string
   value?: string
   fallback: string
-  pick: Omit<PickPathOptions, 'defaultPath'>
+  pick: Omit<PickPathOptions, 'start'>
   onChange: (v: string) => void
 }) {
   return (
@@ -573,7 +573,9 @@ function PathRow({
         className="btn"
         data-nav
         onClick={async () => {
-          const v = await attempt(api().app.pickPath({ ...pick, defaultPath: value || undefined }))
+          // start in the current folder (or the one holding the current file)
+          const start = value ? (pick.kind === 'file' ? value.replace(/[\\/][^\\/]*$/, '') : value) : undefined
+          const v = await pickPath({ ...pick, start })
           if (v) onChange(v)
         }}
       >
@@ -586,6 +588,18 @@ function PathRow({
       )}
     </div>
   )
+}
+
+async function chooseEmuFolder(
+  key: 'emu_root' | 'cache_dir',
+  title: string,
+  current: string | undefined,
+  done: (s: EmuSettings) => void
+): Promise<void> {
+  const folder = await pickPath({ kind: 'folder', title, start: current || undefined })
+  if (!folder) return
+  const s = await attempt(api().emustart.setFolder(key, folder))
+  if (s) done(s)
 }
 
 function BehaviourSection() {

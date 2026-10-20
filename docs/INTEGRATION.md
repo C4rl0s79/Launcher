@@ -204,6 +204,15 @@ także rozpakowane gry). Instalator nie usuwa `LumenData\` przy odinstalowaniu a
 urządzenia w TPM; emulator wskazany ręcznie spoza folderu (np. zwykła instalacja PCSX2 z danymi
 w `Documents`); wersja `portable.exe` rozpakowuje sam program do `%TEMP%` (dlatego jest wersja ZIP).
 
+## 6b. Wybór folderów i plików — tylko padem
+
+Żadne ustawienie nie wymaga wpisywania ścieżki ani okna wyboru Windows (wymaga myszy). Tryb pulpitu:
+`modals/PathPicker.tsx` + `pickPath()` (store) + `app.listDir` (`main/fsBrowse.ts`, tylko odczyt nazw:
+skróty, dyski z etykietami, foldery, pliki z dozwolonymi rozszerzeniami). Wybór jest sprawdzany
+w procesie głównym (`emustart.setFolder`, `art.useFile`). Tryb TV: przeglądarka folderów EmuStart
+(`folderBrowse`); opcja „Okno Windows (mysz)” EmuStart jest w Lumen ukryta, a `pick_folder` zwraca pusty
+wynik.
+
 ## 7. Tryby interfejsu
 
 - Jedno okno, dwa widoki: renderer Lumen i `WebContentsView` z UI EmuStart (ładowany w tle przy starcie).

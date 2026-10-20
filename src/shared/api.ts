@@ -8,6 +8,8 @@ import type {
   EmuActionResult,
   EmuReadiness,
   EmuSettings,
+  FsListing,
+  FsListOptions,
   SaveChoice,
   JobsSnapshot,
   UiMode,
@@ -21,11 +23,11 @@ import type {
   SgdbGame
 } from './types'
 
-export interface PickPathOptions {
-  kind: 'folder' | 'file'
+/** In-app path picker (renderer: pickPath in store.ts). */
+export interface PickPathOptions extends FsListOptions {
   title: string
-  defaultPath?: string
-  filters?: { name: string; extensions: string[] }[]
+  /** folder to open first; empty = shortcuts and drives */
+  start?: string
 }
 
 /** The API exposed on window.lumen by the preload script. */
@@ -64,7 +66,8 @@ export interface LumenApi {
     search(term: string): Promise<{ ok: true; games: SgdbGame[] } | { ok: false; error: string }>
     setMatch(gameId: string, sgdbGame: SgdbGame | null): Promise<Prefs>
     choose(gameId: string, kind: ArtKind, option: ArtOption): Promise<Prefs>
-    chooseFile(gameId: string, kind: ArtKind): Promise<Prefs | null>
+    /** use an image file chosen in the in-app picker (copied into Lumen's data folder) */
+    useFile(gameId: string, kind: ArtKind, file: string): Promise<Prefs>
     useSteam(gameId: string, kind: ArtKind): Promise<Prefs>
     reset(gameId: string, kind: ArtKind): Promise<Prefs>
     onChanged(cb: (gameId: string, rev: number) => void): () => void
@@ -90,7 +93,8 @@ export interface LumenApi {
     readiness(gameId: string): Promise<EmuReadiness>
     installEmulators(systems: string[]): Promise<EmuActionResult>
     settings(): Promise<EmuSettings>
-    pickFolder(key: 'emu_root' | 'cache_dir'): Promise<EmuSettings>
+    /** folder chosen in the in-app picker */
+    setFolder(key: 'emu_root' | 'cache_dir', folder: string): Promise<EmuSettings>
     refreshLibrary(): Promise<EmuActionResult>
     restartEngine(): Promise<void>
     clearConflicts(): Promise<void>
@@ -116,8 +120,8 @@ export interface LumenApi {
     clearCache(): Promise<CacheStats>
     openLogs(): Promise<void>
     openExternal(url: string): Promise<void>
-    /** Windows file / folder dialog — paths are always picked, never typed; null = cancelled */
-    pickPath(o: PickPathOptions): Promise<string | null>
+    /** read-only listing for the in-app path picker ('' = shortcuts and drives) */
+    listDir(dir: string, o: FsListOptions): Promise<FsListing>
     quit(): Promise<void>
     onFocusChange(cb: (focused: boolean) => void): () => void
     /** XInput controller state from the main process (see main/input/xinput.ts) */
@@ -145,7 +149,7 @@ export const IPC = {
   artSearch: 'art:search',
   artSetMatch: 'art:setMatch',
   artChoose: 'art:choose',
-  artChooseFile: 'art:chooseFile',
+  artUseFile: 'art:useFile',
   artUseSteam: 'art:useSteam',
   artReset: 'art:reset',
   artChanged: 'art:changed',
@@ -156,7 +160,7 @@ export const IPC = {
   appOpenLogs: 'app:openLogs',
   appOpenExternal: 'app:openExternal',
   appQuit: 'app:quit',
-  appPickPath: 'app:pickPath',
+  appListDir: 'app:listDir',
   appFocus: 'app:focus',
   launchboxStatus: 'launchbox:status',
   launchboxUpdate: 'launchbox:update',
@@ -172,7 +176,7 @@ export const IPC = {
   emuReadiness: 'emu:readiness',
   emuInstall: 'emu:install',
   emuSettings: 'emu:settings',
-  emuPickFolder: 'emu:pickFolder',
+  emuSetFolder: 'emu:setFolder',
   emuRefresh: 'emu:refresh',
   emuRestart: 'emu:restart',
   emuClearConflicts: 'emu:clearConflicts',

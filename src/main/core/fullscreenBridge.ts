@@ -28,7 +28,6 @@ export interface BridgeDeps {
   select(gameId: string | null): void
   /** Lumen id of an EmuStart engine game number */
   emuLumenId(engineId: number): string | undefined
-  pickFolder(start: string): Promise<string>
   quit(): void
   log(msg: string): void
   now?: () => number
@@ -354,7 +353,8 @@ export function createFullscreenBridge(deps: BridgeDeps) {
         deps.quit()
         return null
       case 'pick_folder':
-        return deps.pickFolder(typeof a0 === 'string' ? a0 : '')
+        // Windows dialog needs a mouse — in Lumen folders are chosen with EmuStart's folder browser (pad)
+        return ''
       case 'ui_log':
         deps.log(String(a0 ?? ''))
         return null

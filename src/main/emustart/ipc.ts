@@ -1,4 +1,5 @@
-import { dialog, type BrowserWindow } from 'electron'
+import { stat } from 'node:fs/promises'
+import type { BrowserWindow } from 'electron'
 import { IPC } from '@shared/api'
 import type { EmuActionResult, EmuReadiness, EmuSettings, JobsSnapshot } from '@shared/types'
 import type { EmustartEngine } from './engine'
@@ -76,17 +77,11 @@ export function registerEmustartIpc(handle: Handle, ctx: Ctx): void {
     }
   }
   handle(IPC.emuSettings, settings)
-  handle(IPC.emuPickFolder, async (key: 'emu_root' | 'cache_dir'): Promise<EmuSettings> => {
+  handle(IPC.emuSetFolder, async (key: 'emu_root' | 'cache_dir', folder: string): Promise<EmuSettings> => {
     if (key !== 'emu_root' && key !== 'cache_dir') throw new Error('Nieznane ustawienie.')
-    const cur = await settings()
-    const w = ctx.win()
-    const r = await dialog.showOpenDialog(w!, {
-      title: key === 'emu_root' ? 'Folder emulatorów' : 'Folder pobranych gier (pamięć podręczna)',
-      defaultPath: (key === 'emu_root' ? cur.emuRoot : cur.cacheDir) || undefined,
-      properties: ['openDirectory', 'createDirectory']
-    })
-    if (r.canceled || !r.filePaths[0]) return cur
-    await call('save_settings', [{ [key]: r.filePaths[0] }])
+    const st = await stat(String(folder)).catch(() => null)
+    if (!st?.isDirectory()) throw new Error('Wybrany folder nie istnieje.')
+    await call('save_settings', [{ [key]: folder }])
     void provider.refresh()
     return settings()
   })

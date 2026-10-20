@@ -119,5 +119,8 @@ Celowo **nie** wykonane automatycznie, bo uruchamiają grę lub okna Steam na Tw
       LB/RB (zakładki), Start (ustawienia), View (filtr), LT/RT (szybkie przewijanie, przytrzymanie = powtarzanie).
 - [ ] Steam Input: czy pad nie porusza jednocześnie kursorem (patrz README).
 - [ ] Telewizor 4K / skalowanie 150–200%: czytelność, ostrość plakatów, pełny ekran (F11 / ustawienie startowe).
-- [ ] „Wybierz plik…” w oknie Grafik (systemowe okno wyboru pliku).
+- [x] Wybór folderów i plików (0.3.1) — własna przeglądarka w Lumen zamiast okna Windows: przejście samą
+      klawiaturą nawigacyjną (strzałki, Enter, Esc, F = X na padzie) — w górę z powrotem na folder, z którego
+      się wyszło, wybór folderu, zapis w ustawieniach EmuStart; pierwsza strona: skróty i dyski z etykietami.
+      Fizycznym padem nie sprawdzano (te same akcje co klawiatura).
 - [ ] Instalator `release/Lumen-0.1.0-setup.exe` (instalacja, skróty, deinstalacja).

@@ -1,12 +1,13 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, Menu, net, protocol, shell } from 'electron'
 import { existsSync, mkdirSync, promises as fs } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { ART_SCHEME, EMU_UI_SCHEME, IPC, type PickPathOptions } from '@shared/api'
+import { ART_SCHEME, EMU_UI_SCHEME, IPC } from '@shared/api'
 import { EMU_UI, isModeCombo } from '@shared/emuPad'
-import type { ActionResult, ArtKind, ArtOption, Game, JobsSnapshot, LibrarySnapshot, Prefs, SecretName, SettingsPatch, SgdbGame, UiMode } from '@shared/types'
+import type { ActionResult, ArtKind, ArtOption, FsEntry, FsListOptions, Game, JobsSnapshot, LibrarySnapshot, Prefs, SecretName, SettingsPatch, SgdbGame, UiMode } from '@shared/types'
 import { initLogger, log } from './logger'
 import { chooseDataDir, migrateDataDir } from './dataDir'
+import { listDir } from './fsBrowse'
 import { ops, PrefsError, PrefsStore } from './store/prefs'
 import { SettingsStore } from './store/settings'
 import { LibraryService } from './library/service'
@@ -302,6 +303,22 @@ function bumpArt(gameId: string, kind?: ArtKind): void {
   send(IPC.artChanged, gameId, rev)
 }
 
+/** Shortcuts on the first page of the path picker. */
+function places(): FsEntry[] {
+  const out: FsEntry[] = [
+    { name: 'Folder danych Lumen', path: userData, kind: 'place' },
+    { name: 'Dane EmuStart', path: settings.get().emustartHome || paths.emustartHome, kind: 'place' }
+  ]
+  for (const [name, key] of [['Pulpit', 'desktop'], ['Dokumenty', 'documents'], ['Pobrane', 'downloads']] as const) {
+    try {
+      out.push({ name, path: app.getPath(key), kind: 'place' })
+    } catch {
+      /* not available */
+    }
+  }
+  return out.filter((p) => existsSync(p.path))
+}
+
 // ---------------- actions shared by both interfaces ----------------
 
 /** Start a Steam game (or a non-Steam shortcut) through the Steam client. */
@@ -491,16 +508,11 @@ function registerIpc(): void {
     bumpArt(gameId, kind)
     return p
   })
-  handle(IPC.artChooseFile, async (gameId: string, kind: ArtKind) => {
-    if (!win) return null
-    const r = await dialog.showOpenDialog(win, {
-      title: 'Wybierz plik graficzny',
-      properties: ['openFile'],
-      filters: [{ name: 'Obrazy', extensions: ['png', 'jpg', 'jpeg', 'webp'] }]
-    })
-    if (r.canceled || !r.filePaths[0]) return null
-    const src = r.filePaths[0]
-    const stat = await fs.stat(src)
+  handle(IPC.artUseFile, async (gameId: string, kind: ArtKind, src: string) => {
+    if (!ART_KINDS.includes(kind)) throw new Error('Nieznany rodzaj grafiki.')
+    if (!/\.(png|jpe?g|webp)$/i.test(String(src))) throw new Error('Wybierz plik PNG, JPG albo WebP.')
+    const stat = await fs.stat(src).catch(() => null)
+    if (!stat?.isFile()) throw new Error('Wybrany plik nie istnieje.')
     if (stat.size > 25 * 1024 * 1024) throw new Error('Plik jest zbyt duży (maks. 25 MB).')
     await fs.mkdir(paths.customArt, { recursive: true })
     const safe = gameId.replace(/[^a-zA-Z0-9_-]/g, '_')
@@ -546,16 +558,9 @@ function registerIpc(): void {
     await shell.openExternal(url)
   })
   handle(IPC.appQuit, () => app.quit())
-  handle(IPC.appPickPath, async (o: PickPathOptions) => {
-    if (!win) return null
-    const r = await dialog.showOpenDialog(win, {
-      title: String(o?.title ?? ''),
-      defaultPath: o?.defaultPath || undefined,
-      properties: o?.kind === 'file' ? ['openFile'] : ['openDirectory', 'createDirectory'],
-      filters: o?.kind === 'file' && Array.isArray(o.filters) ? o.filters : undefined
-    })
-    return r.canceled ? null : (r.filePaths[0] ?? null)
-  })
+  handle(IPC.appListDir, (dir: string, o: FsListOptions) =>
+    listDir(String(dir ?? ''), { kind: o?.kind === 'file' ? 'file' : 'folder', extensions: Array.isArray(o?.extensions) ? o.extensions : undefined }, places())
+  )
 
   registerEmustartIpc(handle, {
     engine,
@@ -597,11 +602,6 @@ function registerFullscreenBridge(): void {
     setMode: (m) => modes?.setMode(m),
     select: (id) => modes?.select(id),
     emuLumenId: (n) => emu.lumenId(n),
-    pickFolder: async (start) => {
-      if (!win) return ''
-      const r = await dialog.showOpenDialog(win, { defaultPath: start || undefined, properties: ['openDirectory', 'createDirectory'] })
-      return r.canceled ? '' : (r.filePaths[0] ?? '')
-    },
     quit: () => app.quit(),
     log: (m) => log.info('emu-ui', m.slice(0, 300))
   })

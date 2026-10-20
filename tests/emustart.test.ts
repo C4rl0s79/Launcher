@@ -202,7 +202,6 @@ function bridge(o: Partial<BridgeDeps> = {}) {
     setMode: vi.fn(),
     select: vi.fn(),
     emuLumenId: (n) => (n === 7 ? 'emu:gabc' : undefined),
-    pickFolder: async () => 'D:\\x',
     quit: vi.fn(),
     log: () => undefined,
     now: () => now,

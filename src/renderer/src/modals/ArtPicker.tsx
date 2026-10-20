@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { ArtKind, ArtOptionsResult, Game, SgdbGame } from '@shared/types'
-import { api, attempt, useStore } from '../store'
+import { api, attempt, useStore, pickPath } from '../store'
 import { Modal } from '../components/Modal'
 import { TextField } from '../components/TextField'
 
@@ -61,7 +61,14 @@ export function ArtPicker({ game, onClose }: { game: Game; onClose: () => void }
         {result?.ok && result.sgdbGame && ` · SteamGridDB: ${result.sgdbGame.name}`}
       </p>
       <div className="modal__row">
-        <button className="btn" data-nav onClick={() => void attempt(api().art.chooseFile(game.id, kind)).then(done('Ustawiono własny plik'))}>
+        <button
+          className="btn"
+          data-nav
+          onClick={async () => {
+            const file = await pickPath({ kind: 'file', title: 'Własny plik graficzny', extensions: ['png', 'jpg', 'jpeg', 'webp'] })
+            if (file) void attempt(api().art.useFile(game.id, kind, file)).then(done('Ustawiono własny plik'))
+          }}
+        >
           Wybierz plik…
         </button>
         {game.source === 'steam' && kind !== 'icon' && (

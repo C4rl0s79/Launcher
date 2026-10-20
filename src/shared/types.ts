@@ -456,3 +456,29 @@ export interface EmuSettings {
 }
 
 export type UiMode = 'desktop' | 'fullscreen'
+
+// ---------- in-app path picker (gamepad friendly, no system dialog) ----------
+
+export interface FsEntry {
+  name: string
+  path: string
+  /** place = shortcut on the first page (Lumen data, Desktop…) */
+  kind: 'drive' | 'dir' | 'file' | 'place'
+  note?: string
+}
+
+export interface FsListOptions {
+  kind: 'folder' | 'file'
+  /** file mode: allowed extensions without the dot, e.g. ["png", "jpg"] */
+  extensions?: string[]
+}
+
+export interface FsListing {
+  /** '' = first page (shortcuts and drives) */
+  path: string
+  /** null on the first page; '' = back to the first page */
+  parent: string | null
+  entries: FsEntry[]
+  truncated: boolean
+  error?: string
+}
