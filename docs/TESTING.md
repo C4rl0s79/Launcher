@@ -68,8 +68,9 @@ Aplikacja sterowana przez Chrome DevTools Protocol (`scripts/cdp.mjs`: zrzuty ek
       przepisanie manifestu „połykał” zmianę stanu gry, przez co okno nie wracało.
       Uwaga: TIS-100 ignoruje WM_CLOSE, więc zamknięto ją wymuszenie; zwykłe wyjście z menu gry nie było testowane.
 - [x] Pad przez XInput: odczyt `XInputGetState` działa w Electronie (dev i spakowany, `koffi.node` rozpakowany z asar),
-      pad w gnieździe 0 widoczny; mapowanie przycisków/triggerów/gałki pokryte testami. **Do sprawdzenia przez Ciebie:**
-      włączenie pada przy działającym Lumen (wcześniejszy problem z samoczynnym wyłączaniem).
+      pad w gnieździe 0 widoczny; mapowanie przycisków/triggerów/gałki pokryte testami.
+      **Potwierdzone przez użytkownika (20.10.2026):** pad włączany przy działającym Lumen już się nie wyłącza
+      i steruje programem (wcześniej, z Gamepad API Chromium, wyłączał się od razu).
 - [~] (wcześniej, Gamepad API) Kontroler: Chromium wykrył „Xbox 360 Controller (XInput STANDARD GAMEPAD)” i interfejs przełączył się
       na glify pada (wejście z pada zostało obsłużone). Pełnej ścieżki padem nie przechodziłem — nie mam
       fizycznego dostępu do urządzenia.
