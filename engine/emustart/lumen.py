@@ -14,11 +14,12 @@ from __future__ import annotations
 
 import logging
 import os
+from pathlib import Path
 import sys
 import threading
 import time
 
-from emustart import api as api_mod, cache, catalog, library, profiles, savesync
+from emustart import api as api_mod, cache, catalog, library, profiles, savesync, scanner
 
 log = logging.getLogger("emustart.lumen")
 
@@ -60,6 +61,23 @@ def emit(event: dict) -> None:
     sys.stdout.flush()
 
 
+def disc_counts(es: str | None = None) -> dict:
+    """{id gry: liczba płyt} dla gier wielopłytowych (płyty „(Disc N)” bez .m3u albo playlisty .m3u)."""
+    import json
+    q = "SELECT id, files FROM games WHERE (multidisc=1 OR lower(rel) LIKE '%.m3u')"
+    rows = library.db().execute(q + (" AND es=?" if es else ""), (es,) if es else ()).fetchall()
+    out = {}
+    for r in rows:
+        try:
+            files = json.loads(r["files"]) if isinstance(r["files"], str) else r["files"]
+        except ValueError:
+            continue
+        labels = {sp[1].lower() for f in files if (sp := scanner.disc_split(Path(str(f[0])).stem))}
+        if len(labels) > 1:
+            out[r["id"]] = len(labels)
+    return out
+
+
 class LumenApi(api_mod.Api):
     """`Api` EmuStart + zestawienia dla widoku pulpitowego Lumen."""
 
@@ -89,6 +107,7 @@ class LumenApi(api_mod.Api):
     def lumen_library(self) -> dict:
         """Wszystkie widoczne gry wszystkich systemów (te same filtry co lista gier EmuStart)."""
         systems = self.list_systems()
+        discs = disc_counts()
         games = []
         for s in systems:
             try:
@@ -105,12 +124,20 @@ class LumenApi(api_mod.Api):
                     "box": r.get("box", ""), "snap": r.get("snap", ""), "logo": r.get("logo", ""),
                     "genre": r.get("genre", ""), "year": r.get("year", ""),
                     "developer": r.get("developer", ""), "publisher": r.get("publisher", ""),
-                    "players": r.get("players", "")})
+                    "players": r.get("players", ""), "discs": discs.get(r["id"], 1)})
         prof = profiles.get(self._profile) or {}
         return {"systems": systems, "games": games, "lib_version": getattr(self, "_lib_version", 0),
                 "profile": {"id": prof.get("id"), "name": prof.get("name", "")},   # bez PIN-u / tokenu
                 "server": self._server_state(),
                 "configured": bool(self._cfg.get("emu_root")) or bool(self._cfg.get("server_key"))}
+
+    def list_games(self, es: str) -> list:
+        """Lista gier EmuStart (tryb TV) + liczba płyt (ikona przy grach wielopłytowych)."""
+        rows = super().list_games(es)
+        discs = disc_counts(es)
+        for r in rows:
+            r["discs"] = discs.get(r["id"], 1)
+        return rows
 
     def lumen_status(self) -> dict:
         """Kolejka zadań EmuStart: uruchamianie, pobieranie, emulatory, wysyłka zapisów."""

@@ -1781,3 +1781,18 @@ p.card__desc[data-nav]:focus {
 .picker__row:focus .picker__note {
   color: var(--accent-ink);
 }
+
+/* multi-disc EmuStart game: number of discs in the set */
+.poster__discs {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  padding: 0.12em 0.45em;
+  border-radius: 999px;
+  background: rgba(10, 12, 17, 0.82);
+  color: var(--text);
+  font-size: 0.78em;
+  font-weight: 600;
+  line-height: 1.4;
+  pointer-events: none;
+}

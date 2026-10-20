@@ -78,6 +78,8 @@ export interface EmuGameInfo {
   pinned: boolean
   /** a download of this game is in progress */
   copying: boolean
+  /** discs in the set (multi-disc games are one entry); 1 = single disc / cartridge */
+  discs: number
   genre?: string
   year?: string
   players?: string

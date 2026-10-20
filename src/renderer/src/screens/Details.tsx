@@ -174,6 +174,7 @@ export function DetailsScreen({ gameId }: { gameId: string }) {
     ['Biblioteka', game.installed ? game.libraryPath : undefined],
     ['Platforma', game.emu?.system],
     ['Rozmiar', game.emu ? formatBytes(game.emu.size) : undefined],
+    ['Płyty', game.emu && game.emu.discs > 1 ? `${game.emu.discs} — jedna pozycja, zmiana płyty w emulatorze` : undefined],
     ['Wersja', game.emu?.tags || undefined],
     ['Emulator', isEmu && ready?.ok ? ready.emulator || 'nie wybrano' : undefined],
     ['Zapisy na serwerze', isEmu && ready?.ok && ready.sync ? syncLabel(ready.sync.state, ready.sync.last) : undefined],

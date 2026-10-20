@@ -106,6 +106,7 @@ małe i opisane w `engine/CHANGELOG.md`:
 | `web/index.html` | CSP: `img-src` także `lumen-art:` | brak |
 | `web/app.js`, `web/options.js` | most `?lumen`, system „Steam”, akcje Steam, „Tryb pulpitu”, wybór gry | brak (aktywne tylko z `?lumen`) |
 | `lumen-engine.spec` (nowy) | PyInstaller: `EmuStartEngine.exe` bez pywebview | brak |
+| `emustart/scanner.py` | gry wielopłytowe: płyty „(Disc A)”, podtytuły płyt, płyty obok gier-katalogów | **tak — także EmuStart Server** (skan biblioteki); do przeniesienia do EmuStart |
 
 Bezpieczeństwo silnika: HTTP tylko na `127.0.0.1`, sprawdzanie nagłówka Host (DNS rebinding — jak
 w EmuStart), `X-EmuStart` (bez CORS), a dodatkowo losowy token sesji z procesu Lumen. Token jest
@@ -203,6 +204,14 @@ także rozpakowane gry). Instalator nie usuwa `LumenData\` przy odinstalowaniu a
 (`resources/installer.nsh`). Wyjątki: folder programu tylko do odczytu → `%APPDATA%\Lumen\`; klucz
 urządzenia w TPM; emulator wskazany ręcznie spoza folderu (np. zwykła instalacja PCSX2 z danymi
 w `Documents`); wersja `portable.exe` rozpakowuje sam program do `%TEMP%` (dlatego jest wersja ZIP).
+
+## 6c. Gry wielopłytowe
+
+Jedna pozycja na grę: płyty łączy **skan biblioteki na serwerze** (`scanner.py`: `.m3u`, a bez niej pliki
+„(Disc N)” / „(Disc A)” z tego samego folderu, także z podtytułem płyty). Uruchomienie gry wielopłytowej:
+EmuStart pobiera wszystkie płyty i tworzy playlistę `.m3u` dla emulatora (zmiana płyty w emulatorze).
+Liczba płyt: ikona 💿 N na plakacie (pulpit) i przy grze na liście (TV), „Płyty” w szczegółach.
+Wersje regionalne (Europe / Japan / USA…) to osobne gry — nie są łączone.
 
 ## 6b. Wybór folderów i plików — tylko padem
 

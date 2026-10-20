@@ -32,6 +32,11 @@ export const Poster = memo(function Poster({ game, favorite, onOpen, onFocusGame
           {game.source === 'demo' && <span className="badge badge--demo">DEMO</span>}
         </div>
         {favorite && <span className="poster__fav" aria-label="Ulubiona">★</span>}
+        {game.emu && game.emu.discs > 1 && (
+          <span className="poster__discs" aria-label={`${game.emu.discs} płyty`} title={`${game.emu.discs} płyty`}>
+            💿{game.emu.discs}
+          </span>
+        )}
         {!game.installed && <span className="poster__cloud" aria-label="Niezainstalowana" />}
       </div>
       <div className="poster__label">{game.name}</div>

@@ -70,6 +70,12 @@ describe('EmuStart → unified library', () => {
     expect(new Set(all.map((g) => g.id)).size).toBe(2)
   })
 
+  it('a multi-disc set is one entry with its number of discs', () => {
+    const [set, single] = emuGames(lib([row({ discs: 3 }), row({ id: 8, sid: 'gdef' })]))
+    expect(set.emu?.discs).toBe(3)
+    expect(single.emu?.discs).toBe(1)
+  })
+
   it('drops duplicate server ids', () => {
     expect(emuGames(lib([row(), row({ id: 9 })]))).toHaveLength(1)
   })

@@ -26,6 +26,8 @@ export interface EmuLibraryRow {
   developer?: string
   publisher?: string
   players?: string
+  /** number of discs (multi-disc games: one entry for the whole set) */
+  discs?: number
 }
 
 export interface EmuLibrary {
@@ -75,6 +77,7 @@ export function emuGame(r: EmuLibraryRow, copying: ReadonlySet<number>): Game {
       cached: !!r.cached,
       pinned: !!r.pinned,
       copying: isCopying,
+      discs: r.discs && r.discs > 1 ? r.discs : 1,
       genre: r.genre || undefined,
       year: r.year || undefined,
       players: r.players || undefined,

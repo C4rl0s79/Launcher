@@ -17,6 +17,13 @@ Plan najbliższych zmian: [ROADMAP.md](ROADMAP.md).
 - **Nie zmienia się:** EmuStart uruchamiany samodzielnie (`main.py`, bez `EMUSTART_HOME`
   i bez `?lumen`) działa jak dotąd; API serwera (`/v1/…`), format danych, pobieranie,
   uruchamianie, zapisy profili, emulatory i BIOS-y — bez zmian.
+- **Gry wielopłytowe — skan (dotyczy też EmuStart Server):** płyty oznaczone literą („(Disc A)”,
+  3DO D's Diner), płyty z podtytułem po numerze (Redump: „(Disc 1) (GDI)”, „(Disc 2) (NOD)” —
+  C&C, MGS3 Subsistence, Red Alert…) i płyty `.iso` obok gier-katalogów (Xbox 360: Lost Odyssey)
+  łączą się w jedną grę. Gry już połączone mają te same nazwy co dotąd (te same identyfikatory gier
+  i zapisów). „(CD32)”, „(CDTV)”, „(Disk Writer)” nie są już traktowane jak numer płyty.
+  Zmiana działa po aktualizacji serwera i ponownym skanie biblioteki. Liczba płyt (`discs`) w listach
+  gier dla Lumen (`LumenApi.list_games`, `lumen_library`).
 
 ## [0.46.0] — 2026-10-20
 

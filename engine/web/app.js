@@ -373,6 +373,7 @@ function renderGames() {
       if (g.cached) icons.push('<span class="tag c">zainstalowana</span>');
     } else {
     if (S.copying.has(g.id)) icons.push('<span class="tag d">⬇ kopiuje</span>');
+    if (g.discs > 1) icons.push(`<span class="tag" title="${g.discs} płyty">💿 ${g.discs}</span>`);   // Lumen: gra wielopłytowa
     if (g.pinned) icons.push('<span class="tag p">📌</span>');
     if (g.cached) icons.push('<span class="tag c">lokalnie</span>');
     }

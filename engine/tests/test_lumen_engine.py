@@ -84,3 +84,24 @@ def test_quit_is_left_to_lumen(capsys):
     _bare_api().quit()
     out = capsys.readouterr().out.strip()
     assert json.loads(out) == {"lumen_event": {"type": "quit"}}
+
+
+def test_disc_counts(tmp_path, monkeypatch):
+    """Liczba płyt gry wielopłytowej (ikona w obu interfejsach) — z plików gry w bazie."""
+    import json as _json
+    from emustart import library
+    monkeypatch.setattr(paths, "DATA", tmp_path / "data")
+    monkeypatch.setattr(paths, "DB_PATH", tmp_path / "data" / "lib.sqlite")
+    library._local.con = None
+    con = library.db()
+    def add(gid, rel, files, multidisc):
+        con.execute("INSERT INTO games(id, es, rel, name, title, tags, files, size, multidisc) VALUES (?,?,?,?,?,?,?,?,?)",
+                    (gid, "psx", rel, rel, rel, "", _json.dumps([[f, 1, 1.0] for f in files]), 1, multidisc))
+    add(1, "Diner (Disc A).chd", ["Diner (Disc A).chd", "Diner (Disc B).chd", "Diner (Disc C).chd"], 1)
+    add(2, "FF7 (USA).m3u", ["FF7 (USA).m3u", "FF7 (USA) (Disc 1).cue", "FF7 (USA) (Disc 1).bin", "FF7 (USA) (Disc 2).cue",
+                              "FF7 (USA) (Disc 2).bin"], 0)
+    add(3, "Single (USA).chd", ["Single (USA).chd"], 0)
+    con.commit()
+    assert lumen.disc_counts() == {1: 3, 2: 2}
+    assert lumen.disc_counts("snes") == {}
+    library._local.con = None
