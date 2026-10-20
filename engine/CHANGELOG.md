@@ -22,8 +22,36 @@ Plan najbliższych zmian: [ROADMAP.md](ROADMAP.md).
   po numerze („(Disc 1) (GDI)”), płyty `.iso` obok gier-katalogów (Xbox 360) — łączą się w kopii
   biblioteki po każdej synchronizacji (pierwsza płyta dostaje pliki kompletu i `multidisc=1`, pozostałe
   `hidden=1`; nazwa gry i identyfikator zapisów — pierwszej płyty). Brakujące płyty pobierane z serwera
-  osobno (`netsrc.find`). Playlista `.m3u` (`launcher.py`) bez ścieżek `.bin`/`.wav` obok `.cue`.
+  osobno (`netsrc.find`). Playlista `.m3u` — od EmuStart 0.46.2 kod EmuStart (`scanner.playlist_entries`).
   Liczba płyt (`discs`) w listach gier dla Lumen (`LumenApi.list_games`, `lumen_library`).
+- **Lumen jest osobnym urządzeniem na serwerze** (`lumen.install_device_identity`): skrót sprzętu przy
+  logowaniu = skrót EmuStart + „lumen”. Serwer trzyma jedną rejestrację na sprzęt
+  (`devices.replace_same_hw`), więc Lumen i samodzielny EmuStart na jednym komputerze wylogowywały
+  się nawzajem (401, „nieznane urządzenie”). Kod EmuStart bez zmian.
+
+## [0.46.2] — 2026-10-20
+
+Zakres: skan biblioteki na serwerze (`emustart/scanner.py`), playlista płyt (`emustart/launcher.py`,
+Android: `Prepare.kt`). Gry dopiero teraz łączone w zestaw dostają nazwę bez „(Disc …)”
+(id bez zmian) — po aktualizacji serwera odśwież bibliotekę.
+
+### Poprawione
+- **Gry wielopłytowe łączą się w jedną pozycję także wtedy, gdy dotąd się rozpadały**
+  (skan biblioteki na serwerze, `emustart/scanner.py`):
+  - płyty oznaczone literami — „Gra (Disc A)”, „Gra (Disc B)” — w kolejności A, B, C…;
+  - podtytuł płyty po numerze — „Gra (Disc 1) (Part One)”, „Gra (Disc 2) - Second Act” —
+    nie rozbija zestawu, tytuł gry to część przed „(Disc …)”; ten sam dopisek na każdej
+    płycie (np. „(USA)”) zostaje w nazwie jak dotąd, a ten sam numer płyty dwa razy (dwie
+    wersje regionalne) — dwie osobne gry;
+  - płyty `.cue` (z `.bin` / `.wav`) — dotąd każda płyta była osobną grą;
+  - Xbox 360: płyty `.iso` „(Disc N)” obok gier-folderów (GOD/XEX) łączą się jak na innych
+    systemach, foldery zostają osobnymi grami.
+  Pozycja zestawu ma id dotychczasowej pierwszej płyty (statystyki i baza klientów bez
+  zmian), pozostałe płyty są jej plikami. Nazwy gier łączonych już wcześniej się nie
+  zmieniają. Bez łączenia: Amiga CD32 i CDTV, „Disk Writer” (tam „Disk N” to osobne
+  programy / dyski danych) i dema Amigi (WHDLoad).
+- Playlista `.m3u` gry wielopłytowej (PC i telefon) — tylko pliki płyt (`.cue`, `.chd`,
+  `.iso`, `.ccd`…), bez ścieżek `.bin` / `.wav` i bez `.img` obok `.ccd`.
 
 ## [0.46.1] — 2026-10-20
 
