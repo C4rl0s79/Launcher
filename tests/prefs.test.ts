@@ -30,10 +30,10 @@ describe('category operations', () => {
   it('moves pinned categories among pinned ones, skipping unpinned in between', () => {
     let p = ops.createCategory(defaultPrefs(), 'A', 'cat:a') // order after all smart ones
     p = ops.setPinned(p, 'cat:a', true)
-    // pinned order: all, installed, favorites, A (unpinned notInstalled/recent sit between favorites and A)
+    // pinned order: all, favorites, A (unpinned recent sits between favorites and A)
     p = ops.moveCategory(p, 'cat:a', -1)
     const pinned = [...p.categories].filter((c) => c.pinned).sort((a, b) => a.order - b.order).map((c) => c.id)
-    expect(pinned).toEqual(['smart:all', 'smart:installed', 'cat:a', 'smart:favorites'])
+    expect(pinned).toEqual(['smart:all', 'cat:a', 'smart:favorites'])
     expect(ops.moveCategory(p, 'smart:all', -1)).toBe(p) // already first
   })
 
@@ -45,7 +45,7 @@ describe('category operations', () => {
   })
 
   it('refuses to delete built-in categories', () => {
-    expect(() => ops.deleteCategory(defaultPrefs(), 'smart:installed')).toThrow(PrefsError)
+    expect(() => ops.deleteCategory(defaultPrefs(), 'smart:favorites')).toThrow(PrefsError)
   })
 
   it('assigns a game to many custom categories, ignoring unknown and smart ids', () => {
@@ -81,7 +81,7 @@ describe('migration', () => {
       favorites: ['steam:1', 7]
     })
     expect(p.categories[0].id).toBe('cat:x')
-    expect(p.categories.filter((c) => c.kind === 'smart')).toHaveLength(5)
+    expect(p.categories.filter((c) => c.kind === 'smart')).toHaveLength(3)
     expect(p.gameCategories).toEqual({ 'steam:1': ['cat:x'] })
     expect(p.favorites).toEqual(['steam:1'])
   })
@@ -96,11 +96,28 @@ describe('migration', () => {
       ]
     }
     const p = migratePrefs(v1)
-    expect(p.version).toBe(2)
+    expect(p.version).toBe(3) // v1 files migrate all the way to the current version
     const pinned = p.categories.filter((c) => c.pinned).sort((a, b) => a.order - b.order).map((c) => c.id)
-    expect(pinned).toEqual(['smart:all', 'steamcol:uc-a', 'smart:installed', 'smart:favorites']) // missing built-ins get their defaults
+    expect(pinned).toEqual(['smart:all', 'steamcol:uc-a', 'smart:favorites']) // missing built-ins get their defaults
     // a v2 file is left as the user arranged it
     expect(migratePrefs({ ...p, categories: p.categories.map((c) => (c.id === 'smart:all' ? { ...c, pinned: false } : c)) }).categories.find((c) => c.id === 'smart:all')?.pinned).toBe(false)
+  })
+
+  it('v2 → v3: "all games" becomes the Steam tab, installed / to-install groups are dropped', () => {
+    const v2 = {
+      version: 2,
+      categories: [
+        { id: 'smart:all', name: 'Wszystkie gry', kind: 'smart', smart: 'all', pinned: true, order: 0 },
+        { id: 'smart:installed', name: 'Zainstalowane', kind: 'smart', smart: 'installed', pinned: true, order: 1 },
+        { id: 'steamcol:ps2', name: 'PS2', kind: 'steam', steamCollectionId: 'ps2', pinned: true, order: 2 },
+        { id: 'smart:notInstalled', name: 'Do zainstalowania', kind: 'smart', smart: 'notInstalled', pinned: false, order: 3 }
+      ]
+    }
+    const p = migratePrefs(v2)
+    expect(p.version).toBe(3)
+    expect(p.categories.some((c) => c.id === 'smart:installed' || c.id === 'smart:notInstalled')).toBe(false)
+    const pinned = p.categories.filter((c) => c.pinned).sort((a, b) => a.order - b.order).map((c) => c.name)
+    expect(pinned).toEqual(['Steam', 'PS2', 'Ulubione'])
   })
 
   it('returns defaults for non-objects', () => {

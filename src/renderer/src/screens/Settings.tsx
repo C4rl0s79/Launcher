@@ -472,9 +472,10 @@ function HelpSection() {
     ['Wstecz', 'Esc / Backspace', 'B'],
     ['Ulubiona', 'F', 'X'],
     ['Szukaj', 'S, / lub Ctrl+F', 'Y'],
-    ['Poprzednia / następna zakładka', 'Q / E', 'LB / RB'],
+    ['Poprzednia / następna grupa (górny pasek)', 'Q / E', 'LB / RB'],
+    ['Filtr: wszystkie / zainstalowane / niezainstalowane', 'PgUp / PgDn', 'LT / RT'],
     ['Ustawienia', 'O', 'Start (☰)'],
-    ['Filtr w bibliotece', 'V', 'View (⧉)'],
+    ['Sortowanie w grupie', 'V', 'View (⧉)'],
     ['Pełny ekran', 'F11', '—']
   ]
   return (

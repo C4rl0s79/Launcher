@@ -6,15 +6,16 @@ import { JsonFile } from './jsonFile'
 // Pure functions below are unit-tested; PrefsStore adds persistence.
 
 /** Pinned categories are the group tabs in the top bar (Start always comes first). */
+// The top bar holds platforms/groups; installed / not installed is the group view's filter, so
+// there are no separate built-in groups for it any more (removed in v3).
 export const SMART_CATEGORIES: Category[] = [
-  { id: 'smart:all', name: 'Wszystkie gry', kind: 'smart', smart: 'all', pinned: true, order: 0 },
-  { id: 'smart:installed', name: 'Zainstalowane', kind: 'smart', smart: 'installed', pinned: true, order: 1 },
-  { id: 'smart:favorites', name: 'Ulubione', kind: 'smart', smart: 'favorites', pinned: true, order: 2 },
-  { id: 'smart:notInstalled', name: 'Do zainstalowania', kind: 'smart', smart: 'notInstalled', pinned: false, order: 3 },
-  { id: 'smart:recent', name: 'Ostatnio grane', kind: 'smart', smart: 'recent', pinned: false, order: 4 }
+  { id: 'smart:all', name: 'Steam', kind: 'smart', smart: 'all', pinned: true, order: 0 },
+  { id: 'smart:favorites', name: 'Ulubione', kind: 'smart', smart: 'favorites', pinned: true, order: 1 },
+  { id: 'smart:recent', name: 'Ostatnio grane', kind: 'smart', smart: 'recent', pinned: false, order: 2 }
 ]
+const REMOVED_SMART = new Set(['smart:installed', 'smart:notInstalled'])
 
-export const PREFS_VERSION = 2
+export const PREFS_VERSION = 3
 
 export function defaultPrefs(): Prefs {
   return { version: PREFS_VERSION, categories: SMART_CATEGORIES.map((c) => ({ ...c })), gameCategories: {}, favorites: [], art: {} }
@@ -24,7 +25,7 @@ export function migratePrefs(raw: unknown): Prefs {
   const base = defaultPrefs()
   if (!raw || typeof raw !== 'object') return base
   const r = raw as Partial<Prefs>
-  let categories = Array.isArray(r.categories) ? r.categories.filter(isCategory) : []
+  let categories = Array.isArray(r.categories) ? r.categories.filter(isCategory).filter((c) => !REMOVED_SMART.has(c.id)) : []
   // make sure every smart category exists exactly once (new ones may be added in updates)
   for (const smart of base.categories) {
     if (!categories.some((c) => c.id === smart.id)) categories.push({ ...smart, order: categories.length })
@@ -34,6 +35,10 @@ export function migratePrefs(raw: unknown): Prefs {
     categories = categories.map((c) =>
       c.id === 'smart:recent' ? { ...c, pinned: false } : c.id === 'smart:all' ? { ...c, pinned: true, order: -1 } : c
     )
+  }
+  if ((r.version ?? 1) < 3) {
+    // v3: "all games" is the Steam platform tab (emulator platforms come from Steam collections)
+    categories = categories.map((c) => (c.id === 'smart:all' ? { ...c, name: 'Steam' } : c))
   }
   const prefs: Prefs = {
     version: PREFS_VERSION,

@@ -15,9 +15,11 @@ interface Props {
   autoFocus?: boolean
   inputRef?: React.RefObject<HTMLInputElement | null>
   navKey?: string
+  /** false = not reachable with arrows / D-pad (opened by a dedicated button instead) */
+  nav?: boolean
 }
 
-export function TextField({ value, onChange, onSubmit, placeholder, label, type = 'text', className, inputRef, navKey }: Props) {
+export function TextField({ value, onChange, onSubmit, placeholder, label, type = 'text', className, inputRef, navKey, nav = true }: Props) {
   const own = useRef<HTMLInputElement>(null)
   const ref = inputRef ?? own
   const [osk, setOsk] = useState(false)
@@ -35,7 +37,7 @@ export function TextField({ value, onChange, onSubmit, placeholder, label, type 
       <input
         ref={ref}
         className={`field ${className ?? ''}`}
-        data-nav
+        data-nav={nav || undefined}
         data-key={navKey}
         type={type}
         value={value}

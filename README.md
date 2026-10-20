@@ -2,8 +2,9 @@
 
 Lumen to lokalna aplikacja desktopowa (Windows) z przejrzystym, ciemnym interfejsem do przeglądania
 i uruchamiania gier Steam klawiaturą, myszą lub kontrolerem. Górny pasek to **Start** (ostatnio grane
-i nowo dodane), **przypięte grupy** (np. Wszystkie gry, Zainstalowane, Ulubione, Twoje kolekcje Steam —
-LB/RB lub Q/E przełączają) i **Ustawienia**. Każda grupa to pełna siatka plakatów jak w bibliotece Steam,
+i nowo dodane), **platformy i grupy** (Steam, kolekcje Steam np. PS2, Ulubione — LB/RB lub Q/E
+przełączają) i **Ustawienia**. Każda grupa to pełna siatka plakatów jak w bibliotece Steam z belką
+wyszukiwania (Y), filtra instalacji (LT/RT) i sortowania (View); strzałki i gałka poruszają się tylko po grach,
 a każda gra ma ekran szczegółów z jedną, jednoznaczną akcją główną. Nie ma tu newsów, reklam ani
 aktywności znajomych.
 
@@ -114,10 +115,10 @@ Klucze nigdy nie trafiają do repozytorium ani do logów.
 | Wstecz | Esc / Backspace | B |
 | Ulubiona | F | X |
 | Szukaj | S, `/` lub Ctrl+F | Y |
-| Poprzednia / następna zakładka | Q / E | LB / RB |
-| Szybkie przewijanie | PgUp / PgDn | LT / RT |
+| Poprzednia / następna grupa (górny pasek) | Q / E | LB / RB |
+| Filtr: wszystkie / zainstalowane / niezainstalowane | PgUp / PgDn | LT / RT |
 | Ustawienia | O | Start (☰) |
-| Filtr instalacji w bibliotece | V | View (⧉) |
+| Sortowanie w grupie | V | View (⧉) |
 | Pełny ekran | F11 | — |
 
 Mysz działa wszędzie. Pola tekstowe przy obsłudze padem otwierają klawiaturę ekranową

@@ -7,6 +7,7 @@ import { TextField } from '../components/TextField'
 import { LibraryNotice } from '../components/LibraryNotice'
 import { toggleFavoriteOfFocused, VirtualPosterGrid } from '../components/PosterGrid'
 import { gameCountLabel } from '../lib/format'
+import { Glyph } from '../components/Hints'
 
 // One group (tab in the top bar): every game of the category as a Steam-style poster grid.
 
@@ -47,6 +48,7 @@ export function GroupScreen({ category, active }: { category: Category; active: 
   const snapshot = useStore((s) => s.snapshot)!
   const prefs = useStore((s) => s.prefs)!
   const openDetails = useStore((s) => s.openDetails)
+  const mode = useStore((s) => s.inputMode)
   const initial = useMemo(() => loadView(category.id), [category.id])
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<Filter>(initial.filter)
@@ -90,14 +92,26 @@ export function GroupScreen({ category, active }: { category: Category; active: 
 
   useActions(
     {
+      // The toolbar is driven by dedicated buttons only (arrows / stick stay on the games):
+      // Y = search, LT/RT = install filter, View = sort.
       y: () => {
-        searchRef.current && focusEl(searchRef.current)
+        const input = searchRef.current
+        if (!input) return true
+        // with a controller go straight to the on-screen keyboard; with a keyboard type into the field
+        if (useStore.getState().inputMode === 'gamepad') input.dispatchEvent(new CustomEvent('lumen-osk', { bubbles: true }))
+        else focusEl(input)
+        return true
+      },
+      lt: () => {
+        if (hasInstallState) cycleFilter(-1)
+        return true
+      },
+      rt: () => {
+        if (hasInstallState) cycleFilter(1)
         return true
       },
       view: () => {
-        if (!hasInstallState) return true
-        const i = FILTERS.findIndex(([f]) => f === filter)
-        setFilter(FILTERS[(i + 1) % FILTERS.length][0])
+        nextSort()
         return true
       },
       x: toggleFavoriteOfFocused,
@@ -116,18 +130,22 @@ export function GroupScreen({ category, active }: { category: Category; active: 
         { action: 'confirm', label: 'Otwórz' },
         { action: 'x', label: 'Ulubiona' },
         { action: 'y', label: 'Szukaj' },
-        ...(hasInstallState ? [{ action: 'view' as const, label: 'Filtr' }] : []),
-        { action: 'lb', label: 'Poprzednia grupa' },
-        { action: 'rb', label: 'Następna' },
+        ...(hasInstallState ? [{ action: 'rt' as const, label: 'Filtr' }] : []),
+        { action: 'view', label: 'Sortuj' },
+        { action: 'rb', label: 'Grupa' },
         { action: 'back', label: query ? 'Wyczyść' : 'Start' }
       ]
     }
   )
 
-  const nextSort = (): void => {
+  function nextSort(): void {
     const avail = SORTS.filter(([s]) => s === 'name' || has[s as keyof typeof has])
     const i = avail.findIndex(([s]) => s === sort)
     setSort(avail[(i + 1) % avail.length][0])
+  }
+  function cycleFilter(delta: number): void {
+    const i = FILTERS.findIndex(([f]) => f === filter)
+    setFilter(FILTERS[(i + delta + FILTERS.length) % FILTERS.length][0])
   }
 
   return (
@@ -136,17 +154,16 @@ export function GroupScreen({ category, active }: { category: Category; active: 
         <h1>{category.name}</h1>
         <span className="group__count">{gameCountLabel(games.length)}</span>
         {category.kind === 'steam' && <span className="pill">kolekcja Steam</span>}
-        {(category.smart === 'all' || category.smart === 'installed' || category.smart === 'notInstalled') && (
-          <span className="pill">tylko gry Steam</span>
-        )}
       </header>
-      <div className="toolbar" data-nav-group={`toolbar-${category.id}`}>
+      <div className="toolbar">
+        {mode === 'gamepad' && <Glyph action="y" />}
         <div className="toolbar__search">
           <span className="toolbar__icon" aria-hidden>
             ⌕
           </span>
           <TextField
             inputRef={searchRef}
+            nav={false}
             navKey="search"
             label={`Szukaj w grupie ${category.name}`}
             placeholder="Szukaj po nazwie…"
@@ -159,15 +176,20 @@ export function GroupScreen({ category, active }: { category: Category; active: 
           />
         </div>
         {hasInstallState && (
-        <div className="segmented" role="group" aria-label="Status instalacji">
-          {FILTERS.map(([f, label]) => (
-            <button key={f} data-nav data-key={`filter-${f}`} className={`seg ${filter === f ? 'is-on' : ''}`} onClick={() => setFilter(f)}>
-              {label}
-            </button>
-          ))}
-        </div>
+          <>
+            {mode === 'gamepad' && <Glyph action="lt" />}
+            <div className="segmented" role="group" aria-label="Status instalacji">
+              {FILTERS.map(([f, label]) => (
+                <button key={f} tabIndex={-1} className={`seg ${filter === f ? 'is-on' : ''}`} onClick={() => setFilter(f)}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            {mode === 'gamepad' && <Glyph action="rt" />}
+          </>
         )}
-        <button className="btn btn--ghost" data-nav data-key="sort" onClick={nextSort}>
+        <button className="btn btn--ghost" tabIndex={-1} onClick={nextSort}>
+          {mode === 'gamepad' && <Glyph action="view" />}
           Sortuj: <strong>{SORTS.find(([s]) => s === sort)![1]}</strong>
         </button>
       </div>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react'
-import { currentFocus, move } from './engine'
+import { activeLayer, currentFocus, focusFirst, move } from './engine'
 import type { Dir } from './spatial'
 import { useStore, type InputMode } from '../store'
 import type { PadState } from '@shared/types'
@@ -177,6 +177,13 @@ export function installKeyboard(): () => void {
     const action = keyToAction(e, inText)
     if (!action) return
     e.preventDefault()
+    if (inText && (action === 'back' || action === 'down') && !(e.target as HTMLElement).hasAttribute('data-nav')) {
+      // leaving a field that is not part of D-pad navigation (e.g. group search): back to the games
+      const el = e.target as HTMLElement
+      el.blur()
+      focusFirst((el.closest('[data-screen]') as HTMLElement | null) ?? activeLayer())
+      return
+    }
     if (inText && action === 'back') (e.target as HTMLElement).blur?.()
     dispatch(action, 'keyboard')
   }

@@ -41,11 +41,12 @@ export function TopBar({ tabs }: { tabs: Tab[] }) {
     <header className="topbar">
       <div className="brand">lumen</div>
       {mode === 'gamepad' && <Glyph action="lb" />}
-      <nav className="tabs" ref={trackRef} data-nav-group="tabs" aria-label="Grupy">
+      <nav className="tabs" ref={trackRef} aria-label="Grupy">
         {tabs.map((t) => (
+          // switched with LB/RB (Q/E) or the mouse only — never reachable with the D-pad / arrows
           <button
             key={t}
-            data-nav
+            tabIndex={-1}
             data-key={`tab-${t}`}
             className={`tab ${tab === t ? 'is-active' : ''} ${t === 'settings' ? 'tab--settings' : ''}`}
             onClick={() => setTab(t)}
