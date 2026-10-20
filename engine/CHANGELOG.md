@@ -30,6 +30,10 @@ Plan najbliższych zmian: [ROADMAP.md](ROADMAP.md).
   się nawzajem (401, „nieznane urządzenie”). Kod EmuStart bez zmian.
 - **Nazwa urządzenia Lumen: „<komputer> (Lumen)”** (`lumen.install_device_name`) w `profiles`
   (blokada profilu, znaczniki, kopie zapasowe), `api` (logowanie, menedżer zapisów) i `savemgr`.
+- **Zapisy wszystkich gier przy logowaniu, starcie i wylogowaniu** (`emustart/lumen_saves.py`,
+  `LumenApi.server_logout` / `server_enroll_poll`, `web/app.js` → `logoutUnsent` tylko z `?lumen`):
+  przed wylogowaniem wysłanie niewysłanych paczek (zostały — decyzja gracza), po zalogowaniu i przy
+  starcie pobranie nowszych wersji znanych paczek, gdy tu bez zmian. Kod synchronizacji EmuStart bez zmian.
 
 ## [0.46.2] — 2026-10-20
 

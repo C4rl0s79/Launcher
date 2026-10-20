@@ -70,10 +70,10 @@ export function registerEmustartIpc(handle: Handle, ctx: Ctx): void {
   }
   const call = <T>(method: string, args: unknown[] = [], timeout?: number): Promise<T> => engine.call<T>(method, args, timeout)
 
-  handle(IPC.emuLaunch, async (gameId: string, state?: string): Promise<EmuActionResult> => {
+  handle(IPC.emuLaunch, async (gameId: string, state?: string, takeover?: boolean): Promise<EmuActionResult> => {
     const r = await call<{ ok: boolean; reason?: string; warning?: string; need_install?: { es: string; system: string; steps: string[] }; profile_pin?: boolean }>(
       'launch',
-      [idOf(gameId), typeof state === 'string' ? state : '', false],
+      [idOf(gameId), typeof state === 'string' ? state : '', takeover === true],
       60_000
     )
     if (r.need_install) return { ok: false, error: `Brak emulatora: ${r.need_install.system}.`, needInstall: r.need_install }

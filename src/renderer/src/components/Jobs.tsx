@@ -124,6 +124,16 @@ export function EmuLaunchOverlay() {
   const visible = !!job && job.state !== 'done'
   const ended = job?.state === 'error' || job?.state === 'cancelled'
   const conflict = launch?.phase === 'conflict' ? (launch.conflict ?? []) : []
+  // one game at a time per profile (like Steam): the profile is playing on another device
+  const lockedBy = ended ? launch?.locked_by : undefined
+  const takeover = (): boolean => {
+    if (!job?.gameId) return true
+    const id = job.gameId
+    void api()
+      .emustart.dismiss()
+      .then(() => attempt(api().emustart.launch(id, undefined, true)))
+    return true
+  }
   const choose = (c: SaveChoice): boolean => {
     void attempt(api().emustart.resolveConflict(c))
     return true
@@ -146,7 +156,7 @@ export function EmuLaunchOverlay() {
         return true
       },
       // save conflict: the same buttons as in EmuStart (X this device, Y server, B skip)
-      x: () => (conflict.length ? choose('local') : true),
+      x: () => (conflict.length ? choose('local') : lockedBy ? takeover() : true),
       y: () => (conflict.length ? choose('remote') : true),
       lb: () => true,
       rb: () => true,
@@ -161,11 +171,16 @@ export function EmuLaunchOverlay() {
             { action: 'y', label: 'Weź z serwera' },
             { action: 'back', label: 'Pomiń' }
           ]
-        : job?.cancellable
-          ? [{ action: 'back', label: 'Anuluj pobieranie' }]
-          : ended
-            ? [{ action: 'confirm', label: 'Zamknij' }]
-            : []
+        : lockedBy
+          ? [
+              { action: 'x', label: 'Przejmij profil i graj' },
+              { action: 'back', label: 'Zamknij' }
+            ]
+          : job?.cancellable
+            ? [{ action: 'back', label: 'Anuluj pobieranie' }]
+            : ended
+              ? [{ action: 'confirm', label: 'Zamknij' }]
+              : []
     }
   )
   if (!visible || !job) return null
@@ -198,6 +213,11 @@ export function EmuLaunchOverlay() {
           {job.cancellable && (
             <button className="btn btn--danger" data-nav data-autofocus onClick={() => void api().emustart.cancelLaunch()}>
               Anuluj pobieranie
+            </button>
+          )}
+          {lockedBy && (
+            <button className="btn" data-nav onClick={takeover}>
+              Przejmij profil i graj
             </button>
           )}
           {ended && (

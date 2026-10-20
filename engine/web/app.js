@@ -897,16 +897,38 @@ function loginAccount(text, mode) {
     }, mode === "new"), 50);
   });
 }
+// Lumen: zapisy części gier nie poszły na serwer — wylogowanie dopiero po decyzji gracza
+function logoutUnsent(reason, done) {
+  setTimeout(() => {
+    S.menu = [["Spróbuj wysłać jeszcze raz", () => logoutAsk()],
+              ["Wyloguj mimo to — zapisy zostaną na tym komputerze", async () => {
+                const r = await api().server_logout(true);
+                if (r && r.ok === false) return toast(r.reason || "Nie udało się wylogować.", 7000);
+                await done(r);
+              }],
+              ["Anuluj", () => {}]];
+    S.menuIdx = 0; S.modal = "menu";
+    $("menu").querySelector("h2").textContent = reason;
+    $("menu").classList.remove("hidden");
+    renderMenu();
+  }, 50);
+}
 async function loginDone(account) {
   S.settings = await api().get_settings(); await refreshState();
   toast(`Zalogowano — konto „${account}” na tym urządzeniu.`, 6000);
   openProfiles(true);
 }
 function logoutAsk() {
-  S.menu = [["Wyloguj — to urządzenie straci dostęp do serwera", async () => {
-    await api().server_logout();
+  const done = async (r) => {
     S.settings = await api().get_settings(); await refreshState();
     renderSettings(); toast("Wylogowano z serwera. Gry i zapisy na tym urządzeniu zostały.", 6000);
+  };
+  S.menu = [["Wyloguj — to urządzenie straci dostęp do serwera", async () => {
+    toast("Wysyłam zapisy gier na serwer…", 4000);
+    const r = await api().server_logout();
+    if (r && r.ok === false && r.pending && LUMEN) return logoutUnsent(r.reason, done);   // Lumen: zapisy przed wylogowaniem
+    if (r && r.ok === false) return toast(r.reason || "Nie udało się wylogować.", 7000);
+    await done(r);
   }], ["Anuluj", () => {}]];
   S.menuIdx = 1; S.modal = "menu";
   $("menu").querySelector("h2").textContent = "Wylogować z serwera?";

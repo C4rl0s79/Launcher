@@ -87,8 +87,11 @@ export interface LumenApi {
   }
   /** EmuStart games: every action runs in the EmuStart engine (engine/emustart) */
   emustart: {
-    /** `state`: path of a save state on this PC (from saves()) to start from */
-    launch(gameId: string, state?: string): Promise<EmuActionResult>
+    /**
+     * `state`: path of a save state on this PC (from saves()) to start from; `takeover`: the
+     * profile is playing on another device (lock) and the player chose to take it over
+     */
+    launch(gameId: string, state?: string, takeover?: boolean): Promise<EmuActionResult>
     /** sync status, save states on this PC, PS2 states of all devices */
     saves(gameId: string): Promise<EmuSaves>
     /** copy a PS2 state to the other platform (or here) */

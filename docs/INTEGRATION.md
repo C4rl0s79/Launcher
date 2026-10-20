@@ -197,6 +197,24 @@ Lumen **nie dodaje** własnej synchronizacji — używa klienta EmuStart 0.46.0 
 - koniec sesji = koniec procesu emulatora (`proc.wait()`); emulatory uruchamiane przez proces pośredni
   nie są osobno obsługiwane — **niesprawdzone**.
 
+### 6.0. Jedna gra naraz na profil, zapisy wszystkich gier (Lumen 0.4.5)
+
+- **Jedna gra naraz na profil (jak Steam)**: blokada profilu na serwerze EmuStart (`profiles.lock`,
+  dzierżawa 5 min odnawiana co minutę w trakcie gry, telefon też). Kolejność przy uruchomieniu:
+  blokada → pobranie zapisów gry → gra → wysłanie zapisów → zdjęcie blokady. Gdy profil gra na innym
+  urządzeniu (także samodzielny EmuStart na tym komputerze — od 0.4.4 osobna nazwa urządzenia),
+  uruchomienie w trybie pulpitu pokazuje „Profil gra teraz na urządzeniu …” i **Przejmij profil i
+  graj** (X) albo Zamknij — jak w trybie TV. Gdy mimo to dwa urządzenia zagrają naraz (np. bez
+  połączenia), serwer odrzuca nieaktualną wysyłkę (409) → konflikt do decyzji gracza, nic nie ginie.
+- **Przed wylogowaniem** (`lumen_saves.flush`): wysłanie wszystkich niewysłanych paczek zapisów; gdy
+  coś zostało (serwer nieosiągalny) — tryb TV pyta: spróbuj jeszcze raz / wyloguj mimo to (zapisy
+  zostają na komputerze i wyślą się po zalogowaniu na to samo konto) / anuluj. W trakcie gry
+  wylogowanie jest zablokowane.
+- **Po zalogowaniu i przy starcie** (`lumen_saves.pull_all`): nowsze wersje paczek znanych na tym
+  komputerze (`save_sync`), gdy tutaj bez zmian; konflikty zostają do decyzji przy uruchomieniu gry,
+  gra w trakcie sesji / wysyłania jest pomijana. Gry nigdy nieuruchamiane na tym komputerze — przy
+  pierwszym uruchomieniu (foldery zapisów zależą od emulatora).
+
 ### 6.1. Rozjazd zapisów między Lumenem, EmuStart i telefonem — diagnoza (20.10.2026)
 
 Na prawdziwej bibliotece (Chrono Trigger MSU-1) każdy program widział inne zapisy. Przyczyny z logów:

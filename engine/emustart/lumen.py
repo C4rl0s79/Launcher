@@ -19,7 +19,7 @@ import sys
 import threading
 import time
 
-from emustart import api as api_mod, cache, catalog, libsync, library, lumen_discs, netsrc, profiles, savesync
+from emustart import api as api_mod, cache, catalog, libsync, library, lumen_discs, lumen_saves, netsrc, profiles, savesync
 
 log = logging.getLogger("emustart.lumen")
 
@@ -156,6 +156,10 @@ class LumenApi(api_mod.Api):
         super().__init__()
         self._conflicts: list = []
         self._conflicts_lock = threading.Lock()
+        # zapisy wszystkich znanych gier przy starcie (lumen_saves) — po starcie synchronizacji biblioteki
+        t = threading.Timer(20, lambda: self._sync_all_saves("start"))
+        t.daemon = True
+        t.start()
 
     # konflikty zapisów: EmuStart oddaje je raz (pop) — tu zostają dla obu interfejsów
     def _keep_conflicts(self, items: list) -> list:
@@ -242,6 +246,57 @@ class LumenApi(api_mod.Api):
                                    "installable": bool(steps),
                                    "steps": installer.describe(steps) if steps else []})
         return out
+
+    # ── zapisy wszystkich gier: logowanie, start, wylogowanie (emustart/lumen_saves.py) ──
+    _PLAYING = ("preparing", "downloading", "extracting", "running", "conflict")
+
+    def _busy_games(self) -> set:
+        s = self._session
+        if s and s.phase in self._PLAYING:
+            g = library.game(s.game_id)
+            if g:
+                from emustart import syncclient
+                return {syncclient.game_ids(g)}
+        return set()
+
+    def _sync_all_saves(self, why: str) -> None:
+        def run() -> None:
+            try:
+                from emustart import launcher
+                launcher.wait_post(120)              # najpierw wysyłanie po ostatniej grze
+                if not self._cfg.get("server_key"):
+                    return
+                left = lumen_saves.flush(self._cfg)
+                r = lumen_saves.pull_all(self._cfg, self._busy_games())
+                log.info("zapisy wszystkich gier (%s): pobrano %d, do decyzji %d, niewysłane %d%s", why,
+                         r["downloaded"], r["conflicts"], len(left), f" — {r['offline']}" if r["offline"] else "")
+            except Exception:
+                log.exception("zapisy wszystkich gier")
+        threading.Thread(target=run, daemon=True, name="zapisy-wszystkich-gier").start()
+
+    def server_enroll_poll(self) -> dict:
+        r = super().server_enroll_poll()
+        if r.get("status") == "approved":
+            self._sync_all_saves("logowanie")
+        return r
+
+    def server_logout(self, force: bool = False) -> dict:
+        """Wylogowanie dopiero, gdy zapisy wszystkich gier są na serwerze (jak Steam Cloud). Zostały
+        niewysłane (serwer nieosiągalny) — `pending` i decyzja gracza (`force`): zostają na tym
+        komputerze i wyślą się po ponownym zalogowaniu na to samo konto."""
+        s = self._session
+        if s and s.phase in self._PLAYING:
+            return {"ok": False, "reason": "Trwa gra — wyloguj się po jej zakończeniu (zapisy idą na serwer po grze)."}
+        from emustart import launcher
+        launcher.wait_post(120)
+        if self._cfg.get("server_key") and not force:
+            left = lumen_saves.flush(self._cfg)
+            if left:
+                games = sorted({g for _p, g, *_ in left})
+                return {"ok": False, "pending": len(left), "games": len(games),
+                        "reason": f"Zapisy {len(games)} gier nie poszły jeszcze na serwer (brak połączenia). "
+                                  "Po wylogowaniu zostaną na tym komputerze i wyślą się po zalogowaniu na to samo konto."}
+        return super().server_logout()
 
     def lumen_conflicts_clear(self) -> None:
         with self._conflicts_lock:
