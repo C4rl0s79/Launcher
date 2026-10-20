@@ -303,7 +303,9 @@ class Session:
         if g["multidisc"] and emulators.supports_m3u(exe):
             self.run_dir.mkdir(parents=True, exist_ok=True)
             m3u = self.run_dir / (g["name"] + ".m3u")
-            m3u.write_text("\n".join(str(base / rel) for rel, _s, _m in g["files"]) + "\n",
+            # Lumen (lumen_discs): w playliście tylko płyty — bez ścieżek .bin/.wav obok .cue
+            from emustart import lumen_discs
+            m3u.write_text("\n".join(str(base / rel) for rel in lumen_discs.playlist_files(g["files"])) + "\n",
                            encoding="utf-8")
             return m3u
         if main.suffix.lower() == ".m3u" and not emulators.supports_m3u(exe):

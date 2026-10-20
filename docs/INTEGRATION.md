@@ -14,7 +14,7 @@ Serwer EmuStart pozostaje osobnym programem (EmuStart Server); jego API (`/v1/�
 
 | | SteamLaunch („Lumen”) | EmuStart |
 |---|---|---|
-| Repozytorium | `D:\GIT\SteamLaunch` (`master`, 128eef8) | `D:\GIT\Emustart` = github.com/C4rl0s79/EmuStart (w `engine/` od 20.10.2026: **`main` v0.46.1**, 8b40316 + PR #73) |
+| Repozytorium | `D:\GIT\SteamLaunch` (`master`, 128eef8) | `D:\GIT\Emustart` = github.com/C4rl0s79/EmuStart (w `engine/` od 20.10.2026: **`main` v0.46.1**, 8b40316) |
 | Stos | Electron 44, React 19, TypeScript, electron-vite, zustand, koffi (XInput) | Python 3.14, pywebview 6 (WebView2), interfejs w czystym JS/HTML/CSS (`web/`), PyInstaller |
 | Architektura | proces główny (Steam: pliki VDF/ACF, rejestr, `steam://`, Web API, SteamGridDB, LaunchBox) + renderer React | klient: `Api` (`emustart/api.py`) wołane z UI przez most pywebview (albo `POST /api/<metoda>` w trybie `--browser`); serwer: `server_main.py` (biblioteka, grafiki, konta, urządzenia, emulatory, BIOS-y, zapisy) |
 | Testy (stan wyjściowy) | 103 vitest — wszystkie przechodziły, `tsc` bez błędów | 320 pytest — wszystkie przechodziły |
@@ -106,7 +106,7 @@ małe i opisane w `engine/CHANGELOG.md`:
 | `web/index.html` | CSP: `img-src` także `lumen-art:` | brak |
 | `web/app.js`, `web/options.js` | most `?lumen`, system „Steam”, akcje Steam, „Tryb pulpitu”, wybór gry | brak (aktywne tylko z `?lumen`) |
 | `lumen-engine.spec` (nowy) | PyInstaller: `EmuStartEngine.exe` bez pywebview | brak |
-| `emustart/scanner.py` | gry wielopłytowe: płyty „(Disc A)”, podtytuły płyt, płyty obok gier-katalogów | **tak — także EmuStart Server** (skan biblioteki); w EmuStart: PR #73 |
+| `emustart/lumen_discs.py` (nowy), `emustart/launcher.py` | gry wielopłytowe łączone w kopii biblioteki klienta; playlista `.m3u` bez ścieżek `.bin` | brak (włączane tylko przez `LumenApi`; poprawka playlisty działa także samodzielnie) |
 
 Bezpieczeństwo silnika: HTTP tylko na `127.0.0.1`, sprawdzanie nagłówka Host (DNS rebinding — jak
 w EmuStart), `X-EmuStart` (bez CORS), a dodatkowo losowy token sesji z procesu Lumen. Token jest
@@ -207,9 +207,15 @@ w `Documents`); wersja `portable.exe` rozpakowuje sam program do `%TEMP%` (dlate
 
 ## 6c. Gry wielopłytowe
 
-Jedna pozycja na grę: płyty łączy **skan biblioteki na serwerze** (`scanner.py`: `.m3u`, a bez niej pliki
-„(Disc N)” / „(Disc A)” z tego samego folderu, także z podtytułem płyty). Uruchomienie gry wielopłytowej:
-EmuStart pobiera wszystkie płyty i tworzy playlistę `.m3u` dla emulatora (zmiana płyty w emulatorze).
+Jedna pozycja na grę. Serwer EmuStart (bez zmian) łączy `.m3u` i płyty różniące się samym numerem
+(„(Disc 1)”, „(Disc 2)”). Pozostałe komplety łączy **Launcher** w swojej kopii biblioteki po każdej
+synchronizacji (`emustart/lumen_discs.py`): płyty z literą („(Disc A)”), z podtytułem po numerze
+(„(Disc 1) (GDI)”), płyty `.iso` obok gier-katalogów (Xbox 360). Pierwsza płyta staje się grą z plikami
+całego kompletu, pozostałe są ukryte (nie usunięte — ich numery i pobrane pliki zostają); nazwa gry
+i identyfikator zapisów to te pierwszej płyty, więc zgadzają się z innymi urządzeniami. Płyty, których
+serwer nie zwraca dla pierwszej, są szukane na serwerze osobno. Uruchomienie: EmuStart pobiera
+wszystkie płyty i tworzy playlistę `.m3u` (same płyty, bez ścieżek `.bin`). Na przykładowej
+bibliotece: 36 płyt → 18 gier.
 Liczba płyt: ikona 💿 N na plakacie (pulpit) i przy grze na liście (TV), „Płyty” w szczegółach.
 Wersje regionalne (Europe / Japan / USA…) to osobne gry na serwerze — łączy je dopiero widok pulpitu (§6d).
 

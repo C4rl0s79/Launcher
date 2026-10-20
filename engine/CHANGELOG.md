@@ -17,13 +17,13 @@ Plan najbliższych zmian: [ROADMAP.md](ROADMAP.md).
 - **Nie zmienia się:** EmuStart uruchamiany samodzielnie (`main.py`, bez `EMUSTART_HOME`
   i bez `?lumen`) działa jak dotąd; API serwera (`/v1/…`), format danych, pobieranie,
   uruchamianie, zapisy profili, emulatory i BIOS-y — bez zmian.
-- **Gry wielopłytowe — skan (dotyczy też EmuStart Server):** płyty oznaczone literą („(Disc A)”,
-  3DO D's Diner), płyty z podtytułem po numerze (Redump: „(Disc 1) (GDI)”, „(Disc 2) (NOD)” —
-  C&C, MGS3 Subsistence, Red Alert…) i płyty `.iso` obok gier-katalogów (Xbox 360: Lost Odyssey)
-  łączą się w jedną grę. Gry już połączone mają te same nazwy co dotąd (te same identyfikatory gier
-  i zapisów). „(CD32)”, „(CDTV)”, „(Disk Writer)” nie są już traktowane jak numer płyty.
-  Zmiana działa po aktualizacji serwera i ponownym skanie biblioteki. Do EmuStart: PR #73. Liczba płyt (`discs`) w listach
-  gier dla Lumen (`LumenApi.list_games`, `lumen_library`).
+- **Gry wielopłytowe jako jedna gra — tylko w Lumen** (`emustart/lumen_discs.py`; serwer i skan
+  EmuStart bez zmian): komplety, których serwer nie łączy — płyty z literą („(Disc A)”), z podtytułem
+  po numerze („(Disc 1) (GDI)”), płyty `.iso` obok gier-katalogów (Xbox 360) — łączą się w kopii
+  biblioteki po każdej synchronizacji (pierwsza płyta dostaje pliki kompletu i `multidisc=1`, pozostałe
+  `hidden=1`; nazwa gry i identyfikator zapisów — pierwszej płyty). Brakujące płyty pobierane z serwera
+  osobno (`netsrc.find`). Playlista `.m3u` (`launcher.py`) bez ścieżek `.bin`/`.wav` obok `.cue`.
+  Liczba płyt (`discs`) w listach gier dla Lumen (`LumenApi.list_games`, `lumen_library`).
 
 ## [0.46.1] — 2026-10-20
 

@@ -19,7 +19,7 @@ import sys
 import threading
 import time
 
-from emustart import api as api_mod, cache, catalog, library, profiles, savesync, scanner
+from emustart import api as api_mod, cache, catalog, libsync, library, lumen_discs, netsrc, profiles, savesync
 
 log = logging.getLogger("emustart.lumen")
 
@@ -72,7 +72,7 @@ def disc_counts(es: str | None = None) -> dict:
             files = json.loads(r["files"]) if isinstance(r["files"], str) else r["files"]
         except ValueError:
             continue
-        labels = {sp[1].lower() for f in files if (sp := scanner.disc_split(Path(str(f[0])).stem))}
+        labels = {sp[1].lower() for f in files if (sp := lumen_discs.disc_split(Path(str(f[0])).stem))}
         if len(labels) > 1:
             out[r["id"]] = len(labels)
     return out
@@ -82,6 +82,13 @@ class LumenApi(api_mod.Api):
     """`Api` EmuStart + zestawienia dla widoku pulpitowego Lumen."""
 
     def __init__(self):
+        # gry wielopłytowe jako jedna gra (lumen_discs): po każdej synchronizacji z serwerem i od razu
+        # w zapisanej kopii biblioteki — przed startem Api, które zaczyna synchronizację w tle
+        lumen_discs.install(netsrc, libsync, library)
+        try:
+            lumen_discs.merge(library.db())
+        except Exception:
+            log.exception("łączenie płyt")
         super().__init__()
         self._conflicts: list = []
         self._conflicts_lock = threading.Lock()
