@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { sortedCategories, tabCategoryId, useStore, type Tab } from '../store'
 import { Glyph } from './Hints'
+import { JobsPill } from './Jobs'
+import { api } from '../store'
 
 function Clock() {
   const [now, setNow] = useState(() => new Date())
@@ -18,6 +20,7 @@ export function TopBar({ tabs }: { tabs: Tab[] }) {
   const prefs = useStore((s) => s.prefs)!
   const steam = useStore((s) => s.snapshot?.steam.status)
   const demo = useStore((s) => s.snapshot?.demo)
+  const emu = useStore((s) => s.snapshot?.emustart)
   const mode = useStore((s) => s.inputMode)
   const trackRef = useRef<HTMLDivElement>(null)
   const cats = sortedCategories(prefs)
@@ -34,6 +37,20 @@ export function TopBar({ tabs }: { tabs: Tab[] }) {
     if (t === 'settings') return 'Ustawienia'
     return cats.find((c) => c.id === tabCategoryId(t))?.name ?? '?'
   }
+  const emuLabel = !emu || emu.engine === 'disabled'
+    ? null
+    : emu.engine === 'starting'
+      ? 'EmuStart: uruchamianie…'
+      : emu.engine !== 'ready'
+        ? 'EmuStart nie działa'
+        : !emu.server
+          ? 'EmuStart: nie zalogowano'
+          : emu.server.ok
+            ? `EmuStart${emu.server.name ? `: ${emu.server.name}` : ''}`
+            : emu.server.checking
+              ? 'EmuStart: łączę…'
+              : 'Serwer EmuStart niedostępny'
+  const emuOk = emu?.engine === 'ready' && !!emu.server?.ok
   const steamLabel =
     steam === 'running' ? 'Steam działa' : steam === 'notRunning' ? 'Steam wyłączony' : steam === 'notInstalled' ? 'Brak Steam' : 'Steam: ?'
 
@@ -59,10 +76,20 @@ export function TopBar({ tabs }: { tabs: Tab[] }) {
       {mode === 'gamepad' && <Glyph action="rb" />}
       <div className="topbar__status">
         {demo && <span className="pill pill--demo">Tryb demo</span>}
+        <JobsPill />
+        {emuLabel && (
+          <span className={`pill pill--steam ${emuOk ? 'is-running' : 'is-notRunning'}`} title={emu?.message ?? emuLabel}>
+            <i />
+            {emuLabel}
+          </span>
+        )}
         <span className={`pill pill--steam is-${steam}`} title={steamLabel}>
           <i />
           {steamLabel}
         </span>
+        <button className="pill pill--mode" tabIndex={-1} onClick={() => void api().ui.setMode('fullscreen')} title="Tryb pełnoekranowy (F10 · View+Start)">
+          ⛶ Tryb TV
+        </button>
         <Clock />
       </div>
     </header>

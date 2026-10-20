@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import type { DetailsResult, Game } from '@shared/types'
+import type { DetailsResult, EmuReadiness, EmustartSummary, Game, Job } from '@shared/types'
 import { api, attempt, steamCollectionsOf, useStore } from '../store'
 import { useActions } from '../nav/input'
 import { focusEl, focusFirst } from '../nav/engine'
 import { Art } from '../components/Art'
 import { CategoryPicker } from '../modals/CategoryPicker'
 import { ArtPicker } from '../modals/ArtPicker'
-import { formatBytes, formatLastPlayed, formatPlaytime, htmlToParagraphs, STATE_LABEL } from '../lib/format'
+import { formatBytes, formatEta, formatLastPlayed, formatPlaytime, htmlToParagraphs, STATE_LABEL, stateLabel } from '../lib/format'
 
 interface PrimaryAction {
   label: string
@@ -26,6 +26,25 @@ export function DetailsScreen({ gameId }: { gameId: string }) {
   const [modal, setModal] = useState<'categories' | 'art' | null>(null)
   const [logoOk, setLogoOk] = useState(true)
   const [busy, setBusy] = useState(false)
+  const isEmu = game?.source === 'emustart'
+  const emuSummary = useStore((s) => s.snapshot?.emustart)
+  const allJobs = useStore((s) => s.jobs.jobs)
+  const gameJobs = useMemo(() => allJobs.filter((j) => j.gameId === gameId && j.kind !== 'emuLaunch'), [allJobs, gameId])
+  const installing = allJobs.some((j) => j.kind === 'emuInstall')
+  const [ready, setReady] = useState<EmuReadiness | null>(null)
+
+  // EmuStart: what is missing before the game can start (emulator) — re-checked after installs
+  useEffect(() => {
+    if (!isEmu || emuSummary?.engine !== 'ready' || installing) return
+    let alive = true
+    void api()
+      .emustart.readiness(gameId)
+      .then((r) => alive && setReady(r))
+      .catch(() => alive && setReady(null))
+    return () => {
+      alive = false
+    }
+  }, [isEmu, gameId, emuSummary?.engine, installing])
   const ref = useRef<HTMLDivElement>(null)
   const opener = useRef<HTMLElement | null>(document.activeElement as HTMLElement | null)
 
@@ -88,6 +107,7 @@ export function DetailsScreen({ gameId }: { gameId: string }) {
       if (r) useStore.getState().toast(r.ok ? (r.message ?? 'Gotowe') : (r.error ?? 'Błąd'), r.ok ? 'info' : 'error')
     }
     if (game.source === 'demo') return { label: 'Gra demonstracyjna', disabled: true, note: 'Dane demonstracyjne — akcje są wyłączone.' }
+    if (game.emu) return emuPrimary(game, emuSummary, ready, installing, setBusy)
     if (steamStatus === 'notInstalled') return { label: 'Steam niedostępny', disabled: true, note: 'Nie znaleziono klienta Steam na tym komputerze.' }
     const play = wrap(() => api().game.play(gameId))
     const downloads = wrap(() => api().game.openInSteam(gameId, 'downloads'))
@@ -115,7 +135,7 @@ export function DetailsScreen({ gameId }: { gameId: string }) {
           note: 'Pliki gry wymagają weryfikacji lub naprawy w kliencie Steam.'
         }
     }
-  }, [game, gameId, steamStatus])
+  }, [game, gameId, steamStatus, emuSummary, ready, installing])
 
   if (!game) {
     return createPortal(
@@ -150,14 +170,19 @@ export function DetailsScreen({ gameId }: { gameId: string }) {
     ['Premiera', d?.releaseDate],
     ['Producent', d?.developers?.join(', ')],
     ['Wydawca', d?.publishers?.join(', ')],
-    ['Rozmiar na dysku', game.installed ? formatBytes(game.sizeOnDisk) : undefined],
+    ['Rozmiar na dysku', game.installed && !game.emu ? formatBytes(game.sizeOnDisk) : undefined],
     ['Biblioteka', game.installed ? game.libraryPath : undefined],
+    ['Platforma', game.emu?.system],
+    ['Rozmiar', game.emu ? formatBytes(game.emu.size) : undefined],
+    ['Wersja', game.emu?.tags || undefined],
+    ['Emulator', isEmu && ready?.ok ? ready.emulator || 'nie wybrano' : undefined],
+    ['Źródło', game.emu ? `Serwer EmuStart${emuSummary?.server?.name ? ` (${emuSummary.server.name})` : ''}` : undefined],
     ['Platforma', game.shortcut?.tags.join(', ') || undefined],
     ['Źródło', game.shortcut ? 'Skrót spoza Steam (uruchamiany przez Steam)' : undefined]
   ]
   const presentFacts = facts.filter((f): f is [string, string] => !!f[1])
   const chips = [
-    { label: game.running ? 'Uruchomiona' : STATE_LABEL[game.installState], tone: game.installed ? 'ok' : 'muted' },
+    { label: game.running ? 'Uruchomiona' : stateLabel(game), tone: game.installed ? 'ok' : 'muted' },
     formatPlaytime(game.playtimeMinutes) && { label: `Czas gry: ${formatPlaytime(game.playtimeMinutes)}` },
     formatLastPlayed(game.lastPlayed) && { label: `Ostatnio: ${formatLastPlayed(game.lastPlayed)}` },
     isFav && { label: '★ Ulubiona', tone: 'fav' }
@@ -204,9 +229,10 @@ export function DetailsScreen({ gameId }: { gameId: string }) {
           </div>
         )}
 
-        {(game.installState === 'installing' || game.installState === 'updating' || game.installState === 'updatePaused') && (
+        {!game.emu && (game.installState === 'installing' || game.installState === 'updating' || game.installState === 'updatePaused') && (
           <DownloadStatus game={game} />
         )}
+        {game.emu && gameJobs.map((j) => <EmuJobStatus key={j.id} job={j} />)}
 
         <div className="details__actions" data-nav-group="details-actions">
           <button className="btn" data-nav data-key="fav" onClick={toggleFav}>
@@ -215,9 +241,42 @@ export function DetailsScreen({ gameId }: { gameId: string }) {
           <button className="btn" data-nav data-key="cats" onClick={() => setModal('categories')}>
             Kategorie{myCats.length ? ` (${myCats.length})` : ''}
           </button>
-          <button className="btn" data-nav data-key="art" onClick={() => setModal('art')}>
-            Grafiki
-          </button>
+          {!game.emu && (
+            <button className="btn" data-nav data-key="art" onClick={() => setModal('art')}>
+              Grafiki
+            </button>
+          )}
+          {game.emu && emuSummary?.engine === 'ready' && (
+            <>
+              <button
+                className="btn"
+                data-nav
+                data-key="keep"
+                onClick={async () => {
+                  const r = await attempt(api().emustart.toggleKeep(gameId))
+                  if (r) useStore.getState().toast(r.ok ? (r.message ?? 'Gotowe') : (r.error ?? 'Błąd'), r.ok ? 'info' : 'error')
+                }}
+              >
+                {game.emu.pinned ? '📌 Zachowana na dysku' : game.emu.cached ? 'Zachowaj na dysku' : 'Pobierz na dysk'}
+              </button>
+              {(game.emu.cached || game.emu.pinned || game.emu.copying) && (
+                <button
+                  className="btn btn--danger"
+                  data-nav
+                  data-key="remove"
+                  onClick={async () => {
+                    const r = await attempt(api().emustart.removeLocal(gameId))
+                    if (r) useStore.getState().toast(r.ok ? (r.message ?? 'Usunięto') : (r.error ?? 'Błąd'), r.ok ? 'info' : 'error')
+                  }}
+                >
+                  Usuń z dysku
+                </button>
+              )}
+              <button className="btn" data-nav data-key="tv" onClick={() => void api().ui.setMode('fullscreen')}>
+                Opcje gry w trybie TV
+              </button>
+            </>
+          )}
           {game.source === 'steam' && (
             <>
               <button className="btn" data-nav data-key="steam" onClick={() => void attempt(api().game.openInSteam(gameId, 'details'))}>
@@ -267,7 +326,9 @@ export function DetailsScreen({ gameId }: { gameId: string }) {
           </div>
         )}
         {details === null && game.source !== 'demo' && (
-          <p className="details__loading">{game.shortcut ? 'Szukanie w bazie LaunchBox…' : 'Wczytywanie informacji ze sklepu Steam…'}</p>
+          <p className="details__loading">
+            {game.emu ? 'Wczytywanie opisu z EmuStart…' : game.shortcut ? 'Szukanie w bazie LaunchBox…' : 'Wczytywanie informacji ze sklepu Steam…'}
+          </p>
         )}
         {details && !details.ok && game.source !== 'demo' && <p className="details__muted">{details.error}</p>}
         {details?.ok && d?.source === 'launchbox' && (
@@ -276,7 +337,8 @@ export function DetailsScreen({ gameId }: { gameId: string }) {
             {d.platform ? ` (${d.platform})` : ''}
           </p>
         )}
-        {details?.ok && details.stale && <p className="details__muted">Informacje z pamięci podręcznej (brak połączenia ze sklepem).</p>}
+        {details?.ok && details.stale && !game.emu && <p className="details__muted">Informacje z pamięci podręcznej (brak połączenia ze sklepem).</p>}
+        {details?.ok && d?.source === 'emustart' && <p className="details__muted">Opis i grafiki: biblioteka serwera EmuStart.</p>}
       </div>
 
       {modal === 'categories' && <CategoryPicker gameId={gameId} onClose={() => setModal(null)} />}
@@ -312,6 +374,92 @@ function DownloadStatus({ game }: { game: Game }) {
         </>
       ) : (
         <p className="details__muted">Steam nie podaje jeszcze postępu (gra może czekać w kolejce). Szczegóły w oknie pobierania Steam.</p>
+      )}
+    </div>
+  )
+}
+
+/** EmuStart: the one action that fits the game's state, as EmuStart itself would do it. */
+function emuPrimary(
+  game: Game,
+  emu: EmustartSummary | undefined,
+  ready: EmuReadiness | null,
+  installing: boolean,
+  setBusy: (b: boolean) => void
+): PrimaryAction {
+  const g = game.emu!
+  if (!emu || emu.engine !== 'ready')
+    return {
+      label: emu?.engine === 'starting' ? 'Uruchamianie EmuStart…' : 'EmuStart nie działa',
+      disabled: true,
+      note: emu?.message ?? 'Silnik EmuStart nie działa — gry z serwera są chwilowo niedostępne (szczegóły w Ustawieniach → EmuStart).'
+    }
+  const missing = ready?.ok ? ready.missing.find((m) => m.kind === 'emulator') : undefined
+  if (installing) return { label: 'Instalowanie emulatora…', disabled: true, note: 'Emulator pobiera się z serwera EmuStart (lista zadań u góry).' }
+  if (missing) {
+    if (!missing.installable)
+      return { label: 'Brak emulatora', disabled: true, note: `Nie ma emulatora dla ${missing.system} na tym komputerze, a serwer EmuStart go nie udostępnia. Wskaż emulator w ustawieniach EmuStart: tryb TV → Menu → Ustawienia → Systemy.` }
+    return {
+      label: 'Zainstaluj emulator',
+      note: `Brak emulatora dla ${missing.system} — pobierze się z serwera EmuStart: ${missing.steps.join(', ')}.`,
+      run: async () => {
+        setBusy(true)
+        const r = await attempt(api().emustart.installEmulators([missing.es]))
+        setBusy(false)
+        if (r) useStore.getState().toast(r.ok ? (r.message ?? 'Instalacja rozpoczęta') : (r.error ?? 'Błąd'), r.ok ? 'info' : 'error')
+      }
+    }
+  }
+  const serverOk = !!emu.server?.ok
+  if (!g.cached && !serverOk)
+    return {
+      label: 'Serwer niedostępny',
+      disabled: true,
+      note: emu.server
+        ? 'Ta gra nie jest pobrana, a serwer EmuStart nie odpowiada. Pobrane gry działają bez serwera.'
+        : 'To urządzenie nie jest zalogowane do serwera EmuStart (Ustawienia → EmuStart).'
+    }
+  const run = async (): Promise<void> => {
+    setBusy(true)
+    const r = await attempt(api().emustart.launch(game.id))
+    setBusy(false)
+    if (!r) return
+    if (!r.ok) useStore.getState().toast(r.error ?? 'Nie udało się uruchomić gry.', 'error')
+    else if (r.message) useStore.getState().toast(r.message, 'info')
+  }
+  if (g.cached) return { label: 'Graj', run, note: `${g.system}${ready?.ok && ready.emulator ? ` · ${ready.emulator}` : ''}` }
+  return {
+    label: 'Pobierz i graj',
+    run,
+    note: `Gra pobierze się z serwera EmuStart (${formatBytes(g.size) ?? '?'}) i uruchomi. Zapisy synchronizuje EmuStart przed i po grze.`
+  }
+}
+
+function EmuJobStatus({ job }: { job: Job }) {
+  const p = job.progress
+  const pct = p?.total ? Math.min(100, Math.floor((p.done / p.total) * 100)) : null
+  return (
+    <div className="download">
+      <div className="download__head">
+        <strong>{job.phase}</strong>
+        {pct !== null && (
+          <span>
+            {pct}% · {formatBytes(p!.done) ?? '0 B'} z {formatBytes(p!.total)}
+            {p?.speed ? ` · ${formatBytes(p.speed)}/s` : ''}
+            {formatEta(p?.eta) ? ` · zostało ${formatEta(p?.eta)}` : ''}
+          </span>
+        )}
+      </div>
+      {pct !== null && (
+        <div className="download__bar">
+          <i style={{ width: `${pct}%` }} />
+        </div>
+      )}
+      {job.message && <p className="details__muted">{job.message}</p>}
+      {job.cancellable && (
+        <button className="btn btn--sm btn--danger" data-nav onClick={() => void attempt(api().jobs.cancel(job.id))}>
+          Anuluj
+        </button>
       )}
     </div>
   )

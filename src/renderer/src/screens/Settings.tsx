@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import type { CacheStats, Category, LaunchBoxStatus, SecretName, SettingsPatch } from '@shared/types'
+import type { CacheStats, Category, EmuSettings, LaunchBoxStatus, SecretName, SettingsPatch } from '@shared/types'
 import { api, attempt, gamesForCategory, sortedCategories, useStore } from '../store'
 import { useActions } from '../nav/input'
 import { TextField } from '../components/TextField'
@@ -18,7 +18,9 @@ export function SettingsScreen({ active }: { active: boolean }) {
   )
   return (
     <div className="settings" data-scroll="center">
+      <InterfaceSection />
       <SteamSection />
+      <EmustartSection />
       <ArtSection />
       <LaunchBoxSection />
       <CategoriesSection />
@@ -374,6 +376,182 @@ function NamePrompt({ title, initial, onClose, onSubmit }: { title: string; init
         </button>
       </div>
     </Modal>
+  )
+}
+
+function InterfaceSection() {
+  const settings = useStore((s) => s.settings)!
+  return (
+    <Section
+      title="Tryb interfejsu"
+      desc="Dwa wyglądy tej samej aplikacji: pulpit (ten widok) i tryb TV w stylu EmuStart — z tą samą biblioteką, ustawieniami i listą zadań. Przełączanie nie przerywa pobierania ani gry: F10 albo View + Start na padzie."
+    >
+      <div className="modal__row">
+        <button className="btn btn--primary" data-nav onClick={() => void api().ui.setMode('fullscreen')}>
+          Przełącz na tryb TV
+        </button>
+      </div>
+      <Toggle
+        label="Uruchamiaj w trybie TV"
+        desc="Przy starcie od razu tryb pełnoekranowy w stylu EmuStart."
+        value={settings.startMode === 'fullscreen'}
+        onChange={(v) => void patch({ startMode: v ? 'fullscreen' : 'desktop' })}
+      />
+    </Section>
+  )
+}
+
+function EmustartSection() {
+  const settings = useStore((s) => s.settings)!
+  const emu = useStore((s) => s.snapshot?.emustart)
+  const [es, setEs] = useState<EmuSettings | null>(null)
+  const [home, setHome] = useState(settings.emustartHome ?? '')
+  const [python, setPython] = useState(settings.pythonPath ?? '')
+  const ready = emu?.engine === 'ready'
+  useEffect(() => {
+    if (ready) void api().emustart.settings().then(setEs).catch(() => setEs(null))
+  }, [ready])
+
+  const engineText =
+    emu?.engine === 'ready'
+      ? `działa (EmuStart ${emu.version ?? '?'})`
+      : emu?.engine === 'starting'
+        ? 'uruchamianie…'
+        : emu?.engine === 'disabled'
+          ? 'wyłączony'
+          : `nie działa — ${emu?.message ?? 'brak szczegółów'}`
+  const serverText = !emu?.server
+    ? 'nie zalogowano'
+    : emu.server.ok
+      ? `połączono${emu.server.name ? ` (${emu.server.name})` : ''}${es?.serverVia ? ` · przez: ${es.serverVia}` : ''}`
+      : emu.server.key_rejected
+        ? 'serwer nie przyjmuje tego urządzenia — zaloguj się ponownie'
+        : emu.server.checking
+          ? 'łączenie…'
+          : 'serwer nie odpowiada (pobrane gry działają bez niego)'
+
+  return (
+    <Section
+      title="EmuStart"
+      desc="Gry na emulowane platformy z serwera EmuStart. Pobieranie, emulatory i BIOS-y z serwera, uruchamianie i synchronizację zapisów wykonuje silnik EmuStart (ten sam kod co program EmuStart) — Lumen go uruchamia i pokazuje jego stan."
+    >
+      <Toggle
+        label="Gry z serwera EmuStart"
+        desc="Wyłączone: silnik EmuStart nie jest uruchamiany, w bibliotece zostają tylko gry Steam."
+        value={settings.emustartEnabled}
+        onChange={(v) => void patch({ emustartEnabled: v })}
+      />
+      <dl className="facts facts--compact">
+        <div className="facts__row">
+          <dt>Silnik</dt>
+          <dd>{engineText}</dd>
+        </div>
+        <div className="facts__row">
+          <dt>Serwer</dt>
+          <dd>{serverText}</dd>
+        </div>
+        {es?.account && (
+          <div className="facts__row">
+            <dt>Konto</dt>
+            <dd>
+              {es.account}
+              {emu?.profile ? ` · profil ${emu.profile}` : ''}
+            </dd>
+          </div>
+        )}
+        {emu && (
+          <div className="facts__row">
+            <dt>Biblioteka</dt>
+            <dd>
+              {emu.systems.length
+                ? `${emu.systems.length} platform, ${gameCountLabel(emu.systems.reduce((n, x) => n + x.games, 0))}`
+                : 'pusta'}
+              {emu.fromCache ? ' (ostatnia zapisana kopia — silnik nie działa)' : ''}
+            </dd>
+          </div>
+        )}
+        {es && (
+          <>
+            <div className="facts__row">
+              <dt>Folder emulatorów</dt>
+              <dd>{es.emuRoot || 'nie wybrano'}</dd>
+            </div>
+            <div className="facts__row">
+              <dt>Pobrane gry</dt>
+              <dd>
+                {es.cacheDir} · ostatnie {es.cacheRecent} + zachowane
+              </dd>
+            </div>
+            <div className="facts__row">
+              <dt>Dane EmuStart</dt>
+              <dd>{es.dataDir}</dd>
+            </div>
+          </>
+        )}
+      </dl>
+      {ready && (
+        <div className="modal__row">
+          <button className="btn" data-nav onClick={() => void api().emustart.pickFolder('emu_root').then(setEs)}>
+            Folder emulatorów…
+          </button>
+          <button className="btn" data-nav onClick={() => void api().emustart.pickFolder('cache_dir').then(setEs)}>
+            Folder pobranych gier…
+          </button>
+          <button
+            className="btn"
+            data-nav
+            onClick={async () => {
+              const r = await attempt(api().emustart.refreshLibrary())
+              if (r) useStore.getState().toast(r.ok ? (r.message ?? 'Odświeżanie…') : (r.error ?? 'Błąd'), r.ok ? 'info' : 'error')
+            }}
+          >
+            Odśwież bibliotekę z serwera
+          </button>
+        </div>
+      )}
+      <div className="modal__row">
+        <button className="btn btn--primary" data-nav onClick={() => void api().ui.setMode('fullscreen', 'settings')}>
+          {emu?.server ? 'Konto, profile i emulatory systemów (tryb TV)' : 'Zaloguj do serwera (tryb TV)'}
+        </button>
+        {emu?.engine !== 'disabled' && (
+          <button className="btn" data-nav onClick={() => void api().emustart.restartEngine()}>
+            Uruchom silnik ponownie
+          </button>
+        )}
+      </div>
+      <p className="card__desc">
+        Logowanie (kod z panelu serwera albo adres), profile graczy z PIN-em i wybór emulatora dla każdego systemu są w ustawieniach EmuStart
+        w trybie TV — to te same ekrany co w programie EmuStart.
+      </p>
+      <div className="field-row">
+        <TextField
+          label="Folder danych EmuStart"
+          placeholder="puste = folder Lumen (np. D:\emustart, aby użyć istniejącej instalacji EmuStart)"
+          value={home}
+          onChange={setHome}
+          onSubmit={() => void patch({ emustartHome: home })}
+        />
+        <button className="btn" data-nav onClick={() => void patch({ emustartHome: home })}>
+          Zapisz
+        </button>
+      </div>
+      <p className="card__desc">
+        Folder istniejącej instalacji EmuStart (z config.json, cache, profiles) zostaje użyty na miejscu — nic nie jest kopiowane ani
+        kasowane. Nie uruchamiaj w tym czasie samodzielnego EmuStart z tego samego folderu (Lumen to sprawdza).
+      </p>
+      <div className="field-row">
+        <TextField
+          label="Python dla silnika (wersja ze źródeł)"
+          placeholder="puste = dołączony silnik albo „py -3”"
+          value={python}
+          onChange={setPython}
+          onSubmit={() => void patch({ pythonPath: python })}
+        />
+        <button className="btn" data-nav onClick={() => void patch({ pythonPath: python })}>
+          Zapisz
+        </button>
+      </div>
+    </Section>
   )
 }
 

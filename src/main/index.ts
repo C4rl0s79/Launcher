@@ -1,9 +1,10 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, shell } from 'electron'
-import { promises as fs } from 'node:fs'
+import { existsSync, promises as fs } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { ART_SCHEME, IPC } from '@shared/api'
-import type { ActionResult, ArtKind, ArtOption, Game, LibrarySnapshot, Prefs, SecretName, SettingsPatch, SgdbGame } from '@shared/types'
+import { ART_SCHEME, EMU_UI_SCHEME, IPC } from '@shared/api'
+import { EMU_UI, isModeCombo } from '@shared/emuPad'
+import type { ActionResult, ArtKind, ArtOption, Game, JobsSnapshot, LibrarySnapshot, Prefs, SecretName, SettingsPatch, SgdbGame, UiMode } from '@shared/types'
 import { initLogger, log } from './logger'
 import { ops, PrefsError, PrefsStore } from './store/prefs'
 import { SettingsStore } from './store/settings'
@@ -17,11 +18,21 @@ import { platformForTags } from './launchbox/match'
 import { ArtworkService } from './art/artwork'
 import { isPlayable } from './steam/manifests'
 import { steamId64ToAccountId } from './steam/local'
+import { EmustartEngine, resolveEngineCommand } from './emustart/engine'
+import { EmustartProvider } from './emustart/provider'
+import { emuArtField, emuDetails, isEmuGameId } from './emustart/mapping'
+import { registerEmustartIpc } from './emustart/ipc'
+import { UnifiedLibrary } from './core/unifiedLibrary'
+import { createFullscreenBridge } from './core/fullscreenBridge'
+import { UiModeManager } from './core/uiMode'
 
 const ART_KINDS: ArtKind[] = ['grid', 'hero', 'logo', 'icon']
+/** the EmuStart engine finds Lumen's window by this title (in-game menu, return after a game) */
+const WINDOW_TITLE = 'Lumen'
 
 protocol.registerSchemesAsPrivileged([
-  { scheme: ART_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }
+  { scheme: ART_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
+  { scheme: EMU_UI_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }
 ])
 
 // Separate profile for tests/development: LUMEN_USER_DATA=<dir>
@@ -44,12 +55,32 @@ const paths = {
   metaCache: path.join(userData, 'cache', 'meta'),
   customArt: path.join(userData, 'custom-art'),
   // not under cache/: rebuilding it means a ~110 MB download, so "clear cache" keeps it
-  launchbox: path.join(userData, 'launchbox')
+  launchbox: path.join(userData, 'launchbox'),
+  // EmuStart engine data (config, game cache, profiles) unless the user picks an existing EmuStart folder
+  emustartHome: path.join(userData, 'emustart'),
+  // last library read from the engine — shown (not playable) when the engine cannot start
+  emustartLibrary: path.join(userData, 'emustart-library.json')
 }
+
+/** engine/ next to the app: the project root in development, resources/ when packaged */
+const engineRoot = (): string => (app.isPackaged ? process.resourcesPath : app.getAppPath())
+const emuWebDir = (): string => path.join(engineRoot(), 'engine', 'web')
 
 const settings = new SettingsStore(paths.settings, paths.secrets)
 const prefs = new PrefsStore(paths.prefs)
 const library = new LibraryService(settings, paths.account, path.join(userData, 'first-seen.json'))
+const engine = new EmustartEngine({
+  command: () =>
+    resolveEngineCommand({
+      resourcesPath: app.isPackaged ? process.resourcesPath : undefined,
+      appPath: engineRoot(),
+      pythonPath: settings.get().pythonPath
+    }),
+  home: () => settings.get().emustartHome || paths.emustartHome,
+  windowTitle: WINDOW_TITLE
+})
+const emu = new EmustartProvider(engine, paths.emustartLibrary)
+const unified = new UnifiedLibrary(library, emu)
 const meta = new StoreMetadataProvider(paths.metaCache, () => settings.get().language)
 const launchbox = new LaunchBoxService(paths.launchbox)
 const pads = new XInputPoller()
@@ -68,6 +99,7 @@ const artwork = new ArtworkService({
 })
 
 let win: BrowserWindow | null = null
+let modes: UiModeManager | null = null
 let launchedAppId: number | undefined
 const artRev = new Map<string, number>()
 
@@ -76,7 +108,7 @@ function send(channel: string, ...args: unknown[]): void {
 }
 
 function findGame(gameId: string): Game | undefined {
-  return library.current.games.find((g) => g.id === gameId)
+  return unified.game(gameId)
 }
 
 function steamAppIdOf(gameId: string): number | undefined {
@@ -87,6 +119,8 @@ function steamAppIdOf(gameId: string): number | undefined {
 function fail(error: string): ActionResult {
   return { ok: false, error }
 }
+
+const artUrl = (gameId: string, kind: ArtKind): string => `${ART_SCHEME}://img/${encodeURIComponent(gameId)}/${kind}?r=${artRev.get(gameId) ?? 0}`
 
 // ---------------- window ----------------
 
@@ -99,7 +133,7 @@ function createWindow(): void {
     minHeight: 600,
     show: false,
     backgroundColor: '#0a0c11',
-    title: 'Lumen',
+    title: WINDOW_TITLE,
     autoHideMenuBar: true,
     fullscreen: s.startFullscreen,
     webPreferences: {
@@ -111,8 +145,17 @@ function createWindow(): void {
     }
   })
   Menu.setApplicationMenu(null)
-  win.once('ready-to-show', () => win?.show())
-  win.on('focus', () => send(IPC.appFocus, true))
+  win.on('page-title-updated', (e) => e.preventDefault())
+  win.once('ready-to-show', () => {
+    win?.show()
+    if (settings.get().startMode === 'fullscreen') modes?.setMode('fullscreen')
+    else modes?.preload()
+  })
+  win.on('focus', () => {
+    send(IPC.appFocus, true)
+    // keyboard focus belongs to the visible interface
+    if (modes?.mode === 'fullscreen') modes.activeContents.focus()
+  })
   win.on('minimize', () => log.info('window', 'minimized'))
   win.on('restore', () => log.info('window', 'restored'))
   win.on('blur', () => send(IPC.appFocus, false))
@@ -120,14 +163,31 @@ function createWindow(): void {
   win.webContents.on('will-navigate', (e, url) => {
     if (!url.startsWith(process.env.ELECTRON_RENDERER_URL ?? 'file:')) e.preventDefault()
   })
-  win.webContents.on('before-input-event', (_e, input) => {
-    if (input.type === 'keyDown' && input.key === 'F11') win?.setFullScreen(!win.isFullScreen())
-    if (input.type === 'keyDown' && input.key === 'F12' && !app.isPackaged) win?.webContents.toggleDevTools()
-  })
+  win.webContents.on('before-input-event', (_e, input) => hotkeys(input, win!.webContents))
   win.webContents.on('render-process-gone', (_e, d) => log.error('app', `renderer gone: ${d.reason}`))
 
   if (process.env.ELECTRON_RENDERER_URL) void win.loadURL(process.env.ELECTRON_RENDERER_URL)
   else void win.loadFile(path.join(__dirname, '../renderer/index.html'))
+
+  modes = new UiModeManager(win, {
+    preloadDir: path.join(__dirname, '../preload'),
+    locate: (gameId) => {
+      const g = findGame(gameId)
+      if (g?.source === 'steam') return { es: 'steam', id: g.id }
+      const row = emu.row(gameId)
+      return row ? { es: row.es, id: row.id } : null
+    },
+    onInput: (input, wc) => hotkeys(input, wc)
+  })
+  modes.on('mode', (mode: UiMode, selection: string | null) => send(IPC.uiMode, mode, selection))
+}
+
+/** F10 / View+Start: switch interface; F11: window fullscreen (desktop); F12: DevTools (development). */
+function hotkeys(input: Electron.Input, wc: Electron.WebContents): void {
+  if (input.type !== 'keyDown') return
+  if (input.key === 'F10') modes?.toggle()
+  if (input.key === 'F11' && modes?.mode !== 'fullscreen') win?.setFullScreen(!win.isFullScreen())
+  if (input.key === 'F12' && !app.isPackaged) wc.toggleDevTools()
 }
 
 function restoreWindow(): void {
@@ -146,6 +206,7 @@ function registerArtProtocol(): void {
       const [, rawId, kind] = u.pathname.split('/')
       const gameId = decodeURIComponent(rawId ?? '')
       if (!ART_KINDS.includes(kind as ArtKind)) return new Response('bad kind', { status: 400 })
+      if (isEmuGameId(gameId)) return await emuArt(gameId, kind)
       const game = findGame(gameId)
       const shortcutId = /^shortcut:(\d+)$/.exec(gameId)
       const file = shortcutId
@@ -163,11 +224,104 @@ function registerArtProtocol(): void {
   })
 }
 
+/** EmuStart game art comes from the engine (its offline copy of the server's media). */
+async function emuArt(gameId: string, kind: string): Promise<Response> {
+  const field = emuArtField(kind)
+  const url = field ? emu.row(gameId)?.[field] : undefined
+  if (!url || !engine.baseUrl) return new Response('not found', { status: 404 })
+  const res = await net.fetch(new URL(url, engine.baseUrl).toString())
+  if (!res.ok) return new Response('not found', { status: 404 })
+  const headers = new Headers(res.headers)
+  headers.set('Cache-Control', 'max-age=86400')
+  return new Response(res.body, { status: 200, headers })
+}
+
+const UI_TYPES: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.png': 'image/png',
+  '.svg': 'image/svg+xml',
+  '.webp': 'image/webp',
+  '.jpg': 'image/jpeg',
+  '.ico': 'image/x-icon',
+  '.woff2': 'font/woff2'
+}
+
+/**
+ * lumen-emu://ui/… — EmuStart's UI files (engine/web) for the fullscreen interface; /media and
+ * /assets go to the engine (art from the server, system logos). A fixed origin keeps the UI
+ * working while the engine restarts or is missing (Steam games still work then).
+ */
+function registerEmuUiProtocol(): void {
+  protocol.handle(EMU_UI_SCHEME, async (req) => {
+    try {
+      const u = new URL(req.url)
+      const rel = decodeURIComponent(u.pathname).replace(/^\/+/, '')
+      if (rel.startsWith('media/') || rel.startsWith('assets/')) {
+        if (!engine.baseUrl) return new Response('engine not running', { status: 503 })
+        return await net.fetch(`${engine.baseUrl}/${rel}${u.search}`)
+      }
+      const base = emuWebDir()
+      const file = path.resolve(base, rel || 'index.html')
+      if (!file.startsWith(base + path.sep) || !existsSync(file)) return new Response('not found', { status: 404 })
+      const body = await fs.readFile(file)
+      return new Response(body, {
+        status: 200,
+        headers: { 'Content-Type': UI_TYPES[path.extname(file).toLowerCase()] ?? 'application/octet-stream', 'Cache-Control': 'no-cache' }
+      })
+    } catch (e) {
+      log.warn('ui', `lumen-emu error: ${(e as Error).message}`)
+      return new Response('error', { status: 500 })
+    }
+  })
+}
+
 function bumpArt(gameId: string, kind?: ArtKind): void {
   artwork.invalidate(gameId, kind)
   const rev = (artRev.get(gameId) ?? 0) + 1
   artRev.set(gameId, rev)
   send(IPC.artChanged, gameId, rev)
+}
+
+// ---------------- actions shared by both interfaces ----------------
+
+/** Start a Steam game (or a non-Steam shortcut) through the Steam client. */
+async function playSteam(gameId: string): Promise<ActionResult> {
+  const game = findGame(gameId)
+  if (!game) return fail('Nie znaleziono gry w bibliotece.')
+  if (game.source === 'demo') return fail('To jest gra demonstracyjna — nie można jej uruchomić.')
+  if (game.source === 'emustart') return fail('Gry z serwera EmuStart uruchamia EmuStart.')
+  if (library.current.steam.status === 'notInstalled') return fail('Nie znaleziono klienta Steam na tym komputerze.')
+  if (!isPlayable(game.installState))
+    return fail(game.source === 'shortcut' ? 'Nie znaleziono programu tego skrótu na dysku.' : 'Gra nie jest gotowa do uruchomienia.')
+  if (game.shortcut) await openSteamUri(shortcutRunUri(game.shortcut.gameId64))
+  else await openSteam('run', game.appId)
+  launchedAppId = game.appId
+  const steamRunning = library.current.steam.status === 'running'
+  if (settings.get().afterLaunch === 'minimize') setTimeout(() => win?.minimize(), steamRunning ? 1500 : 4000)
+  return { ok: true, message: steamRunning ? 'Uruchamianie przez Steam…' : 'Uruchamianie Steam i gry…' }
+}
+
+/** Ask the Steam client to install a game (Steam shows its own dialog and runs the download). */
+async function installSteam(gameId: string): Promise<ActionResult> {
+  const game = findGame(gameId)
+  if (!game) return fail('Nie znaleziono gry w bibliotece.')
+  if (game.source !== 'steam') return fail('Tej pozycji nie instaluje się przez Steam.')
+  if (library.current.steam.status === 'notInstalled') return fail('Nie znaleziono klienta Steam na tym komputerze.')
+  await openSteam('install', game.appId)
+  return { ok: true, message: 'Steam otworzy okno instalacji — potwierdź tam lokalizację. Instalacją zarządza klient Steam.' }
+}
+
+async function openInSteam(gameId: string, view: 'details' | 'store' | 'downloads'): Promise<ActionResult> {
+  const game = findGame(gameId)
+  if (view === 'downloads') {
+    await openSteam('downloads')
+    return { ok: true }
+  }
+  if (!game || game.source !== 'steam') return fail('Ta pozycja nie jest grą ze sklepu Steam.')
+  await openSteam(view, game.appId)
+  return { ok: true }
 }
 
 // ---------------- IPC ----------------
@@ -190,49 +344,23 @@ async function updatePrefs(fn: (p: Prefs) => Prefs): Promise<Prefs> {
 }
 
 function registerIpc(): void {
-  handle(IPC.libraryGet, () => library.current)
+  handle(IPC.libraryGet, () => unified.current)
   handle(IPC.libraryRefresh, async (includeAccount: boolean) => {
     if (includeAccount) await library.refreshAccount(true)
-    return library.scan()
+    await Promise.all([library.scan(), engine.state === 'ready' ? emu.refresh() : undefined])
+    return unified.current
   })
 
-  handle(IPC.gamePlay, async (gameId: string): Promise<ActionResult> => {
-    const game = findGame(gameId)
-    if (!game) return fail('Nie znaleziono gry w bibliotece.')
-    if (game.source === 'demo') return fail('To jest gra demonstracyjna — nie można jej uruchomić.')
-    if (library.current.steam.status === 'notInstalled') return fail('Nie znaleziono klienta Steam na tym komputerze.')
-    if (!isPlayable(game.installState))
-      return fail(game.source === 'shortcut' ? 'Nie znaleziono programu tego skrótu na dysku.' : 'Gra nie jest gotowa do uruchomienia.')
-    if (game.shortcut) await openSteamUri(shortcutRunUri(game.shortcut.gameId64))
-    else await openSteam('run', game.appId)
-    launchedAppId = game.appId
-    const steamRunning = library.current.steam.status === 'running'
-    if (settings.get().afterLaunch === 'minimize') setTimeout(() => win?.minimize(), steamRunning ? 1500 : 4000)
-    return { ok: true, message: steamRunning ? 'Uruchamianie przez Steam…' : 'Uruchamianie Steam i gry…' }
-  })
-
-  handle(IPC.gameInstall, async (gameId: string): Promise<ActionResult> => {
-    const game = findGame(gameId)
-    if (!game) return fail('Nie znaleziono gry w bibliotece.')
-    if (game.source !== 'steam') return fail('Tej pozycji nie instaluje się przez Steam.')
-    if (library.current.steam.status === 'notInstalled') return fail('Nie znaleziono klienta Steam na tym komputerze.')
-    await openSteam('install', game.appId)
-    return { ok: true, message: 'Steam otworzy okno instalacji — potwierdź tam lokalizację.' }
-  })
-
-  handle(IPC.gameOpen, async (gameId: string, view: 'details' | 'store' | 'downloads'): Promise<ActionResult> => {
-    const game = findGame(gameId)
-    if (view === 'downloads') {
-      await openSteam('downloads')
-      return { ok: true }
-    }
-    if (!game || game.source !== 'steam') return fail('Ta pozycja nie jest grą ze sklepu Steam.')
-    await openSteam(view, game.appId)
-    return { ok: true }
-  })
+  handle(IPC.gamePlay, (gameId: string) => playSteam(gameId))
+  handle(IPC.gameInstall, (gameId: string) => installSteam(gameId))
+  handle(IPC.gameOpen, (gameId: string, view: 'details' | 'store' | 'downloads') => openInSteam(gameId, view))
 
   handle(IPC.gameDetails, async (gameId: string, force?: boolean) => {
     const game = findGame(gameId)
+    if (game?.emu) {
+      if (engine.state !== 'ready') return { ok: false, error: engine.message ?? 'Silnik EmuStart nie działa — opis jest niedostępny.' }
+      return emuDetails(await engine.call<Record<string, unknown>>('game_detail', [game.emu.id], 30_000))
+    }
     if (game?.shortcut) {
       const st = await launchbox.status()
       if (!st.ready) return { ok: false, error: 'Opisy gier spoza Steama wymagają bazy LaunchBox — pobierz ją w Ustawieniach.' }
@@ -282,6 +410,10 @@ function registerIpc(): void {
       await library.scan()
       if (before.steamIdOverride !== after.steamIdOverride) void library.refreshAccount(true)
     }
+    if (before.emustartEnabled !== after.emustartEnabled || before.emustartHome !== after.emustartHome || before.pythonPath !== after.pythonPath) {
+      if (after.emustartEnabled) void engine.restart()
+      else void engine.stop()
+    }
     send(IPC.settingsChanged, after)
     return after
   })
@@ -298,6 +430,7 @@ function registerIpc(): void {
   })
 
   handle(IPC.artOptions, async (gameId: string, kind: ArtKind) => {
+    if (isEmuGameId(gameId)) return { ok: false, error: 'Grafiki gier EmuStart wybiera się na serwerze EmuStart.' }
     if (!sgdb.enabled) return { ok: false, error: 'Dodaj klucz SteamGridDB w Ustawieniach, aby przeglądać grafiki.' }
     const appId = steamAppIdOf(gameId)
     const manual = prefs.get().art[gameId]
@@ -395,6 +528,64 @@ function registerIpc(): void {
     await shell.openExternal(url)
   })
   handle(IPC.appQuit, () => app.quit())
+
+  registerEmustartIpc(handle, {
+    engine,
+    provider: emu,
+    win: () => win,
+    jobs: () => unified.jobs,
+    dataDir: () => settings.get().emustartHome || paths.emustartHome
+  })
+
+  handle(IPC.uiGetMode, () => modes?.mode ?? 'desktop')
+  handle(IPC.uiSetMode, (mode: UiMode, then?: 'settings') =>
+    modes?.setMode(mode === 'fullscreen' ? 'fullscreen' : 'desktop', then === 'settings' ? 'settings' : undefined)
+  )
+  ipcMain.on(IPC.uiSelect, (_e, gameId: unknown) => modes?.select(typeof gameId === 'string' ? gameId : null))
+
+  registerFullscreenBridge()
+}
+
+/** Fullscreen interface (EmuStart's UI): EmuStart calls go to the engine, Steam is answered here. */
+function registerFullscreenBridge(): void {
+  const bridge = createFullscreenBridge({
+    engineReady: () => engine.state === 'ready',
+    engineMessage: () => engine.message,
+    engineCall: (m, a) => engine.call(m, a, m === 'launch' || m === 'install_missing' || m === 'server_enroll' ? 120_000 : 60_000),
+    steamGames: () => library.current.games,
+    steamStatus: () => library.current.steam.status,
+    artUrl: (id, kind) => artUrl(id, kind),
+    steamDetails: (id) => {
+      const appId = steamAppIdOf(id)
+      return appId ? meta.get(appId) : Promise.resolve({ ok: false as const, error: 'Brak danych.' })
+    },
+    play: playSteam,
+    install: installSteam,
+    openInSteam,
+    toggleFavorite: async (id) => (await updatePrefs((p) => ops.toggleFavorite(p, id))).favorites.includes(id),
+    isFavorite: (id) => prefs.get().favorites.includes(id),
+    runningAppId: () => library.current.steam.runningAppId,
+    steamJobs: () => unified.jobs.jobs.filter((j) => j.source === 'steam'),
+    setMode: (m) => modes?.setMode(m),
+    select: (id) => modes?.select(id),
+    emuLumenId: (n) => emu.lumenId(n),
+    pickFolder: async (start) => {
+      if (!win) return ''
+      const r = await dialog.showOpenDialog(win, { defaultPath: start || undefined, properties: ['openDirectory', 'createDirectory'] })
+      return r.canceled ? '' : (r.filePaths[0] ?? '')
+    },
+    quit: () => app.quit(),
+    log: (m) => log.info('emu-ui', m.slice(0, 300))
+  })
+  ipcMain.handle(EMU_UI.call, async (e, name: unknown, args: unknown) => {
+    if (!modes?.emuContents || e.sender !== modes.emuContents) throw new Error('forbidden')
+    try {
+      return await bridge.call(String(name), Array.isArray(args) ? args : [])
+    } catch (err) {
+      log.warn('emu-ui', `${String(name)}: ${(err as Error).message}`)
+      throw new Error((err as Error).message)
+    }
+  })
 }
 
 // ---------------- lifecycle ----------------
@@ -403,13 +594,29 @@ app.on('second-instance', () => restoreWindow())
 
 app.whenReady().then(async () => {
   log.info('app', `Lumen ${app.getVersion()} starting (electron ${process.versions.electron}, packaged=${app.isPackaged})`)
-  await Promise.all([settings.init(), prefs.init()])
+  await Promise.all([settings.init(), prefs.init(), emu.init()])
   registerArtProtocol()
+  registerEmuUiProtocol()
   registerIpc()
 
   launchbox.on('changed', () => void launchbox.status().then((st) => send(IPC.launchboxChanged, st)))
-  library.on('snapshot', (s: LibrarySnapshot) => {
+  unified.on('snapshot', (s: LibrarySnapshot) => {
     send(IPC.librarySnapshot, s)
+    // EmuStart platforms as group tabs — only from a live engine library, never from an empty one
+    const systems = s.emustart.systems
+    if (s.emustart.engine === 'ready' && !s.emustart.fromCache && systems.length && ops.syncEmustartSystems(prefs.get(), systems) !== prefs.get()) {
+      updatePrefs((p) => ops.syncEmustartSystems(p, systems)).catch((e) => log.error('prefs', 'platform sync failed', e))
+    }
+  })
+  unified.on('jobs', (j: JobsSnapshot) => send(IPC.jobsChanged, j))
+  engine.on('event', (ev: { type: string }) => {
+    if (ev.type === 'quit') app.quit()
+  })
+  engine.on('state', (st) => {
+    // the fullscreen UI reads the engine state when it loads — reload it once the engine is up
+    if (st === 'ready') modes?.reloadEmu()
+  })
+  library.on('snapshot', (s: LibrarySnapshot) => {
     // mirror Steam collections as read-only categories (skipped when they could not be read,
     // so a missing file never wipes the user's pins)
     if (s.collections && prefs.get() !== ops.syncSteamCollections(prefs.get(), s.collections)) {
@@ -425,17 +632,44 @@ app.whenReady().then(async () => {
   createWindow()
   // controller: passive XInput polling, only while Lumen has focus (never while a game runs)
   settings.setRuntimeInfo({ xinputAvailable: pads.available })
+  let combo = false
   pads.start(
-    () => settings.get().gamepadBackend === 'xinput' && !!win && !win.isDestroyed() && win.isFocused() && !win.isMinimized(),
-    (state) => send(IPC.padState, state)
+    () =>
+      // LUMEN_NO_PAD=1: automated UI tests ignore controllers connected to this PC
+      process.env.LUMEN_NO_PAD !== '1' &&
+      (settings.get().gamepadBackend === 'xinput' || modes?.mode === 'fullscreen') &&
+      !!win &&
+      !win.isDestroyed() &&
+      win.isFocused() &&
+      !win.isMinimized(),
+    (state) => {
+      // View + Start: switch between the desktop and fullscreen interfaces
+      const nowCombo = state.some(isModeCombo)
+      if (nowCombo && !combo) modes?.toggle()
+      combo = nowCombo
+      if (nowCombo) return
+      if (modes?.mode === 'fullscreen') modes.emuContents?.send(EMU_UI.pad, state)
+      else send(IPC.padState, state)
+    }
   )
   library.start().catch((e) => log.error('library', 'start failed', e))
+  if (settings.get().emustartEnabled) engine.start().catch((e) => log.error('engine', 'start failed', e))
 })
 
 app.on('window-all-closed', () => {
   library.stop()
+  emu.stop()
   void artwork.flush()
   app.quit()
+})
+
+// let the engine finish (save uploads after the last game) before Lumen exits
+let engineStopped = false
+app.on('before-quit', (e) => {
+  if (engineStopped || engine.state === 'disabled' || engine.state === 'missing') return
+  e.preventDefault()
+  engineStopped = true
+  void engine.stop().finally(() => app.quit())
 })
 
 process.on('unhandledRejection', (e) => log.error('app', 'unhandled rejection', e))

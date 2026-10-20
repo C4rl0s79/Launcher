@@ -1,8 +1,8 @@
 {
   "name": "lumen-launcher",
   "productName": "Lumen",
-  "version": "0.1.0",
-  "description": "Couch-friendly launcher for your Steam library",
+  "version": "0.2.0",
+  "description": "Couch-friendly launcher for Steam and EmuStart (emulated) games",
   "main": "./out/main/index.js",
   "author": "Carlos",
   "license": "UNLICENSED",
@@ -14,8 +14,10 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "dist": "electron-vite build && electron-builder --win --config electron-builder.yml",
-    "dist:dir": "electron-vite build && electron-builder --win --dir --config electron-builder.yml"
+    "dist": "npm run build:engine && electron-vite build && electron-builder --win --config electron-builder.yml",
+    "dist:dir": "npm run build:engine && electron-vite build && electron-builder --win --dir --config electron-builder.yml",
+    "build:engine": "cd engine && py -3 -m PyInstaller --noconfirm --log-level WARN lumen-engine.spec",
+    "test:engine": "cd engine && py -3 -m pytest -q -p no:cacheprovider tests"
   },
   "devDependencies": {
     "@fontsource-variable/manrope": "^5.3.0",

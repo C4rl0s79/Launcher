@@ -24,7 +24,15 @@ def bundle_dir() -> Path:
     return Path(getattr(sys, "_MEIPASS", app_dir()))
 
 
-APP = app_dir()
+def data_home() -> Path:
+    """Katalog danych (config, data, cache, profile, logi). Lumen uruchamia EmuStart jako
+    silnik bez okna i podaje własny katalog w EMUSTART_HOME (może to być folder istniejącej
+    instalacji EmuStart — dane zostają na miejscu); bez zmiennej — obok programu."""
+    home = os.environ.get("EMUSTART_HOME", "").strip()
+    return Path(home).resolve() if home else app_dir()
+
+
+APP = data_home()
 DATA = APP / "data"
 MEDIA = DATA / "media"
 DB_PATH = DATA / "library.sqlite"

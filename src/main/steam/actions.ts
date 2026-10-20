@@ -37,13 +37,17 @@ export function shortcutRunUri(gameId64: string): string {
   return `steam://rungameid/${gameId64}`
 }
 
+/**
+ * Development / automated UI tests: LUMEN_DRY_RUN=1 logs Steam actions and emulator launches
+ * instead of performing them (no game starts, no Steam dialog opens). Never set in normal use.
+ */
+export const DRY_RUN = process.env.LUMEN_DRY_RUN === '1'
+
 export async function openSteamUri(uri: string): Promise<void> {
-  log.info('steam', `open ${uri}`)
-  await shell.openExternal(uri)
+  log.info('steam', `${DRY_RUN ? 'DRY RUN, not opening' : 'open'} ${uri}`)
+  if (!DRY_RUN) await shell.openExternal(uri)
 }
 
 export async function openSteam(action: SteamUriAction, appId?: number): Promise<void> {
-  const uri = steamUri(action, appId)
-  log.info('steam', `open ${uri}`)
-  await shell.openExternal(uri)
+  await openSteamUri(steamUri(action, appId))
 }

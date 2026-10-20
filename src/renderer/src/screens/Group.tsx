@@ -8,6 +8,7 @@ import { LibraryNotice } from '../components/LibraryNotice'
 import { toggleFavoriteOfFocused, VirtualPosterGrid } from '../components/PosterGrid'
 import { gameCountLabel } from '../lib/format'
 import { Glyph } from '../components/Hints'
+import { EmuNotice } from '../components/EmuNotice'
 
 // One group (tab in the top bar): every game of the category as a Steam-style poster grid.
 
@@ -154,6 +155,7 @@ export function GroupScreen({ category, active }: { category: Category; active: 
         <h1>{category.name}</h1>
         <span className="group__count">{gameCountLabel(games.length)}</span>
         {category.kind === 'steam' && <span className="pill">kolekcja Steam</span>}
+        {category.kind === 'emustart' && <span className="pill">EmuStart</span>}
       </header>
       <div className="toolbar">
         {mode === 'gamepad' && <Glyph action="y" />}
@@ -194,6 +196,7 @@ export function GroupScreen({ category, active }: { category: Category; active: 
         </button>
       </div>
       {category.smart === 'all' && <LibraryNotice />}
+      {category.kind === 'emustart' && <EmuNotice />}
       {games.length ? (
         <VirtualPosterGrid games={games} favs={favs} onOpen={(g) => openDetails(g.id)} navGroup={`grid-${category.id}`} />
       ) : (

@@ -15,8 +15,12 @@ const defaults = (): StoredSettings => ({
   showTools: false,
   demoMode: false,
   gamepadBackend: 'xinput',
+  startMode: 'desktop',
+  emustartEnabled: true,
   language: 'polish'
 })
+
+const cleanPath = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() && v.length < 1024 ? v.trim() : undefined)
 
 function migrate(raw: unknown): StoredSettings {
   const d = defaults()
@@ -31,7 +35,11 @@ function migrate(raw: unknown): StoredSettings {
     startFullscreen: r.startFullscreen === true,
     showTools: r.showTools === true,
     demoMode: r.demoMode === true,
-    gamepadBackend: r.gamepadBackend === 'chromium' ? 'chromium' : 'xinput'
+    gamepadBackend: r.gamepadBackend === 'chromium' ? 'chromium' : 'xinput',
+    startMode: r.startMode === 'fullscreen' ? 'fullscreen' : 'desktop',
+    emustartEnabled: r.emustartEnabled !== false,
+    emustartHome: cleanPath(r.emustartHome),
+    pythonPath: cleanPath(r.pythonPath)
   }
 }
 

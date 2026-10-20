@@ -12,3 +12,6 @@ secrets.json
 .vite/
 coverage/
 LumenData/
+
+# local integration-test data (test server, test profiles)
+.lumen-test/

@@ -1,5 +1,9 @@
 # Architektura i ograniczenia
 
+> Od 0.2.0 Lumen obsługuje także gry z serwera EmuStart (silnik EmuStart w `engine/`) i ma drugi,
+> pełnoekranowy tryb w stylu EmuStart. Ten dokument opisuje część Steam; całość integracji, wspólny
+> rdzeń i stan sprawdzenia: [INTEGRATION.md](INTEGRATION.md).
+
 ## Decyzja: osobna aplikacja + lokalne pliki Steam + steam:// + opcjonalne Web API
 
 | Wariant | Wykonalność | Utrzymanie | Biblioteka | Uruchamianie / instalacja | Postęp pobierania | Ryzyko |
@@ -139,7 +143,8 @@ Gry mają stabilny klucz `steam:<appid>` (lub `demo:<n>`). Tytuł nigdy nie jest
 
 `Game.source` i prefiks identyfikatora (`steam:`) wydzielają źródło; scalanie (`library/merge.ts`)
 i akcje (`main/index.ts` → `steam/actions.ts`) są jedynymi miejscami zależnymi od Steama. Nowe źródło
-wymaga własnego skanera + mapowania akcji. Celowo nie implementowano innych integracji.
+wymaga własnego skanera + mapowania akcji. Drugim źródłem jest EmuStart (`main/emustart/`, `core/`) —
+zob. [INTEGRATION.md](INTEGRATION.md).
 
 ## Metadane gier spoza Steama — LaunchBox Games DB
 

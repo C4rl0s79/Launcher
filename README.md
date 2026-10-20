@@ -1,4 +1,10 @@
-# Lumen — launcher biblioteki Steam do obsługi z kanapy
+# Lumen — launcher gier Steam i EmuStart do obsługi z kanapy
+
+> **Lumen + EmuStart:** jedna aplikacja dla gier Steam i gier na emulowane platformy z serwera
+> [EmuStart](engine/README.md). Dwa wyglądy tej samej aplikacji: **tryb pulpitu** (Lumen) i **tryb TV**
+> (pełnoekranowy, w stylu EmuStart) — wspólna biblioteka, ustawienia i lista zadań, przełączanie
+> F10 albo View + Start bez restartu. Architektura i stan integracji: [docs/INTEGRATION.md](docs/INTEGRATION.md),
+> migracja danych: [docs/MIGRATION.md](docs/MIGRATION.md).
 
 Lumen to lokalna aplikacja desktopowa (Windows) z przejrzystym, ciemnym interfejsem do przeglądania
 i uruchamiania gier Steam klawiaturą, myszą lub kontrolerem. Górny pasek to **Start** (ostatnio grane
@@ -22,7 +28,10 @@ aktywności znajomych.
 
 - Windows 10/11 x64 (inne systemy nie były testowane).
 - Zainstalowany klient Steam (bez niego aplikacja działa, ale nie ma czego pokazać — jest tryb demo).
-- Do budowania ze źródeł: Node.js 22+ (sprawdzone na 24.16) i npm.
+- Gry EmuStart: dostęp do serwera EmuStart (EmuStart Server) i konto na nim.
+- Do budowania ze źródeł: Node.js 22+ (sprawdzone na 24.16) i npm, Python 3.12+ (sprawdzone na 3.14)
+  z pakietami z `engine/requirements.txt` (`pip install -r engine/requirements.txt`; do zbudowania
+  silnika także `pip install pyinstaller`).
 
 ## Szybki start (ze źródeł)
 
@@ -34,7 +43,8 @@ npm install
 npm run dev
 ```
 
-`npm run dev` uruchamia aplikację z przeładowaniem na żywo. Wersja produkcyjna bez serwera deweloperskiego:
+`npm run dev` uruchamia aplikację z przeładowaniem na żywo. Silnik EmuStart startuje ze źródeł
+(`py -3 engine/engine_main.py`; inny Python: Ustawienia → EmuStart albo zmienna `LUMEN_PYTHON`). Wersja produkcyjna bez serwera deweloperskiego:
 
 ```bash
 npm run build
@@ -49,6 +59,9 @@ npm start
 ```bash
 npm run dist
 ```
+
+`npm run dist` buduje najpierw silnik EmuStart (`npm run build:engine` → `engine/dist/EmuStartEngine/`,
+PyInstaller), który trafia do `resources\engine\` — wersja zbudowana nie wymaga Pythona.
 
 Wynik w katalogu `release/`:
 
@@ -77,6 +90,21 @@ Aby zobaczyć wszystkie posiadane gry:
    W razie potrzeby wpisz inne w polu „Inne SteamID64”.
 4. Jeśli Steam zwraca pustą listę, ustaw w profilu Steam: *Prywatność → Szczegóły gry → Publiczne*.
 
+### Serwer EmuStart (gry na emulowane platformy)
+
+1. Na komputerze z serwerem: panel EmuStart Server → **Dodaj urządzenie** (link logowania / kod QR)
+   albo `EmuStartServer.exe --login-link` (link do schowka).
+2. W Lumen: **Ustawienia → EmuStart → „Zaloguj do serwera (tryb TV)”** (albo F10 → Start → Ustawienia
+   → Zaloguj) → wklej link → „Mam konto” / „Nowe konto” → nazwa i hasło konta.
+3. Biblioteka przychodzi z serwera; każda platforma pojawia się jako grupa na górnym pasku. Folder
+   emulatorów i pobranych gier: Ustawienia → EmuStart. Emulatory i BIOS-y pobierają się z serwera.
+4. Istniejąca instalacja EmuStart: Ustawienia → EmuStart → „Folder danych EmuStart” = folder programu
+   EmuStart (dane używane na miejscu, bez kopiowania — szczegóły w [docs/MIGRATION.md](docs/MIGRATION.md)).
+
+Gry EmuStart: „Pobierz i graj” / „Graj”, „Pobierz na dysk” (zostaje na stałe), „Usuń z dysku”.
+Zapisy synchronizuje EmuStart przez serwer przed i po grze (stan faktyczny i ograniczenia:
+[docs/INTEGRATION.md §6](docs/INTEGRATION.md)). Gry Steam synchronizuje Steam Cloud.
+
 ### SteamGridDB (grafiki — opcjonalnie)
 
 1. Zaloguj się na <https://www.steamgriddb.com> i skopiuj klucz z *Preferences → API*
@@ -103,6 +131,8 @@ dla konta Windows, więc na innym komputerze trzeba je wpisać ponownie).
 | `cache\meta\` | opisy gier ze sklepu Steam (14 dni) | tak |
 | `cache\account-library.json` | ostatnia lista gier konta (używana offline) | nie |
 | `logs\lumen.log` | log diagnostyczny (klucze są maskowane) | — |
+| `emustart\` | dane silnika EmuStart (config, pobrane gry, profile, `logs\emustart.log`), jeśli nie wskazano innego folderu | nie |
+| `emustart-library.json` | ostatnia biblioteka EmuStart (widoczna, gdy silnik nie działa) | nie |
 
 Klucze nigdy nie trafiają do repozytorium ani do logów.
 
@@ -120,6 +150,10 @@ Klucze nigdy nie trafiają do repozytorium ani do logów.
 | Ustawienia | O | Start (☰) |
 | Sortowanie w grupie | V | View (⧉) |
 | Pełny ekran | F11 | — |
+| Tryb pulpitu ⇄ tryb TV | F10 | View + Start |
+
+W trybie TV obowiązuje sterowanie EmuStart (A — graj, przytrzymane A — opcje, Y — przypnij / ulubiona
+dla gier Steam, X — filtry, Start — menu, A + Y przez 2 s w grze — menu w grze).
 
 Mysz działa wszędzie. Pola tekstowe przy obsłudze padem otwierają klawiaturę ekranową
 (A — wpisz, X — usuń, Y — spacja, LB — wielkie litery, Start — gotowe).
@@ -140,6 +174,13 @@ npm test
 npm run typecheck
 ```
 
+```bash
+npm run test:engine
+```
+
+Serwer testowy EmuStart (tylko 127.0.0.1, plik-atrapa zamiast gry) do testów integracyjnych:
+`py -3 scripts/test-server.py .lumen-test/srv` — link logowania w `.lumen-test/srv/login.txt`.
+
 Zakres testów i checklista testów ręcznych: [docs/TESTING.md](docs/TESTING.md).
 Architektura i ograniczenia integracji: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
@@ -151,3 +192,6 @@ Architektura i ograniczenia integracji: [docs/ARCHITECTURE.md](docs/ARCHITECTURE
 | `LUMEN_STEAM_PATH=<katalog>` / `none` | wymuszenie ścieżki Steam / symulacja braku Steam |
 | `LUMEN_OFFLINE=1` | symulacja braku sieci (każde żądanie HTTP kończy się błędem) |
 | `LUMEN_DEBUG=1` | dodatkowe logi na konsoli |
+| `LUMEN_PYTHON=<python.exe>` | Python dla silnika EmuStart w wersji ze źródeł |
+| `LUMEN_DRY_RUN=1` | **tryb testowy**: akcje `steam://` i uruchamianie emulatorów tylko w logu (żadna gra nie startuje) |
+| `LUMEN_NO_PAD=1` | **tryb testowy**: ignoruje pady podłączone do komputera (testy automatyczne UI) |

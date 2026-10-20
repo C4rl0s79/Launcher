@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { LumenApi } from '@shared/api'
-import type { Category, Game, LibrarySnapshot, Prefs, Settings, SteamCollection } from '@shared/types'
+import type { Category, Game, JobsSnapshot, LibrarySnapshot, Prefs, Settings, SteamCollection } from '@shared/types'
 
 declare global {
   interface Window {
@@ -24,6 +24,10 @@ export interface Toast {
 
 interface State {
   snapshot: LibrarySnapshot | null
+  /** one task list shared with the fullscreen interface (Steam downloads, EmuStart jobs) */
+  jobs: JobsSnapshot
+  /** jobs panel open */
+  jobsOpen: boolean
   prefs: Prefs | null
   settings: Settings | null
   artRev: Record<string, number>
@@ -32,6 +36,8 @@ interface State {
   inputMode: InputMode
   toasts: Toast[]
   setSnapshot(s: LibrarySnapshot): void
+  setJobs(j: JobsSnapshot): void
+  setJobsOpen(open: boolean): void
   setPrefs(p: Prefs): void
   setSettings(s: Settings): void
   bumpArt(gameId: string, rev: number): void
@@ -56,6 +62,8 @@ const savedTab = (): Tab => {
 
 export const useStore = create<State>((set) => ({
   snapshot: null,
+  jobs: { jobs: [], emu: null },
+  jobsOpen: false,
   prefs: null,
   settings: null,
   artRev: {},
@@ -64,6 +72,8 @@ export const useStore = create<State>((set) => ({
   inputMode: 'keyboard',
   toasts: [],
   setSnapshot: (snapshot) => set({ snapshot }),
+  setJobs: (jobs) => set({ jobs }),
+  setJobsOpen: (jobsOpen) => set({ jobsOpen }),
   setPrefs: (prefs) => set({ prefs }),
   setSettings: (settings) => set({ settings }),
   bumpArt: (gameId, rev) => set((s) => ({ artRev: { ...s.artRev, [gameId]: rev } })),
@@ -75,7 +85,11 @@ export const useStore = create<State>((set) => ({
     }
     set({ tab })
   },
-  openDetails: (detailsId) => set({ detailsId }),
+  openDetails: (detailsId) => {
+    // the fullscreen interface opens on the same game after a mode switch
+    if (detailsId) api().ui.select(detailsId)
+    set({ detailsId })
+  },
   setInputMode: (inputMode) => set((s) => (s.inputMode === inputMode ? s : { inputMode })),
   toast: (text, kind = 'info') =>
     set((s) => {
@@ -100,12 +114,12 @@ export async function attempt<T>(p: Promise<T>): Promise<T | undefined> {
 // ---------- selectors ----------
 
 /**
- * Games with a real install state (Steam apps, demo data). Shortcuts to emulated games are always
- * "installed" and never downloaded, so the built-in all / installed / to-install groups leave them
- * out; they live in their Steam collections (one per platform), favourites and the home screen.
+ * Steam apps (and demo data) — the "Steam" group. Shortcuts to emulated games are always
+ * "installed" and never downloaded, so they live in their Steam collections (one per platform),
+ * favourites and the home screen. EmuStart games have their own platform groups.
  */
 export function storeGames(games: Game[]): Game[] {
-  return games.filter((g) => g.source !== 'shortcut')
+  return games.filter((g) => g.source === 'steam' || g.source === 'demo')
 }
 
 export function gamesForCategory(cat: Category, games: Game[], prefs: Prefs, collections: SteamCollection[] | null): Game[] {
@@ -115,6 +129,7 @@ export function gamesForCategory(cat: Category, games: Game[], prefs: Prefs, col
     const ids = new Set(col.appIds)
     return games.filter((g) => (g.source === 'steam' || g.source === 'shortcut') && ids.has(g.appId))
   }
+  if (cat.kind === 'emustart') return games.filter((g) => g.emu?.es === cat.emuSystem)
   const favs = new Set(prefs.favorites)
   switch (cat.smart) {
     case 'recent':
@@ -137,7 +152,7 @@ export function gamesForCategory(cat: Category, games: Game[], prefs: Prefs, col
 
 /** Steam collections (read-only) that contain this game. */
 export function steamCollectionsOf(game: Game, prefs: Prefs, collections: SteamCollection[] | null): Category[] {
-  if (game.source === 'demo' || !collections) return []
+  if (game.source === 'demo' || game.source === 'emustart' || !collections) return []
   return sortedCategories(prefs).filter(
     (c) => c.kind === 'steam' && collections.find((col) => col.id === c.steamCollectionId)?.appIds.includes(game.appId)
   )

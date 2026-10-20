@@ -1,8 +1,11 @@
 // Types shared between the main process, preload bridge and renderer.
 // Game identity is always the stable `id` ("steam:<appid>"), never the title.
 
-/** steam = Steam app; shortcut = non-Steam game added to Steam (shortcuts.vdf); demo = fake data */
-export type GameSource = 'steam' | 'shortcut' | 'demo'
+/**
+ * steam = Steam app; shortcut = non-Steam game added to Steam (shortcuts.vdf); demo = fake data;
+ * emustart = game on the EmuStart server, downloaded and run with an emulator by the EmuStart engine
+ */
+export type GameSource = 'steam' | 'shortcut' | 'demo' | 'emustart'
 
 /** Install state derived from Steam's appmanifest StateFlags (see main/steam/manifests.ts). */
 export type InstallState =
@@ -24,7 +27,7 @@ export interface DownloadProgress {
 }
 
 /** Where we learned about this game. Local-only detection is NOT the full owned library. */
-export type Provenance = 'localManifest' | 'accountApi' | 'steamShortcut' | 'demo'
+export type Provenance = 'localManifest' | 'accountApi' | 'steamShortcut' | 'demo' | 'emustartServer'
 
 export interface Game {
   id: string
@@ -56,6 +59,33 @@ export interface Game {
     /** id for steam://rungameid */
     gameId64: string
   }
+  /** only for EmuStart games (source 'emustart') */
+  emu?: EmuGameInfo
+}
+
+/** EmuStart-specific part of a game. `id` is the engine's local number (changes per device);
+ *  Game.id uses the stable `sid` (same on every device: system + game name on the server). */
+export interface EmuGameInfo {
+  id: number
+  sid: string
+  es: string
+  system: string
+  tags: string
+  size: number
+  /** complete copy in the local game cache — playable without the server */
+  cached: boolean
+  /** kept locally on purpose (outside the "last N games" cache limit) */
+  pinned: boolean
+  /** a download of this game is in progress */
+  copying: boolean
+  genre?: string
+  year?: string
+  players?: string
+  developer?: string
+  publisher?: string
+  hasBox: boolean
+  hasSnap: boolean
+  hasLogo: boolean
 }
 
 export type SteamClientStatus = 'running' | 'notRunning' | 'notInstalled' | 'unknown'
@@ -98,12 +128,47 @@ export interface LibrarySnapshot {
   demo: boolean
   scannedAt: number
   warnings: string[]
+  /** EmuStart engine and server (the Steam part is in `steam`) */
+  emustart: EmustartSummary
+}
+
+export type EngineState = 'disabled' | 'starting' | 'ready' | 'missing' | 'error'
+
+export interface EmuServerState {
+  ok: boolean
+  name?: string
+  checking?: boolean
+  key_rejected?: boolean
+  reason?: string
+}
+
+export interface EmuSystem {
+  es: string
+  display: string
+  games: number
+  cached: number
+  emulator: string
+}
+
+export interface EmustartSummary {
+  engine: EngineState
+  /** why the engine is not ready (missing Python, crash…) */
+  message?: string
+  version?: string
+  /** null = this device is not logged in to an EmuStart server */
+  server: EmuServerState | null
+  profile?: string
+  systems: EmuSystem[]
+  /** the library shown comes from the last saved copy (engine not running) */
+  fromCache: boolean
+  /** emulator root folder set on this PC */
+  configured: boolean
 }
 
 export interface GameDetails {
   appId: number
   fetchedAt: number
-  source: 'steamStore' | 'launchbox'
+  source: 'steamStore' | 'launchbox' | 'emustart'
   name?: string
   shortDescription?: string
   descriptionHtml?: string
@@ -142,10 +207,14 @@ export type SmartCategoryType = 'recent' | 'installed' | 'favorites' | 'notInsta
 export interface Category {
   id: string
   name: string
-  /** smart = built-in rule, custom = Lumen category, steam = mirror of a Steam collection (read-only) */
-  kind: 'smart' | 'custom' | 'steam'
+  /**
+   * smart = built-in rule, custom = Lumen category, steam = mirror of a Steam collection (read-only),
+   * emustart = platform (system) of the EmuStart server library (read-only, follows the server)
+   */
+  kind: 'smart' | 'custom' | 'steam' | 'emustart'
   smart?: SmartCategoryType
   steamCollectionId?: string
+  emuSystem?: string
   pinned: boolean
   /** order among pinned categories on the home screen */
   order: number
@@ -202,6 +271,14 @@ export interface Settings {
   showTools: boolean
   demoMode: boolean
   gamepadBackend: GamepadBackend
+  /** interface shown at start: desktop (Lumen look) or fullscreen (EmuStart look) */
+  startMode: UiMode
+  /** run the EmuStart engine (emulated games from an EmuStart server) */
+  emustartEnabled: boolean
+  /** EmuStart data folder (config, game cache, profiles); empty = Lumen's own folder */
+  emustartHome?: string
+  /** Python used to run the engine from sources (dev); empty = bundled engine or `py -3` */
+  pythonPath?: string
   /** filled in by the main process: XInput could be loaded on this PC */
   xinputAvailable?: boolean
   language: string
@@ -213,7 +290,18 @@ export interface Settings {
 export type SettingsPatch = Partial<
   Pick<
     Settings,
-    'steamIdOverride' | 'artPriority' | 'afterLaunch' | 'restoreAfterGame' | 'startFullscreen' | 'showTools' | 'demoMode' | 'gamepadBackend'
+    | 'steamIdOverride'
+    | 'artPriority'
+    | 'afterLaunch'
+    | 'restoreAfterGame'
+    | 'startFullscreen'
+    | 'showTools'
+    | 'demoMode'
+    | 'gamepadBackend'
+    | 'startMode'
+    | 'emustartEnabled'
+    | 'emustartHome'
+    | 'pythonPath'
   >
 >
 
@@ -247,3 +335,97 @@ export interface CacheStats {
 }
 
 export type ActionResult = { ok: true; message?: string } | { ok: false; error: string }
+
+// ---------- jobs (one queue for both interfaces) ----------
+
+export type JobKind = 'steamDownload' | 'emuLaunch' | 'emuDownload' | 'emuInstall' | 'saveUpload' | 'libraryRefresh'
+
+export interface JobProgress {
+  done: number
+  total: number
+  /** bytes per second */
+  speed?: number
+  /** seconds */
+  eta?: number
+}
+
+/**
+ * One task shown in both interfaces. Built from the real state of the integration that runs it:
+ * Steam manifests (Steam runs the download) or the EmuStart engine.
+ */
+export interface Job {
+  id: string
+  kind: JobKind
+  source: 'steam' | 'emustart'
+  gameId?: string
+  title: string
+  /** human readable phase, e.g. "Pobieranie", "Rozpakowywanie", "Gra uruchomiona" */
+  phase: string
+  state: 'active' | 'running' | 'done' | 'error' | 'cancelled' | 'queued'
+  progress?: JobProgress
+  message?: string
+  cancellable: boolean
+  /** Steam runs this download — Lumen can only show it and open the Steam window */
+  managedBySteam?: boolean
+}
+
+/** EmuStart launch session as reported by the engine (launch_status). */
+export interface EmuLaunchStatus {
+  phase: 'idle' | 'preparing' | 'downloading' | 'extracting' | 'running' | 'finished' | 'error' | 'cancelled'
+  game_id?: number
+  title?: string
+  system?: string
+  message?: string
+  mode?: string
+  copying?: boolean
+  locked_by?: string
+  missing_core?: boolean
+  notice?: string
+  progress?: { done: number; total: number; left?: number; speed?: number; eta?: number; file?: number; files?: number }
+}
+
+export interface SaveConflict {
+  profile?: string
+  file?: string
+  at?: number
+  [k: string]: unknown
+}
+
+export interface EmuRuntime {
+  launch: EmuLaunchStatus
+  /** save files waiting to be sent to the server ("" = none) */
+  postPending: string
+  conflicts: SaveConflict[]
+  server: EmuServerState | null
+}
+
+export interface JobsSnapshot {
+  jobs: Job[]
+  emu: EmuRuntime | null
+}
+
+export type EmuMissing = { kind: 'emulator'; es: string; system: string; installable: boolean; steps: string[] }
+
+export type EmuReadiness = { ok: true; emulator: string; system: string; missing: EmuMissing[] } | { ok: false; reason: string }
+
+export interface EmuActionResult {
+  ok: boolean
+  message?: string
+  error?: string
+  /** launch could not start: these components are missing */
+  needInstall?: { es: string; system: string; steps: string[] }
+}
+
+export interface EmuSettings {
+  dataDir: string
+  emuRoot: string
+  cacheDir: string
+  cacheRecent: number
+  account?: string
+  serverVia?: string
+  enroll?: { url?: string; code?: string } | null
+  profiles: { id: number; name: string }[]
+  profileId?: number
+}
+
+export type UiMode = 'desktop' | 'fullscreen'

@@ -1,5 +1,29 @@
 # Testy
 
+## Lumen + EmuStart (0.2.0) — zob. też [INTEGRATION.md §8](INTEGRATION.md)
+
+Automatyczne:
+- `tests/emustart.test.ts` (20) — model gry EmuStart (stabilny id z serwera, stany, brak łączenia po tytule),
+  grupy platform (dodawanie, przypięcia, zmiany z serwera, ochrona przed usunięciem, migracja), lista zadań
+  (pobieranie Steam tylko z prawdziwymi licznikami i jako „zarządzane przez Steam”, fazy uruchamiania
+  EmuStart, kopie, emulatory, wysyłka zapisów, błędy widoczne), most trybu TV (Steam jako system, gry
+  Steam w wierszach EmuStart, granie przez Steam z `RunningAppID`, instalacja niezainstalowanej gry
+  przez Steam bez udawania gotowości, ulubione wspólne, działanie bez silnika), pad (mapowanie XInput,
+  powtarzanie, kombinacja View + Start).
+- `engine/tests/test_lumen_engine.py` (6) — `EMUSTART_HOME`, token sesji `/api`, zachowanie bez tokenu
+  (samodzielny EmuStart), biblioteka bez PIN-ów i tokenów, konflikty dla obu interfejsów, wyjście.
+- `npm run test:engine` — pełny zestaw EmuStart (326).
+
+Ręcznie / integracyjnie (20.10.2026, `LUMEN_DRY_RUN=1`, `LUMEN_NO_PAD=1`, serwer `scripts/test-server.py`):
+- [x] start ze źródeł i spakowanej wersji (`release/win-unpacked`, `EmuStartEngine.exe`), silnik gotowy ~1 s;
+- [x] logowanie urządzenia linkiem z panelu, biblioteka serwera w obu trybach, grupa platformy;
+- [x] pobranie gry („Pobierz na dysk”), usunięcie, ponowne pobranie — ten sam stan w obu trybach;
+- [x] brak emulatora → czytelna informacja (serwer testowy nie udostępnia emulatorów);
+- [x] tryb TV: system „Steam”, lista z grafikami i opisem, przełączanie F10/menu w obie strony z zachowaniem gry;
+- [ ] gra EmuStart uruchomiona emulatorem, instalacja emulatora i BIOS-ów z serwera, menu A + Y, zapisy
+      przed/po grze i konflikty — wymaga prawdziwego serwera z emulatorami (nie wykonano);
+- [ ] pełna obsługa padem w trybie TV, instalator NSIS, istniejący folder EmuStart jako `emustartHome`.
+
 ## Automatyczne (`npm test`)
 
 102 testy (vitest), bez sieci i bez prawdziwego Steama (fixture'y w `tests/fixtures`):

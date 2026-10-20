@@ -4,11 +4,14 @@
 //   shot <file.png>        capture a screenshot
 //   key <Key> [count]      send a key press (e.g. ArrowRight, Enter, Escape, f)
 // Start the app with: npx electron . --remote-debugging-port=9333
+// Two views exist (desktop UI, fullscreen EmuStart UI): set CDP_TARGET to pick one.
 
 const [port = '9333', cmd, ...args] = process.argv.slice(2)
 
 const targets = await (await fetch(`http://127.0.0.1:${port}/json`)).json()
-const page = targets.find((t) => t.type === 'page' && !t.url.startsWith('devtools'))
+// CDP_TARGET=<url part> picks the view: e.g. "lumen-emu" = fullscreen (EmuStart UI), "index.html" = desktop
+const want = process.env.CDP_TARGET
+const page = targets.find((t) => t.type === 'page' && !t.url.startsWith('devtools') && (!want || t.url.includes(want)))
 if (!page) throw new Error('no page target')
 const ws = new WebSocket(page.webSocketDebuggerUrl)
 await new Promise((r, j) => {

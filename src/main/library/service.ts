@@ -24,6 +24,9 @@ import { demoGames } from './demo'
 
 const ACCOUNT_TTL_MS = 6 * 3600 * 1000
 
+/** The Steam service knows nothing about EmuStart; the unified library fills this in (core/unifiedLibrary.ts). */
+const NO_EMUSTART: LibrarySnapshot['emustart'] = { engine: 'disabled', server: null, systems: [], fromCache: false, configured: false }
+
 interface AccountCache {
   steamId?: string
   fetchedAt: number
@@ -43,7 +46,8 @@ export class LibraryService extends EventEmitter {
     collections: null,
     demo: false,
     scannedAt: 0,
-    warnings: []
+    warnings: [],
+    emustart: NO_EMUSTART
   }
   private accountCache: JsonFile<AccountCache>
   private account: AccountCache | null = null
@@ -193,7 +197,8 @@ export class LibraryService extends EventEmitter {
       collections,
       demo: settings.demoMode,
       scannedAt: Date.now(),
-      warnings
+      warnings,
+      emustart: NO_EMUSTART
     }
     this.watchFolders(libraryFolders, installPath && accountId ? collectionsDir(installPath, accountId) : undefined)
     this.emitIfChanged()

@@ -4,6 +4,11 @@
 
 const $ = (id) => document.getElementById(id);
 const api = () => window.pywebview.api;
+// Lumen: ten interfejs jako tryb pełnoekranowy Lumen (most `?lumen`, gry Steam jako system „Steam”)
+const LUMEN = new URLSearchParams(location.search).has("lumen") && !!window.lumenEmu;
+// metody Lumen (wybór gry, tryb, akcje Steam) — obsługuje je Lumen, nie emustart/api.py
+const lumenCall = (name, ...args) => window.lumenEmu.call(name, args);
+const isSteam = (g) => !!g && (g.source === "steam" || String(g.id).startsWith("steam:"));
 
 // błąd w interfejsie: na ekran i do logu (logs/emustart.log), zamiast cichej, martwej klawiatury
 let uiErrors = 0;
@@ -278,7 +283,7 @@ function renderSystems() {
   $("sysName").textContent = s ? s.display : "";
   $("sysMeta").textContent = s
     ? `${s.games} ${plural(s.games, "gra", "gry", "gier")}` +
-      (s.cached ? ` · ${s.cached} w pamięci podręcznej` : "") +
+      (s.cached ? (s.source === "steam" ? ` · ${s.cached} zainstalowanych` : ` · ${s.cached} w pamięci podręcznej`) : "") +
       (s.emulator ? ` · ${s.emulator}` : " · brak emulatora")
     : "";
   setHints(n ? [["dpad", "System"], ["a", "Wybierz (przytrzymaj: opcje)"], ["start", "Menu"]] : [["start", "Menu"]]);
@@ -362,9 +367,15 @@ function renderGames() {
   for (let i = Math.max(0, top); i < Math.min(n, top + vis); i++) {
     const g = S.games[i];
     const icons = [];
+    if (isSteam(g)) {
+      if (S.copying.has(g.id)) icons.push('<span class="tag d">⬇ Steam</span>');
+      if (g.favorite) icons.push('<span class="tag p">★</span>');
+      if (g.cached) icons.push('<span class="tag c">zainstalowana</span>');
+    } else {
     if (S.copying.has(g.id)) icons.push('<span class="tag d">⬇ kopiuje</span>');
     if (g.pinned) icons.push('<span class="tag p">📌</span>');
     if (g.cached) icons.push('<span class="tag c">lokalnie</span>');
+    }
     html.push(`<div class="row${i === S.gameIdx ? " sel" : ""}" data-i="${i}" style="top:${(i - top) * rh}px">` +
       (S.state?.games_logo && g.logo ? `<img class="tlogo" src="${esc(g.logo)}" alt="${esc(g.title)}">` : `<span class="t">${esc(g.title)}</span>`) +
       `<span class="g">${esc(listTags(g.tags))}</span>` +
@@ -377,7 +388,10 @@ function renderGames() {
     // prawy przycisk myszy / długie dotknięcie — opcje gry (jak przytrzymane A)
     el.addEventListener("contextmenu", (ev) => { ev.preventDefault(); S.gameIdx = +el.dataset.i; renderGames(); openGameOptions(); });
   });
-  setHints([["a", "Graj (przytrzymaj: opcje)"], ["x", "Filtry"], ["y", S.games[S.gameIdx]?.pinned ? "Odepnij" : "Przypnij"],
+  const cur = S.games[S.gameIdx];
+  const yLabel = isSteam(cur) ? (cur.favorite ? "Usuń z ulubionych" : "Ulubiona") : cur?.pinned ? "Odepnij" : "Przypnij";
+  const aLabel = isSteam(cur) && !cur.cached ? "Zainstaluj w Steam (przytrzymaj: opcje)" : "Graj (przytrzymaj: opcje)";
+  setHints([["a", aLabel], ["x", "Filtry"], ["y", yLabel],
             ["lb", "Strona"], ["lt", "Litera"], ["b", "Wstecz"], ["start", "Menu"]]);
   schedulePreview();
   // okładki dla widocznej strony — w tle
@@ -462,6 +476,7 @@ async function updatePreview() {
   }
   $("pvTitle").textContent = g.title;
   $("pvTags").textContent = g.tags;
+  if (LUMEN) lumenCall("lumen_selected", g.id);
   setArt(g);
   if (!g.box || !g.snap || (!g.logo && !g.art_logo)) {
     api().request_art([g.id], !g.logo && !g.art_logo);   // logo zaznaczonej gry — zawsze
@@ -478,7 +493,8 @@ async function updatePreview() {
   const d = await api().game_detail(g.id);
   if (S.games[S.gameIdx] !== g || !d.id) return;
   setVariant(g, d);
-  const status = d.copying ? '<span class="st-n">kopiowanie do pamięci podręcznej…</span>'
+  const status = d.source === "steam" ? `<span class="${d.cached ? "st-c" : "st-n"}">${esc(d.steam_status)}</span>`
+    : d.copying ? '<span class="st-n">kopiowanie do pamięci podręcznej…</span>'
     : d.pinned && d.cached ? '<span class="st-p">przypięta, lokalnie</span>'
     : d.pinned ? '<span class="st-p">przypięta (pobierze się)</span>'
     : d.cached ? '<span class="st-c">w pamięci podręcznej</span>'
@@ -599,6 +615,11 @@ async function togglePin() {
   const g = S.games[S.gameIdx];
   const r = await api().toggle_pin(playId(g));
   if (!r.ok) return;
+  if (isSteam(g)) {
+    g.favorite = g.pinned = r.favorite ? 1 : 0;
+    toast(r.favorite ? `Dodano do ulubionych: ${g.title}` : `Usunięto z ulubionych: ${g.title}`);
+    return renderGames();
+  }
   g.pinned = r.pinned ? 1 : 0;
   toast(r.pinned ? `Przypięto: ${g.title}. Zostanie na dysku na stałe.` : `Odpięto: ${g.title}`);
   refreshState();
@@ -653,6 +674,7 @@ async function updateLaunch() {
     finished: st.mode === "config" ? "Ustawienia zapisane w profilu" : "Koniec gry",
     error: "Nie udało się uruchomić gry",
     cancelled: "Pobieranie przerwane",
+    steam: "Instalacja przez Steam",
   }[st.phase] || "";
   $("lHead").textContent = head;
   const showProg = p && (st.phase === "downloading" || st.phase === "extracting" || (st.phase === "running" && st.copying));
@@ -678,6 +700,8 @@ async function updateLaunch() {
   const hints = [];
   if (st.phase === "downloading") {
     hints.push(["b", "Anuluj"]);
+  } else if (st.phase === "steam") {
+    hints.push(["x", "Okno pobierania Steam"], ["a", "Zamknij"]);
   } else if (["error", "cancelled"].includes(st.phase)) {
     if (st.locked_by) hints.push(["y", "Przejmij profil i graj"]);
     if (st.missing_core) hints.push(["y", "Otwórz RetroArch"]);
@@ -698,6 +722,8 @@ async function closeLaunch() {
 function launchInput(a) {
   const ph = lastLaunch.phase;
   if (ph === "downloading" && a === "b") api().launch_cancel();
+  else if (ph === "steam" && a === "x") lumenCall("steam_action", lastLaunch.game_id, "downloads");
+  else if (ph === "steam" && (a === "a" || a === "b")) closeLaunch();
   else if (ph === "error" && a === "y" && lastLaunch.missing_core) {
     // telefon: RetroArch bez rdzenia — otwarcie RetroArcha (Online Updater → Core Downloader)
     const gid = lastLaunch.game_id;
@@ -777,6 +803,12 @@ function openMenu() {
     ["Aktualizuj EmuStart", () => appUpdate()],
     ["Wyjdź z EmuStart", () => api().quit()],
   ];
+  if (LUMEN) {
+    items.unshift(["Tryb pulpitu (Lumen)  ·  F10 / View+Start", () => lumenCall("lumen_mode", "desktop")]);
+    items[items.length - 1] = ["Wyjdź z Lumen", () => api().quit()];
+    const upd = items.findIndex(([t]) => t === "Aktualizuj EmuStart");   // Lumen aktualizuje się w całości
+    if (upd >= 0) items.splice(upd, 1);
+  }
   if (S.platform === "android") {
     items.length = 0;
     items.push(["Ustawienia", () => openSettings()], ["Zmień profil", () => openProfiles()],
@@ -1245,6 +1277,7 @@ async function refreshState() {
     net.className = "pill warn";
   }
   S.copying = new Set(st.copying);
+  if (st.engine_down && !S.engineWarned) { S.engineWarned = true; toast(st.engine_down + " Gry Steam działają.", 9000); }
   $("profInfo").textContent = st.profile ? "👤 " + st.profile.name : "";
   if (st.conflicts?.length) {
     const c = st.conflicts[0];
@@ -1360,6 +1393,32 @@ if (new URLSearchParams(location.search).has("dev")) {
   uiReady();
 }
 
+
+// Lumen: tryb pełnoekranowy Lumen — most do procesu Lumen (preload emu.js) zamiast pywebview.
+// Pad czyta Lumen (XInput) i przekazuje akcje; wybór gry i przełączanie trybów idą do Lumen.
+if (LUMEN) {
+  window.pywebview = {
+    api: new Proxy({}, { get: (_t, name) => (...args) => window.lumenEmu.call(String(name), args) }),
+  };
+  window.lumenEmu.onPad((a, up) => (up ? release(a) : press(a, true)));
+  window.lumenEmu.onFocusGame(async (es, id) => {
+    // tuż po wczytaniu strony systemy jeszcze nie przyszły z silnika — chwilę czekamy
+    for (let i = 0; i < 40 && !S.systems.length; i++) await new Promise((r) => setTimeout(r, 250));
+    if (S.modal) return;
+    const i = S.systems.findIndex((s) => s.es === es);
+    if (i < 0) return;
+    S.sysIdx = i;
+    await openSystem();
+    const gi = S.games.findIndex((g) => g.id === id);
+    if (gi >= 0) { S.gameIdx = gi; renderGames(); }
+  });
+  window.lumenEmu.onOpen(async (what) => {
+    for (let i = 0; i < 40 && !S.state; i++) await new Promise((r) => setTimeout(r, 250));
+    if (what === "settings" && !S.modal) openSettings();
+  });
+  document.body.classList.add("lumen");
+  uiReady();
+}
 
 // aplikacja na Androida: most do Kotlina (EmuAndroid) zamiast pywebview
 // układ dla telefonu (app.css: body.phone) — aplikacja na Androida; ?phone — podgląd w przeglądarce

@@ -83,6 +83,7 @@ const META_FIELDS = [["title", "Tytuł"], ["developer", "Producent"], ["publishe
 async function openGameOptions() {
   const g = S.games[S.gameIdx];
   if (!g) return;
+  if (isSteam(g)) return steamOptions(g);
   GO.id = g.id;
   GO.confirmDel = false;
   // telefon: tylko granie, przypięcie i usunięcie z telefonu — emulatory, zapisy
@@ -95,6 +96,27 @@ async function openGameOptions() {
   S.modal = "gopt";
   $("gopt").classList.remove("hidden");
   renderGopt();
+}
+/** Lumen: opcje gry Steam — akcje klienta Steam (instalacja, aktualizacje i pliki są po stronie Steam). */
+function steamOptions(g) {
+  const act = async (action, ok) => {
+    const r = await lumenCall("steam_action", g.id, action);
+    if (!r.ok) return toast(r.reason || "Nie udało się.", 5000);
+    if (action === "favorite") { g.favorite = g.pinned = r.favorite ? 1 : 0; renderGames(); return toast(r.favorite ? "Dodano do ulubionych." : "Usunięto z ulubionych."); }
+    if (ok || r.message) toast(r.message || ok, 5000);
+  };
+  S.menu = [
+    [g.cached ? "Graj" : "Zainstaluj w Steam", () => launch()],
+    [g.favorite ? "Usuń z ulubionych" : "Dodaj do ulubionych", () => act("favorite")],
+    ["Otwórz w kliencie Steam", () => act("details", "Otwarto grę w kliencie Steam.")],
+    ["Strona w sklepie Steam", () => act("store", "Otwarto stronę sklepu w kliencie Steam.")],
+    ["Okno pobierania Steam", () => act("downloads")],
+    ["Zamknij", () => {}],
+  ];
+  S.menuIdx = 0; S.modal = "menu";
+  $("menu").querySelector("h2").textContent = `${g.title} — Steam`;
+  $("menu").classList.remove("hidden");
+  renderMenu();
 }
 function closeGopt() {
   S.modal = null;

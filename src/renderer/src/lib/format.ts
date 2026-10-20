@@ -53,6 +53,26 @@ export const STATE_LABEL: Record<InstallState, string> = {
   broken: 'Wymaga weryfikacji w Steam'
 }
 
+/** Install state in words for any source (EmuStart: local copy of a game from the server). */
+export function stateLabel(g: Game): string {
+  if (g.emu) {
+    if (g.emu.copying) return 'Pobieranie z serwera'
+    if (g.emu.cached) return g.emu.pinned ? 'Na dysku (zachowana)' : 'Na dysku'
+    return 'Na serwerze EmuStart'
+  }
+  return STATE_LABEL[g.installState]
+}
+
+export function formatEta(sec?: number): string | undefined {
+  if (sec === undefined || sec === null || !isFinite(sec)) return undefined
+  const s = Math.max(0, Math.round(sec))
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  if (h) return `${h} godz. ${m} min`
+  if (m) return `${m} min ${s % 60} s`
+  return `${s} s`
+}
+
 export function gameCountLabel(n: number): string {
   return `${n} ${plural(n, 'gra', 'gry', 'gier')}`
 }

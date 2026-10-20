@@ -7,6 +7,7 @@ data-URI byłoby wolne przy przewijaniu tysięcy gier. Serwer słucha tylko na
 
 from __future__ import annotations
 
+import hmac
 import json
 import mimetypes
 import ssl
@@ -27,6 +28,8 @@ DEV_API = None
 # z biblioteką z serwera. Wcześniej tylko w trybie --browser (DEV_API), więc w zwykłym
 # oknie logo systemów i grafiki spoza pamięci komputera nigdy się nie pojawiały.
 MEDIA_CFG = None
+# silnik Lumen (engine_main.py): /api wymaga dodatkowo tokenu sesji z procesu Lumen
+ENGINE_TOKEN = ""
 
 
 def _near(handler) -> bool:
@@ -158,6 +161,8 @@ class _Handler(BaseHTTPRequestHandler):
         # z internetu nie wyśle go do 127.0.0.1 bez zgody CORS, której nie dajemy)
         if not _local_ui(self) or self.headers.get("X-EmuStart") != "1":
             return refuse(self, 403)
+        if ENGINE_TOKEN and not hmac.compare_digest(self.headers.get("X-Lumen-Token", ""), ENGINE_TOKEN):
+            return refuse(self, 403)      # silnik Lumen: API tylko dla procesu, który go uruchomił
         if self.path.startswith("/admin/"):
             from emustart import srvadmin     # panel serwera (tylko z tego komputera)
             return srvadmin.handle(self, DEV_API)

@@ -9,6 +9,7 @@ import { HomeScreen } from './screens/Home'
 import { GroupScreen } from './screens/Group'
 import { SettingsScreen } from './screens/Settings'
 import { DetailsScreen } from './screens/Details'
+import { EmuLaunchOverlay, JobsPanel } from './components/Jobs'
 
 /** Start, the pinned groups (in their order), Settings. */
 export function useTabs(): Tab[] {
@@ -35,8 +36,16 @@ export function App() {
     void a.library.get().then(s.setSnapshot)
     void a.prefs.get().then(s.setPrefs)
     void a.settings.get().then(s.setSettings)
+    void a.jobs.get().then(s.setJobs)
     const offs = [
       a.library.onSnapshot(s.setSnapshot),
+      a.jobs.onChange(s.setJobs),
+      // back from the fullscreen interface: show the game that was selected there
+      a.ui.onMode((mode, selection) => {
+        const st = useStore.getState()
+        if (mode !== 'desktop' || !selection || st.detailsId === selection) return
+        if (st.snapshot?.games.some((g) => g.id === selection)) st.openDetails(selection)
+      }),
       a.prefs.onChange(s.setPrefs),
       a.settings.onChange(s.setSettings),
       a.art.onChanged(s.bumpArt),
@@ -146,6 +155,8 @@ export function App() {
         </main>
       </div>
       {detailsId && <DetailsScreen key={detailsId} gameId={detailsId} />}
+      <JobsPanel />
+      <EmuLaunchOverlay />
       <HintsBar />
       <Toasts />
     </>

@@ -8,6 +8,16 @@ Wszystkie istotne zmiany w EmuStart. Format oparty na
 
 Plan najbliższych zmian: [ROADMAP.md](ROADMAP.md).
 
+### Lumen — EmuStart jako silnik (tylko w repozytorium Lumen, katalog `engine/`)
+- **Zmienia się:** nowy punkt startowy `engine_main.py` (bez okna, `/api` na 127.0.0.1 z tokenem
+  sesji `X-Lumen-Token`), moduł `emustart/lumen.py` (`LumenApi` = `Api` + zestawienia biblioteki
+  i kolejki zadań dla widoku pulpitowego), `paths.py` czyta katalog danych z `EMUSTART_HOME`,
+  `web/app.js` dostaje most `?lumen` (jak most Androida) oraz gry Steam jako system „Steam”
+  (akcje Steam: graj / zainstaluj w Steam / ulubiona) i pozycję menu „Tryb pulpitu”.
+- **Nie zmienia się:** EmuStart uruchamiany samodzielnie (`main.py`, bez `EMUSTART_HOME`
+  i bez `?lumen`) działa jak dotąd; API serwera (`/v1/…`), format danych, pobieranie,
+  uruchamianie, zapisy profili, emulatory i BIOS-y — bez zmian.
+
 ### Dokumentacja
 - Koncepcja 2.0 (`docs/koncepcja-2.0.md`, wersja robocza 3): **stany jak w Steam** — każdy
   zapis stanu to nowy, niezmienny wpis na serwerze, przed grą sloty wypełniane najnowszymi

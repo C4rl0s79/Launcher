@@ -57,6 +57,31 @@ const api: LumenApi = {
     cancel: () => invoke(IPC.launchboxCancel),
     onChange: (cb) => subscribe(IPC.launchboxChanged, cb)
   },
+  emustart: {
+    launch: (id) => invoke(IPC.emuLaunch, id),
+    cancelLaunch: () => invoke(IPC.emuCancelLaunch),
+    dismiss: () => invoke(IPC.emuDismiss),
+    toggleKeep: (id) => invoke(IPC.emuToggleKeep, id),
+    removeLocal: (id) => invoke(IPC.emuRemoveLocal, id),
+    readiness: (id) => invoke(IPC.emuReadiness, id),
+    installEmulators: (systems) => invoke(IPC.emuInstall, systems),
+    settings: () => invoke(IPC.emuSettings),
+    pickFolder: (key) => invoke(IPC.emuPickFolder, key),
+    refreshLibrary: () => invoke(IPC.emuRefresh),
+    restartEngine: () => invoke(IPC.emuRestart),
+    clearConflicts: () => invoke(IPC.emuClearConflicts)
+  },
+  jobs: {
+    get: () => invoke(IPC.jobsGet),
+    cancel: (id) => invoke(IPC.jobsCancel, id),
+    onChange: (cb) => subscribe(IPC.jobsChanged, cb)
+  },
+  ui: {
+    getMode: () => invoke(IPC.uiGetMode),
+    setMode: (mode, then) => invoke(IPC.uiSetMode, mode, then),
+    select: (id) => ipcRenderer.send(IPC.uiSelect, id),
+    onMode: (cb) => subscribe(IPC.uiMode, cb)
+  },
   app: {
     toggleFullscreen: () => invoke(IPC.appFullscreen),
     isFullscreen: () => invoke(IPC.appIsFullscreen),

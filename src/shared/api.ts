@@ -5,6 +5,11 @@ import type {
   ArtOptionsResult,
   CacheStats,
   DetailsResult,
+  EmuActionResult,
+  EmuReadiness,
+  EmuSettings,
+  JobsSnapshot,
+  UiMode,
   LaunchBoxStatus,
   PadState,
   LibrarySnapshot,
@@ -62,6 +67,38 @@ export interface LumenApi {
     cancel(): Promise<void>
     onChange(cb: (s: LaunchBoxStatus) => void): () => void
   }
+  /** EmuStart games: every action runs in the EmuStart engine (engine/emustart) */
+  emustart: {
+    launch(gameId: string): Promise<EmuActionResult>
+    /** stop the download of the game being launched */
+    cancelLaunch(): Promise<void>
+    /** close the finished / failed launch session */
+    dismiss(): Promise<void>
+    /** keep the game on this PC (download now, outside the "last N games" limit) or stop keeping it */
+    toggleKeep(gameId: string): Promise<EmuActionResult>
+    removeLocal(gameId: string): Promise<EmuActionResult>
+    readiness(gameId: string): Promise<EmuReadiness>
+    installEmulators(systems: string[]): Promise<EmuActionResult>
+    settings(): Promise<EmuSettings>
+    pickFolder(key: 'emu_root' | 'cache_dir'): Promise<EmuSettings>
+    refreshLibrary(): Promise<EmuActionResult>
+    restartEngine(): Promise<void>
+    clearConflicts(): Promise<void>
+  }
+  jobs: {
+    get(): Promise<JobsSnapshot>
+    cancel(jobId: string): Promise<EmuActionResult>
+    onChange(cb: (j: JobsSnapshot) => void): () => void
+  }
+  /** desktop (Lumen look) ⇄ fullscreen (EmuStart look); both use the same core */
+  ui: {
+    getMode(): Promise<UiMode>
+    /** `then` — what to open in the fullscreen interface (EmuStart settings: login, profiles, emulators) */
+    setMode(mode: UiMode, then?: 'settings'): Promise<void>
+    /** the game the user is looking at (kept when switching modes) */
+    select(gameId: string | null): void
+    onMode(cb: (mode: UiMode, selection: string | null) => void): () => void
+  }
   app: {
     toggleFullscreen(): Promise<boolean>
     isFullscreen(): Promise<boolean>
@@ -112,7 +149,30 @@ export const IPC = {
   launchboxUpdate: 'launchbox:update',
   launchboxCancel: 'launchbox:cancel',
   launchboxChanged: 'launchbox:changed',
-  padState: 'pad:state'
+  padState: 'pad:state',
+  emuLaunch: 'emu:launch',
+  emuCancelLaunch: 'emu:cancelLaunch',
+  emuDismiss: 'emu:dismiss',
+  emuToggleKeep: 'emu:toggleKeep',
+  emuRemoveLocal: 'emu:removeLocal',
+  emuReadiness: 'emu:readiness',
+  emuInstall: 'emu:install',
+  emuSettings: 'emu:settings',
+  emuPickFolder: 'emu:pickFolder',
+  emuRefresh: 'emu:refresh',
+  emuRestart: 'emu:restart',
+  emuClearConflicts: 'emu:clearConflicts',
+  jobsGet: 'jobs:get',
+  jobsCancel: 'jobs:cancel',
+  jobsChanged: 'jobs:changed',
+  uiGetMode: 'ui:getMode',
+  uiSetMode: 'ui:setMode',
+  uiSelect: 'ui:select',
+  uiMode: 'ui:mode'
+  // channels of the fullscreen view: shared/emuPad.ts (EMU_UI), kept apart so the two sandboxed
+  // preload bundles share no module
 } as const
 
 export const ART_SCHEME = 'lumen-art'
+/** EmuStart's fullscreen UI files (engine/web) and its /media, /assets proxied to the engine */
+export const EMU_UI_SCHEME = 'lumen-emu'

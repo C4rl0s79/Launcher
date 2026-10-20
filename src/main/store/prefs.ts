@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import type { ArtChoice, ArtKind, Category, GameArtPrefs, Prefs, SteamCollection } from '@shared/types'
+import type { ArtChoice, ArtKind, Category, EmuSystem, GameArtPrefs, Prefs, SteamCollection } from '@shared/types'
 import { JsonFile } from './jsonFile'
 
 // User library preferences: categories, favourites, artwork choices.
@@ -56,7 +56,11 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 
 function isCategory(c: unknown): c is Category {
   if (!isRecord(c)) return false
-  return typeof c.id === 'string' && typeof c.name === 'string' && (c.kind === 'smart' || c.kind === 'custom' || c.kind === 'steam')
+  return (
+    typeof c.id === 'string' &&
+    typeof c.name === 'string' &&
+    (c.kind === 'smart' || c.kind === 'custom' || c.kind === 'steam' || c.kind === 'emustart')
+  )
 }
 
 function sanitizeGameCategories(v: Record<string, unknown>): Record<string, string[]> {
@@ -77,6 +81,7 @@ function normalizeOrder(p: Prefs): Prefs {
 export class PrefsError extends Error {}
 
 export const steamCategoryId = (collectionId: string): string => `steamcol:${collectionId}`
+export const emuCategoryId = (es: string): string => `emusys:${es}`
 const steamCategoryName = (c: SteamCollection): string => (c.kind === 'favorite' ? 'Ulubione w Steam' : c.name)
 
 export const ops = {
@@ -95,6 +100,8 @@ export const ops = {
     if (!clean) throw new PrefsError('Nazwa kategorii nie może być pusta.')
     if (p.categories.find((c) => c.id === id)?.kind === 'steam')
       throw new PrefsError('Nazwę kolekcji Steam można zmienić tylko w kliencie Steam.')
+    if (p.categories.find((c) => c.id === id)?.kind === 'emustart')
+      throw new PrefsError('Nazwa platformy pochodzi z serwera EmuStart.')
     if (p.categories.some((c) => c.id !== id && c.name.toLocaleLowerCase('pl') === clean.toLocaleLowerCase('pl')))
       throw new PrefsError(`Kategoria „${clean}” już istnieje.`)
     if (!p.categories.some((c) => c.id === id)) throw new PrefsError('Nie znaleziono kategorii.')
@@ -106,6 +113,7 @@ export const ops = {
     if (!cat) throw new PrefsError('Nie znaleziono kategorii.')
     if (cat.kind === 'smart') throw new PrefsError('Kategorii wbudowanej nie można usunąć — można ją odpiąć.')
     if (cat.kind === 'steam') throw new PrefsError('Kolekcję Steam można usunąć tylko w kliencie Steam — w Lumen można ją odpiąć.')
+    if (cat.kind === 'emustart') throw new PrefsError('Platformy EmuStart wynikają z biblioteki serwera — w Lumen można ją odpiąć.')
     const gameCategories: Record<string, string[]> = {}
     for (const [g, ids] of Object.entries(p.gameCategories)) {
       const rest = ids.filter((x) => x !== id)
@@ -175,6 +183,37 @@ export const ops = {
     for (const [id, col] of byId) {
       changed = true
       categories.push({ id, name: steamCategoryName(col), kind: 'steam', steamCollectionId: col.id, pinned: false, order: categories.length })
+    }
+    return changed ? normalizeOrder({ ...p, categories }) : p
+  },
+
+  /**
+   * Platforms of the EmuStart server library as read-only categories (group tabs). New platforms
+   * are pinned, so emulated games show up next to Steam without setup; pin state and order chosen
+   * in Lumen are kept; platforms gone from the server library disappear. Call only with a library
+   * read from the engine — never with an empty list caused by the engine not running.
+   */
+  syncEmustartSystems(p: Prefs, systems: EmuSystem[]): Prefs {
+    const byId = new Map(systems.map((s) => [emuCategoryId(s.es), s]))
+    let changed = false
+    const categories: Category[] = []
+    for (const cat of p.categories) {
+      if (cat.kind !== 'emustart') {
+        categories.push(cat)
+        continue
+      }
+      const sys = byId.get(cat.id)
+      if (!sys) {
+        changed = true
+        continue
+      }
+      byId.delete(cat.id)
+      if (cat.name !== sys.display) changed = true
+      categories.push(cat.name === sys.display ? cat : { ...cat, name: sys.display })
+    }
+    for (const [id, sys] of byId) {
+      changed = true
+      categories.push({ id, name: sys.display, kind: 'emustart', emuSystem: sys.es, pinned: true, order: categories.length + 1000 })
     }
     return changed ? normalizeOrder({ ...p, categories }) : p
   },
