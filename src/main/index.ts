@@ -8,6 +8,7 @@ import type { ActionResult, ArtKind, ArtOption, FsEntry, FsListOptions, Game, Jo
 import { initLogger, log } from './logger'
 import { chooseDataDir, migrateDataDir } from './dataDir'
 import { listDir } from './fsBrowse'
+import { detectFlavor, Updater } from './updater'
 import { ops, PrefsError, PrefsStore } from './store/prefs'
 import { SettingsStore } from './store/settings'
 import { LibraryService } from './library/service'
@@ -100,6 +101,17 @@ const engine = new EmustartEngine({
 })
 const emu = new EmustartProvider(engine, paths.emustartLibrary, () => ({ order: settings.get().regionOrder, choices: prefs.get().versions }))
 const unified = new UnifiedLibrary(library, emu)
+const updater = new Updater({
+  current: app.getVersion(),
+  flavor: detectFlavor({ packaged: app.isPackaged, exeDir: path.dirname(process.execPath), portableFile: process.env.PORTABLE_EXECUTABLE_FILE }),
+  dataDir: userData,
+  // the portable exe runs from a temporary copy — the file to replace and restart is the original
+  exe: process.env.PORTABLE_EXECUTABLE_FILE || process.execPath,
+  portableFile: process.env.PORTABLE_EXECUTABLE_FILE,
+  // development / tests only: local release feed instead of GitHub
+  feed: process.env.LUMEN_UPDATE_FEED || undefined,
+  quit: () => app.quit()
+})
 const meta = new StoreMetadataProvider(paths.metaCache, () => settings.get().language)
 const launchbox = new LaunchBoxService(paths.launchbox)
 const pads = new XInputPoller()
@@ -580,6 +592,15 @@ function registerIpc(): void {
     return updatePrefs((p) => ops.chooseVersion(p, gameId, versionId ?? undefined))
   })
 
+  handle(IPC.updateGet, () => updater.state)
+  handle(IPC.updateCheck, () => updater.check())
+  handle(IPC.updateDownload, () => {
+    void updater.download()
+    return updater.state
+  })
+  handle(IPC.updateCancel, () => updater.cancel())
+  handle(IPC.updateApply, () => updater.apply())
+
   handle(IPC.uiGetMode, () => modes?.mode ?? 'desktop')
   handle(IPC.uiSetMode, (mode: UiMode, then?: 'settings') =>
     modes?.setMode(mode === 'fullscreen' ? 'fullscreen' : 'desktop', then === 'settings' ? 'settings' : undefined)
@@ -606,6 +627,7 @@ function registerFullscreenBridge(): void {
     install: installSteam,
     openInSteam,
     toggleFavorite: async (id) => (await updatePrefs((p) => ops.toggleFavorite(p, id))).favorites.includes(id),
+    updater,
     isFavorite: (id) => prefs.get().favorites.includes(id),
     runningAppId: () => library.current.steam.runningAppId,
     steamJobs: () => unified.jobs.jobs.filter((j) => j.source === 'steam'),
@@ -670,6 +692,11 @@ app.whenReady().then(async () => {
     }
   })
   unified.on('jobs', (j: JobsSnapshot) => send(IPC.jobsChanged, j))
+  updater.on('state', (s) => send(IPC.updateChanged, s))
+  // like EmuStart: look for a new version shortly after start and once a day
+  const autoCheck = (): void => void updater.check()
+  setTimeout(autoCheck, 20_000)
+  setInterval(autoCheck, 24 * 3600_000)
   engine.on('event', (ev: { type: string }) => {
     if (ev.type === 'quit') app.quit()
   })

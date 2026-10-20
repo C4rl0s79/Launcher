@@ -8,6 +8,7 @@ import type {
   EmuActionResult,
   EmuReadiness,
   EmuSettings,
+  UpdateState,
   FsListing,
   FsListOptions,
   SaveChoice,
@@ -106,6 +107,16 @@ export interface LumenApi {
     cancel(jobId: string): Promise<EmuActionResult>
     onChange(cb: (j: JobsSnapshot) => void): () => void
   }
+  /** self-update from GitHub releases (verified: SHA-256 + Lumen release signature) */
+  update: {
+    get(): Promise<UpdateState>
+    check(): Promise<UpdateState>
+    download(): Promise<UpdateState>
+    cancel(): Promise<void>
+    /** close Lumen, swap the program, start it again */
+    apply(): Promise<UpdateState>
+    onChange(cb: (s: UpdateState) => void): () => void
+  }
   /** desktop (Lumen look) ⇄ fullscreen (EmuStart look); both use the same core */
   ui: {
     getMode(): Promise<UiMode>
@@ -189,7 +200,13 @@ export const IPC = {
   uiGetMode: 'ui:getMode',
   uiSetMode: 'ui:setMode',
   uiSelect: 'ui:select',
-  uiMode: 'ui:mode'
+  uiMode: 'ui:mode',
+  updateGet: 'update:get',
+  updateCheck: 'update:check',
+  updateDownload: 'update:download',
+  updateCancel: 'update:cancel',
+  updateApply: 'update:apply',
+  updateChanged: 'update:changed'
   // channels of the fullscreen view: shared/emuPad.ts (EMU_UI), kept apart so the two sandboxed
   // preload bundles share no module
 } as const

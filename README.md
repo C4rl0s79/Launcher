@@ -74,6 +74,38 @@ Wynik w katalogu `release/`:
 
 Pliki nie są podpisane certyfikatem, więc Windows SmartScreen może przy pierwszym uruchomieniu pokazać ostrzeżenie.
 
+### Aktualizacje (jak w EmuStart)
+
+Lumen sam sprawdza wydania na GitHubie (C4rl0s79/Launcher) — przy starcie i raz dziennie — i pokazuje
+„⬆ Nowa wersja” na górnym pasku. Ustawienia → **Aktualizacja Lumen** (albo tryb TV: Menu → „Aktualizuj Lumen”):
+**Pobierz** → **Zainstaluj i uruchom ponownie**. Pobrany plik musi mieć skrót SHA-256 zgodny z wydaniem
+**i poprawny podpis wydania Lumen** (Ed25519, `<plik>.sig`, klucz publiczny w programie) — inaczej nic nie jest
+instalowane. Podmianę robi skrypt po zamknięciu Lumen (jednorazowe zadanie Harmonogramu „Lumen Update”,
+usuwane po pracy): kopia zapasowa, podmiana, przy błędzie powrót do poprzedniej wersji, start nowej.
+`LumenData` nie jest ruszany. Przebieg: `LumenData\logs\update.log`.
+
+| Wersja | Co jest pobierane | Podmiana |
+| --- | --- | --- |
+| ZIP (folder) | `Lumen-<w>-win64.zip` | pliki programu w folderze (kopia w `LumenData\update\backup`) |
+| instalator | `Lumen-<w>-setup.exe` | instalator uruchamiany po cichu (`/S`) |
+| portable | `Lumen-<w>-portable.exe` | podmiana pliku `.exe` w miejscu (ta sama nazwa i ścieżka) |
+
+Wersje do 0.3.4 nie mają aktualizatora — 0.4.0 trzeba raz pobrać ręcznie.
+
+### Wydanie (podpisy)
+
+```bash
+npm run dist
+```
+
+```bash
+node scripts/sign-release.mjs release/Lumen-<w>-win64.zip release/Lumen-<w>-setup.exe release/Lumen-<w>-portable.exe
+```
+
+Klucz prywatny wydań: `D:\GIT\_klucze\launcher-release-ed25519.pem` (albo `LUMEN_SIGNING_KEY_FILE`) — nigdy
+w repozytorium; skrypt sprawdza, czy pasuje do klucza publicznego w `src/main/releaseSigning.ts`. Do wydania
+na GitHubie trafiają trzy pliki i trzy pliki `.sig`.
+
 ## Konfiguracja
 
 Wszystko konfiguruje się w aplikacji: **Ustawienia** (klawisz `O` lub przycisk ☰ / Start na padzie).
@@ -210,3 +242,4 @@ Architektura i ograniczenia integracji: [docs/ARCHITECTURE.md](docs/ARCHITECTURE
 | `LUMEN_PYTHON=<python.exe>` | Python dla silnika EmuStart w wersji ze źródeł |
 | `LUMEN_DRY_RUN=1` | **tryb testowy**: akcje `steam://` i uruchamianie emulatorów tylko w logu (żadna gra nie startuje) |
 | `LUMEN_NO_PAD=1` | **tryb testowy**: ignoruje pady podłączone do komputera (testy automatyczne UI) |
+| `LUMEN_UPDATE_FEED=<url>` | **tryb testowy**: lokalne „najnowsze wydanie” zamiast GitHuba (test aktualizatora; podpis nadal wymagany) |

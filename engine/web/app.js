@@ -830,8 +830,9 @@ function openMenu() {
   if (LUMEN) {
     items.unshift(["Tryb pulpitu (Lumen)  ·  F10 / View+Start", () => lumenCall("lumen_mode", "desktop")]);
     items[items.length - 1] = ["Wyjdź z Lumen", () => api().quit()];
-    const upd = items.findIndex(([t]) => t === "Aktualizuj EmuStart");   // Lumen aktualizuje się w całości
-    if (upd >= 0) items.splice(upd, 1);
+    // aktualizacja całego Lumen (z silnikiem EmuStart) — te same okna, updater Lumen
+    const upd = items.findIndex(([t]) => t === "Aktualizuj EmuStart");
+    if (upd >= 0) items[upd] = ["Aktualizuj Lumen", () => appUpdate()];
   }
   if (S.platform === "android") {
     items.length = 0;
@@ -1004,7 +1005,7 @@ function joinInput(a) {
 /* ───────────── aktualizacja EmuStart (menu Start) ───────────── */
 let updTimer = null;
 async function appUpdate() {
-  toast("Sprawdzam wydania na GitHubie…", 4000);
+  toast(LUMEN ? "Sprawdzam wydania Lumen na GitHubie…" : "Sprawdzam wydania na GitHubie…", 4000);
   const r = await api().app_update_check();
   if (!r || !r.ok) return toast(r?.reason || "Nie udało się sprawdzić aktualizacji.", 5000);
   if (!r.newer) return toast(`Masz najnowszą wersję (${r.current}).`, 4000);
@@ -1029,7 +1030,7 @@ async function appUpdateStart() {
     const a = await api().app_update_apply();
     if (!a || !a.ok) return toast(a?.reason || "Nie udało się zainstalować aktualizacji.", 6000);
     toast(S.platform === "android" ? "Potwierdź instalację w oknie Androida."
-                                   : `Instaluję ${st.version} — EmuStart uruchomi się ponownie.`, 8000);
+                                   : `Instaluję ${st.version} — ${LUMEN ? "Lumen" : "EmuStart"} uruchomi się ponownie.`, 8000);
   }, 700);
 }
 

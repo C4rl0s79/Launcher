@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { sortedCategories, tabCategoryId, useStore, type Tab } from '../store'
 import { Glyph } from './Hints'
 import { JobsPill } from './Jobs'
+import { UpdatePill } from './Update'
 import { api } from '../store'
 
 function Clock() {
@@ -76,6 +77,7 @@ export function TopBar({ tabs }: { tabs: Tab[] }) {
       {mode === 'gamepad' && <Glyph action="rb" />}
       <div className="topbar__status">
         {demo && <span className="pill pill--demo">Tryb demo</span>}
+        <UpdatePill />
         <JobsPill />
         {emuLabel && (
           <span className={`pill pill--steam ${emuOk ? 'is-running' : 'is-notRunning'}`} title={emu?.message ?? emuLabel}>

@@ -1,4 +1,4 @@
-import type { ActionResult, DetailsResult, Game, Job, SteamClientStatus } from '@shared/types'
+import type { ActionResult, DetailsResult, Game, Job, SteamClientStatus, UpdateState } from '@shared/types'
 
 // The fullscreen interface is EmuStart's own UI (engine/web) running in Lumen's window. It talks
 // to `window.pywebview.api` — with `?lumen` that proxy calls Lumen's main process, which ends up
@@ -30,6 +30,8 @@ export interface BridgeDeps {
   emuLumenId(engineId: number): string | undefined
   quit(): void
   log(msg: string): void
+  /** Lumen's own updater (TV menu "Aktualizuj Lumen" — EmuStart's update screens, Lumen's update) */
+  updater?: { state: UpdateState; check(): Promise<UpdateState>; download(): Promise<UpdateState>; apply(): Promise<UpdateState> }
   now?: () => number
 }
 
@@ -346,6 +348,39 @@ export function createFullscreenBridge(deps: BridgeDeps) {
           return r.ok ? { ok: true, message: r.message } : { ok: false, reason: r.error }
         }
         return { ok: false, reason: 'Nieznana akcja.' }
+      }
+
+      // ── update: EmuStart's update flow (app.js appUpdate) drives Lumen's updater ──
+      case 'app_update_check': {
+        if (!deps.updater) return { ok: false, reason: 'Aktualizacja niedostępna.' }
+        const s = await deps.updater.check()
+        if (s.phase === 'error') return { ok: false, reason: s.error }
+        const i = s.info
+        return {
+          ok: true,
+          newer: !!i?.newer,
+          available: !!i?.file,
+          version: i?.version ?? '',
+          current: i?.current ?? '',
+          size: i?.file?.size ?? 0,
+          reason: s.error
+        }
+      }
+      case 'app_update_start': {
+        if (!deps.updater) return { ok: false }
+        if (deps.updater.state.phase !== 'ready') void deps.updater.download()
+        return { ok: true }
+      }
+      case 'app_update_status': {
+        const s = deps.updater?.state
+        if (!s) return null
+        const phase = s.phase === 'downloading' ? 'downloading' : s.phase === 'verifying' || s.phase === 'extracting' ? 'extracting' : s.phase === 'ready' ? 'ready' : s.phase === 'error' ? 'error' : s.phase
+        return { phase, done: s.done, total: s.total, version: s.info?.version ?? '', error: s.error ?? '' }
+      }
+      case 'app_update_apply': {
+        if (!deps.updater) return { ok: false }
+        const s = await deps.updater.apply()
+        return s.phase === 'applying' ? { ok: true } : { ok: false, reason: s.error }
       }
 
       // ── window / host ──

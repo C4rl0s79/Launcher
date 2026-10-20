@@ -78,6 +78,14 @@ const api: LumenApi = {
     cancel: (id) => invoke(IPC.jobsCancel, id),
     onChange: (cb) => subscribe(IPC.jobsChanged, cb)
   },
+  update: {
+    get: () => invoke(IPC.updateGet),
+    check: () => invoke(IPC.updateCheck),
+    download: () => invoke(IPC.updateDownload),
+    cancel: () => invoke(IPC.updateCancel),
+    apply: () => invoke(IPC.updateApply),
+    onChange: (cb) => subscribe(IPC.updateChanged, cb)
+  },
   ui: {
     getMode: () => invoke(IPC.uiGetMode),
     setMode: (mode, then) => invoke(IPC.uiSetMode, mode, then),

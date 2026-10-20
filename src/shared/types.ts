@@ -484,6 +484,33 @@ export interface EmuSettings {
 
 export type UiMode = 'desktop' | 'fullscreen'
 
+// ---------- self-update (GitHub releases, like EmuStart) ----------
+
+/** zip = folder version, installed = setup.exe, portable = single exe, dev = from sources (no updates) */
+export type UpdateFlavor = 'zip' | 'installed' | 'portable' | 'dev'
+
+export interface UpdateInfo {
+  version: string
+  current: string
+  newer: boolean
+  flavor: UpdateFlavor
+  /** the release file for this build */
+  file?: { name: string; url: string; size: number; sha256: string }
+  sigUrl?: string
+  notes: string
+  page: string
+  published: string
+}
+
+export interface UpdateState {
+  phase: 'idle' | 'checking' | 'none' | 'available' | 'downloading' | 'verifying' | 'extracting' | 'ready' | 'applying' | 'error'
+  info?: UpdateInfo
+  done: number
+  total: number
+  error?: string
+  checkedAt?: number
+}
+
 // ---------- in-app path picker (gamepad friendly, no system dialog) ----------
 
 export interface FsEntry {

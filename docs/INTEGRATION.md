@@ -239,6 +239,22 @@ w procesie głównym (`emustart.setFolder`, `art.useFile`). Tryb TV: przeglądar
 (`folderBrowse`); opcja „Okno Windows (mysz)” EmuStart jest w Lumen ukryta, a `pick_folder` zwraca pusty
 wynik.
 
+## 6e. Aktualizacja programu (jak EmuStart)
+
+`src/main/updater.ts` + `releaseSigning.ts`, ten sam przebieg co `emustart/updater.py`: najnowsze wydanie
+z GitHuba → plik dla tej wersji programu (ZIP / instalator / portable) → pobranie z postępem → rozmiar,
+SHA-256 z GitHuba i podpis Ed25519 (`<plik>.sig`, wiadomość `lumen-release-v1\n<nazwa>\n<sha256>`; klucz
+publiczny w programie, prywatny poza repozytorium) → ZIP rozpakowany z kontrolą ścieżek → skrypt
+PowerShell po zamknięciu Lumen (kopia zapasowa, podmiana bez `LumenData`, przywrócenie przy błędzie,
+restart). Skrypt startuje jako jednorazowe zadanie Harmonogramu „Lumen Update” (proces potomny ginął razem
+z Lumen w obiekcie zadania — EmuStart rozwiązuje to `CREATE_BREAKAWAY_FROM_JOB`, niedostępnym w Node).
+Silnik EmuStart jest częścią Lumen i aktualizuje się razem z nim („Aktualizuj EmuStart” w trybie TV
+uruchamia aktualizację Lumen).
+
+Sprawdzone 20.10.2026 na lokalnym kanale wydań (`LUMEN_UPDATE_FEED`, podpisy prawdziwym kluczem): ZIP
+0.3.90 → 0.3.91 i portable 0.3.90 → 0.3.91 — pobranie, weryfikacja, podmiana, restart nowej wersji
+z działającym silnikiem, zadanie usunięte. Instalator (`/S`) — niesprawdzony (wymaga instalacji w systemie).
+
 ## 7. Tryby interfejsu
 
 - Jedno okno, dwa widoki: renderer Lumen i `WebContentsView` z UI EmuStart (ładowany w tle przy starcie).

@@ -1845,3 +1845,19 @@ p.card__desc[data-nav]:focus {
 .version:focus .version__state {
   color: var(--accent-ink);
 }
+
+/* Lumen self-update */
+.update__notes {
+  white-space: pre-wrap;
+  max-height: 14em;
+  overflow-y: auto;
+  padding: 0.8em 1em;
+  border-radius: var(--radius);
+  background: var(--panel-solid);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 0.88em;
+}
+.card__desc.is-error {
+  color: var(--danger);
+}

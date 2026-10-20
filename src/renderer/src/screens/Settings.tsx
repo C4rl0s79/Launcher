@@ -6,6 +6,7 @@ import { useActions } from '../nav/input'
 import { TextField } from '../components/TextField'
 import { Modal } from '../components/Modal'
 import { formatBytes, gameCountLabel } from '../lib/format'
+import { UpdateSection } from '../components/Update'
 
 export function SettingsScreen({ active }: { active: boolean }) {
   useActions(
@@ -27,6 +28,12 @@ export function SettingsScreen({ active }: { active: boolean }) {
       <CategoriesSection />
       <BehaviourSection />
       <DataSection />
+      <Section
+        title="Aktualizacja Lumen"
+        desc="Jak w EmuStart: nowe wersje z wydań na GitHubie (C4rl0s79/Launcher), sprawdzane przy starcie i raz dziennie. Plik jest sprawdzany skrótem SHA-256 i podpisem wydania Lumen; dane w LumenData zostają nietknięte."
+      >
+        <UpdateSection />
+      </Section>
       <HelpSection />
     </div>
   )
