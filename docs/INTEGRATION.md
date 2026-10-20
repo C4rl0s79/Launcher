@@ -14,7 +14,7 @@ Serwer EmuStart pozostaje osobnym programem (EmuStart Server); jego API (`/v1/�
 
 | | SteamLaunch („Lumen”) | EmuStart |
 |---|---|---|
-| Repozytorium | `D:\GIT\SteamLaunch` (`master`, 128eef8) | `D:\GIT\Emustart` = github.com/C4rl0s79/EmuStart (`feature/savesync-server`, ea28eb7 = `main` 0.45.1 + 2 commity) |
+| Repozytorium | `D:\GIT\SteamLaunch` (`master`, 128eef8) | `D:\GIT\Emustart` = github.com/C4rl0s79/EmuStart (`feature/savesync-server`; w `engine/` od 20.10.2026: **0.46.0**, c87e189, PR #71) |
 | Stos | Electron 44, React 19, TypeScript, electron-vite, zustand, koffi (XInput) | Python 3.14, pywebview 6 (WebView2), interfejs w czystym JS/HTML/CSS (`web/`), PyInstaller |
 | Architektura | proces główny (Steam: pliki VDF/ACF, rejestr, `steam://`, Web API, SteamGridDB, LaunchBox) + renderer React | klient: `Api` (`emustart/api.py`) wołane z UI przez most pywebview (albo `POST /api/<metoda>` w trybie `--browser`); serwer: `server_main.py` (biblioteka, grafiki, konta, urządzenia, emulatory, BIOS-y, zapisy) |
 | Testy (stan wyjściowy) | 103 vitest — wszystkie przechodziły, `tsc` bez błędów | 320 pytest — wszystkie przechodziły |
@@ -37,10 +37,8 @@ z magazynu serwera (manifest SHA-256, archiwum wznawiane), BIOS-y z serwera, men
 profile graczy z PIN-em/hasłem, blokada profilu na czas gry, synchronizacja zapisów profilu przez serwer
 przed i po grze, kolejka zapisów offline.
 
-**Częściowe:** nowa synchronizacja zapisów „jak Steam Cloud” (`emustart/savesync.py`, rewizje, konflikt
-rozstrzygany przez gracza) — gotowy jest tylko **serwer (etap 1)**; klient (etap 2) ma na razie część 1
-(zapisy profilu bez junction, osobna karta pamięci PS2 na grę). Klient nadal używa synchronizacji folderu
-profilu (patrz §6).
+**0.46.0 (od 20.10.2026 w `engine/`):** synchronizacja zapisów „jak Steam Cloud” na serwerze, PC
+i Androidzie (paczki, rewizje, konflikt rozstrzygany przez gracza) — patrz §6.
 
 ### Wybrany wariant integracji
 
@@ -170,24 +168,30 @@ zachowywanej — odepnij (część zostaje); pobieranie w tle po starcie — usu
 emulatorów — „Anuluj”. Rozpakowywanie archiwów i ścieżki docelowe — mechanizmy EmuStart (`cache.py`,
 `installer.py`: manifest SHA-256, rozpakowanie tylko plików z manifestu).
 
-## 6. Synchronizacja zapisów — stan faktyczny
+## 6. Synchronizacja zapisów — stan faktyczny (EmuStart 0.46.0)
 
-Lumen **nie dodaje** własnej synchronizacji. Działa mechanizm klienta EmuStart 0.45 (`profiles.py`,
-`launcher.py`):
+Lumen **nie dodaje** własnej synchronizacji — używa klienta EmuStart 0.46.0 (`syncclient.py`,
+`savebundles.py`, `launcher.py`), czyli synchronizacji „jak Steam Cloud”:
 
-- przed grą: pobranie nowszych zapisów profilu z serwera; po wyjściu z emulatora: wysłanie zmienionych,
-- blokada profilu na serwerze na czas gry (inne urządzenie dostaje „profil zajęty” z możliwością
-  przejęcia),
-- bez serwera: zapisy czekają w kolejce i wysyłają się później (lista zadań: „Wysyłanie zapisów”),
-- konflikt (gra na dwóch urządzeniach bez serwera): **zostaje nowsza wersja, druga trafia do kopii
-  zapasowej profilu na serwerze** — to nie jest wybór gracza. Lumen nie ukrywa konfliktów: są w panelu
-  zadań trybu pulpitu i w komunikacie trybu TV,
+- serwer jest jedynym źródłem prawdy; zapisy w grze, stany i karty pamięci synchronizują się
+  **paczkami** per konto, gra, emulator i rdzeń RetroArcha (RetroArch: zapisy i stany; DuckStation
+  i PCSX2: karta pamięci osobna dla gry),
+- przed grą pobierają się zmiany z innych urządzeń, po grze zmiany idą na serwer; bez połączenia gra
+  rusza na zapisach z urządzenia, a zmiany wysyłają się, gdy serwer wróci (zadanie „Wysyłanie zapisów”),
+- **konflikt** (zapisy zmienione tu i na innym urządzeniu): uruchamianie zatrzymuje się i czeka na
+  decyzję gracza — w trybie TV okno EmuStart, w trybie pulpitu okno Lumen z obiema wersjami (kiedy,
+  z którego urządzenia) i wyborem **Zostaw z tego urządzenia / Weź z serwera / Pomiń** (pad: X / Y / B,
+  wywołanie `launch_choice`). Druga wersja zostaje w historii na serwerze (10 ostatnich) albo w kopii
+  zapasowej na urządzeniu,
+- stan zapisów gry („zsynchronizowane / czekają na wysłanie / jeszcze nie synchronizowane”) jest
+  w szczegółach gry (pulpit) i w opcjach gry (TV),
+- **wymaga EmuStart Server 0.46.0** — starszy serwer nie ma API zapisów: gra rusza wtedy na zapisach
+  z urządzenia, bez synchronizacji,
+- poza paczkami (stany PS2 `.p2s`, Dolphin, PPSSPP, RPCS3) — jak dotąd: folder profilu na serwerze,
+  blokada profilu na czas gry, przy konflikcie zostaje nowsza wersja, druga w kopii zapasowej profilu
+  (te konflikty pokazuje panel zadań trybu pulpitu i komunikat w trybie TV),
 - koniec sesji = koniec procesu emulatora (`proc.wait()`); emulatory uruchamiane przez proces pośredni
   nie są osobno obsługiwane — **niesprawdzone**.
-
-Nowa synchronizacja „jak Steam Cloud” (rewizje, wybór gracza przy konflikcie) istnieje dotąd tylko po
-stronie serwera (`savesync.py`, etap 1). Gdy klient EmuStart ją dostanie (etap 2), Lumen przejmie ją
-automatycznie przez `git subtree pull` — UI wymaga wtedy tylko okna wyboru przy konflikcie.
 
 ## 6a. Dane w folderze programu
 
@@ -228,13 +232,13 @@ w `Documents`); wersja `portable.exe` rozpakowuje sam program do `%TEMP%` (dlate
 **Zaimplementowane, niesprawdzone w realnym środowisku:**
 - uruchomienie gry EmuStart z emulatorem (test serwera nie miał emulatorów — testy z `LUMEN_DRY_RUN`),
 - instalacja emulatora z magazynu serwera, BIOS-y, menu w grze A+Y nad emulatorem wyciągające okno Lumen,
-- synchronizacja zapisów przed/po grze i konflikty na prawdziwym serwerze,
+- synchronizacja zapisów 0.46.0 przed/po grze i prawdziwy konflikt na serwerze (okno konfliktu w trybie
+  pulpitu sprawdzone tylko na danych podstawionych w procesie głównym; logika — testy EmuStart `test_syncclient`),
 - pełna obsługa padem w trybie TV (testy automatyczne z `LUMEN_NO_PAD`),
 - użycie istniejącego folderu danych EmuStart (`emustartHome`),
 - instalator NSIS (zbudowano tylko `--dir`).
 
 **Niewdrożone / ograniczenia:**
-- wybór gracza przy konflikcie zapisów (czeka na etap 2 klienta EmuStart),
 - pauza pobierania (EmuStart ma tylko anuluj + wznowienie od miejsca przerwania),
 - logowanie, profile i ustawienia systemów są tylko w trybie TV (świadomie — jedna implementacja),
 - weryfikacja integralności gier: zgodność rozmiaru z serwerem (EmuStart); emulatory: SHA-256 z manifestu,

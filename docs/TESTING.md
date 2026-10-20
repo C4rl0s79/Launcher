@@ -20,8 +20,11 @@ Ręcznie / integracyjnie (20.10.2026, `LUMEN_DRY_RUN=1`, `LUMEN_NO_PAD=1`, serwe
 - [x] pobranie gry („Pobierz na dysk”), usunięcie, ponowne pobranie — ten sam stan w obu trybach;
 - [x] brak emulatora → czytelna informacja (serwer testowy nie udostępnia emulatorów);
 - [x] tryb TV: system „Steam”, lista z grafikami i opisem, przełączanie F10/menu w obie strony z zachowaniem gry;
+- [x] EmuStart 0.46.0 (20.10.2026): silnik i serwer testowy na 0.46.0, logowanie, biblioteka, stan zapisów
+      gry w szczegółach („jeszcze nie synchronizowane”); okno konfliktu zapisów w trybie pulpitu — wygląd
+      sprawdzony na danych podstawionych w procesie głównym;
 - [ ] gra EmuStart uruchomiona emulatorem, instalacja emulatora i BIOS-ów z serwera, menu A + Y, zapisy
-      przed/po grze i konflikty — wymaga prawdziwego serwera z emulatorami (nie wykonano);
+      przed/po grze i prawdziwy konflikt — wymaga prawdziwego serwera 0.46.0 z emulatorami (nie wykonano);
 - [ ] pełna obsługa padem w trybie TV, instalator NSIS, istniejący folder EmuStart jako `emustartHome`.
 
 ## Automatyczne (`npm test`)

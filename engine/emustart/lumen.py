@@ -134,7 +134,8 @@ class LumenApi(api_mod.Api):
             return {"ok": False, "reason": "Nie ma takiej gry w bibliotece."}
         emu = self._effective_emu(g)
         info = systems.info(g["es"])
-        out = {"ok": True, "emulator": emu.get("label", ""), "system": info["display"], "missing": []}
+        out = {"ok": True, "emulator": emu.get("label", ""), "system": info["display"], "missing": [],
+               "sync": self._sync_status(g)}           # zapisy gry na serwerze (syncclient)
         if not emu["exe"] or not Path(emu["exe"]).is_file():
             steps = installer.plan_for(g["es"], self._cfg.get("emu_root", ""))
             out["missing"].append({"kind": "emulator", "es": g["es"], "system": info["display"],

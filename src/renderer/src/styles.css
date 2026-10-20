@@ -1699,3 +1699,27 @@ p.card__desc[data-nav]:focus {
 .path-row__value.is-default {
   color: var(--text-3);
 }
+
+/* save conflict before an EmuStart game */
+.conflict {
+  margin-top: 1.2em;
+  text-align: left;
+}
+.conflict__sides {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.8em;
+}
+.conflict__side {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2em;
+  padding: 0.9em 1em;
+  border-radius: var(--radius);
+  background: var(--panel-solid);
+  border: 1px solid var(--line);
+  color: var(--text-2);
+}
+.conflict__side strong {
+  color: var(--text);
+}

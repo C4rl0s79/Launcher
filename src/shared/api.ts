@@ -8,6 +8,7 @@ import type {
   EmuActionResult,
   EmuReadiness,
   EmuSettings,
+  SaveChoice,
   JobsSnapshot,
   UiMode,
   LaunchBoxStatus,
@@ -81,6 +82,8 @@ export interface LumenApi {
     cancelLaunch(): Promise<void>
     /** close the finished / failed launch session */
     dismiss(): Promise<void>
+    /** save conflict before a game: which version wins (the other one is kept in history / backup) */
+    resolveConflict(choice: SaveChoice): Promise<boolean>
     /** keep the game on this PC (download now, outside the "last N games" limit) or stop keeping it */
     toggleKeep(gameId: string): Promise<EmuActionResult>
     removeLocal(gameId: string): Promise<EmuActionResult>
@@ -163,6 +166,7 @@ export const IPC = {
   emuLaunch: 'emu:launch',
   emuCancelLaunch: 'emu:cancelLaunch',
   emuDismiss: 'emu:dismiss',
+  emuResolve: 'emu:resolveConflict',
   emuToggleKeep: 'emu:toggleKeep',
   emuRemoveLocal: 'emu:removeLocal',
   emuReadiness: 'emu:readiness',

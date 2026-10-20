@@ -39,6 +39,10 @@ export function registerEmustartIpc(handle: Handle, ctx: Ctx): void {
   })
   handle(IPC.emuCancelLaunch, () => call('launch_cancel'))
   handle(IPC.emuDismiss, () => call('launch_dismiss'))
+  handle(IPC.emuResolve, (choice: string) => {
+    if (choice !== 'local' && choice !== 'remote' && choice !== 'skip') throw new Error('Nieznany wybór.')
+    return call<boolean>('launch_choice', [choice])
+  })
   handle(IPC.emuToggleKeep, async (gameId: string): Promise<EmuActionResult> => {
     const r = await call<{ ok: boolean; pinned?: boolean }>('toggle_pin', [idOf(gameId)])
     void provider.refresh()

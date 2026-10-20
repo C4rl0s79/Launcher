@@ -103,8 +103,10 @@ Aby zobaczyć wszystkie posiadane gry:
    EmuStart (dane używane na miejscu, bez kopiowania — szczegóły w [docs/MIGRATION.md](docs/MIGRATION.md)).
 
 Gry EmuStart: „Pobierz i graj” / „Graj”, „Pobierz na dysk” (zostaje na stałe), „Usuń z dysku”.
-Zapisy synchronizuje EmuStart przez serwer przed i po grze (stan faktyczny i ograniczenia:
-[docs/INTEGRATION.md §6](docs/INTEGRATION.md)). Gry Steam synchronizuje Steam Cloud.
+Zapisy synchronizuje EmuStart przez serwer przed i po grze, jak Steam Cloud — przy konflikcie
+wybierasz wersję (szczegóły i ograniczenia: [docs/INTEGRATION.md §6](docs/INTEGRATION.md)).
+**Wymaga EmuStart Server 0.46.0** — ze starszym serwerem gry działają, ale bez synchronizacji zapisów.
+Gry Steam synchronizuje Steam Cloud.
 
 ### SteamGridDB (grafiki — opcjonalnie)
 

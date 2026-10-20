@@ -14,6 +14,7 @@ export const LAUNCH_PHASE: Record<string, string> = {
   running: 'Gra uruchomiona',
   finished: 'Koniec gry',
   error: 'Błąd uruchamiania',
+  conflict: 'Konflikt zapisów — wybierz wersję',
   cancelled: 'Pobieranie przerwane'
 }
 
@@ -63,7 +64,18 @@ export function emuJobs(st: EmuStatusRaw | null, lumenIdOf: (engineId: number) =
       gameId: l.game_id !== undefined ? lumenIdOf(l.game_id) : undefined,
       title: l.title ?? '',
       phase: l.mode === 'config' && l.phase === 'running' ? 'Ustawienia emulatora' : (LAUNCH_PHASE[l.phase] ?? l.phase),
-      state: l.phase === 'error' ? 'error' : l.phase === 'cancelled' ? 'cancelled' : l.phase === 'finished' ? 'done' : l.phase === 'running' ? 'running' : 'active',
+      state:
+        l.phase === 'error'
+          ? 'error'
+          : l.phase === 'cancelled'
+            ? 'cancelled'
+            : l.phase === 'finished'
+              ? 'done'
+              : l.phase === 'running'
+                ? 'running'
+                : l.phase === 'conflict'
+                  ? 'waiting'
+                  : 'active',
       progress: showProgress && p ? { done: p.done, total: p.total, speed: p.speed, eta: p.eta } : undefined,
       message: l.message || undefined,
       cancellable: l.phase === 'downloading'

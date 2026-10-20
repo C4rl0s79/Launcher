@@ -153,6 +153,21 @@ describe('job list', () => {
     expect(jobs[2].phase).toContain('(1/2)')
   })
 
+  it('a save conflict waits for the player and cannot be cancelled away', () => {
+    const [j] = emuJobs(
+      status({
+        launch: {
+          phase: 'conflict',
+          title: 'T',
+          message: 'Zapisy tej gry zmieniły się na tym urządzeniu i na innym.',
+          conflict: [{ emulator: 'retroarch', core: 'snes9x', kind: 'saves', server_revision: 3, server_time: 2, server_device: 'Telefon', local_time: 1, local_files: 1 }]
+        }
+      }),
+      () => undefined
+    )
+    expect(j).toMatchObject({ state: 'waiting', phase: expect.stringContaining('Konflikt zapisów'), cancellable: false })
+  })
+
   it('an error is a job state, not hidden; a finished install drops off', () => {
     const jobs = emuJobs(
       status({
@@ -260,6 +275,12 @@ describe('fullscreen bridge (EmuStart UI)', () => {
     expect(await b.call('launch_status')).toEqual({ phase: 'idle' })
     expect(await b.call('install_start', [['snes']])).toMatchObject({ ok: false })
     expect(deps.engineCall).not.toHaveBeenCalled()
+  })
+
+  it('the save-conflict choice from the TV interface goes to the engine', async () => {
+    const { b, deps } = bridge()
+    await b.call('launch_choice', ['remote'])
+    expect(deps.engineCall).toHaveBeenCalledWith('launch_choice', ['remote'])
   })
 
   it('mode switch, selection and quit go to Lumen', async () => {

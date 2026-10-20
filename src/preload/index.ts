@@ -61,6 +61,7 @@ const api: LumenApi = {
     launch: (id) => invoke(IPC.emuLaunch, id),
     cancelLaunch: () => invoke(IPC.emuCancelLaunch),
     dismiss: () => invoke(IPC.emuDismiss),
+    resolveConflict: (choice) => invoke(IPC.emuResolve, choice),
     toggleKeep: (id) => invoke(IPC.emuToggleKeep, id),
     removeLocal: (id) => invoke(IPC.emuRemoveLocal, id),
     readiness: (id) => invoke(IPC.emuReadiness, id),

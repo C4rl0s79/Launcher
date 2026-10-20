@@ -1,7 +1,7 @@
 {
   "name": "lumen-launcher",
   "productName": "Lumen",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Couch-friendly launcher for Steam and EmuStart (emulated) games",
   "main": "./out/main/index.js",
   "author": "Carlos",

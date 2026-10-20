@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import type { Job } from '@shared/types'
+import type { EmuSaveConflict, Job, SaveChoice } from '@shared/types'
 import { api, attempt, useStore } from '../store'
 import { useActions } from '../nav/input'
 import { focusFirst } from '../nav/engine'
@@ -123,6 +123,11 @@ export function EmuLaunchOverlay() {
   const ref = useRef<HTMLDivElement>(null)
   const visible = !!job && job.state !== 'done'
   const ended = job?.state === 'error' || job?.state === 'cancelled'
+  const conflict = launch?.phase === 'conflict' ? (launch.conflict ?? []) : []
+  const choose = (c: SaveChoice): boolean => {
+    void attempt(api().emustart.resolveConflict(c))
+    return true
+  }
 
   // a finished session is closed right away (as in EmuStart); errors wait for the user
   useEffect(() => {
@@ -130,17 +135,19 @@ export function EmuLaunchOverlay() {
   }, [job?.state])
   useEffect(() => {
     if (visible && ref.current) focusFirst(ref.current)
-  }, [visible, ended])
+  }, [visible, ended, conflict.length])
 
   useActions(
     {
       back: () => {
+        if (conflict.length) return choose('skip')
         if (job?.cancellable) void api().emustart.cancelLaunch()
         else if (ended) void api().emustart.dismiss()
         return true
       },
-      x: () => true,
-      y: () => true,
+      // save conflict: the same buttons as in EmuStart (X this device, Y server, B skip)
+      x: () => (conflict.length ? choose('local') : true),
+      y: () => (conflict.length ? choose('remote') : true),
       lb: () => true,
       rb: () => true,
       menu: () => true
@@ -148,7 +155,17 @@ export function EmuLaunchOverlay() {
     {
       enabled: visible,
       modal: true,
-      hints: job?.cancellable ? [{ action: 'back', label: 'Anuluj pobieranie' }] : ended ? [{ action: 'confirm', label: 'Zamknij' }] : []
+      hints: conflict.length
+        ? [
+            { action: 'x', label: 'Zostaw z tego urządzenia' },
+            { action: 'y', label: 'Weź z serwera' },
+            { action: 'back', label: 'Pomiń' }
+          ]
+        : job?.cancellable
+          ? [{ action: 'back', label: 'Anuluj pobieranie' }]
+          : ended
+            ? [{ action: 'confirm', label: 'Zamknij' }]
+            : []
     }
   )
   if (!visible || !job) return null
@@ -175,6 +192,7 @@ export function EmuLaunchOverlay() {
           </>
         )}
         {job.message && <p className="launch__msg">{job.message}</p>}
+        {conflict.length > 0 && <SaveConflictChoice conflict={conflict} onChoose={choose} />}
         {job.state === 'running' && !job.message && <p className="launch__msg">Miłej gry! Menu w grze: przytrzymaj A + Y.</p>}
         <div className="launch__actions">
           {job.cancellable && (
@@ -191,5 +209,48 @@ export function EmuLaunchOverlay() {
       </div>
     </div>,
     document.body
+  )
+}
+
+const KIND_PL: Record<string, string> = { saves: 'zapisy w grze', states: 'stany', memcards: 'karta pamięci' }
+
+const when = (unix: number): string =>
+  unix ? new Date(unix * 1000).toLocaleString('pl-PL', { dateStyle: 'medium', timeStyle: 'short' }) : '—'
+
+/**
+ * Save conflict (EmuStart 0.46 save sync): the saves of this game changed here and on another device.
+ * Nothing is lost either way — the other version stays in the server history or in a local backup.
+ */
+function SaveConflictChoice({ conflict, onChoose }: { conflict: EmuSaveConflict[]; onChoose: (c: SaveChoice) => boolean }) {
+  const kinds = [...new Set(conflict.map((c) => KIND_PL[c.kind] ?? c.kind))].join(', ')
+  const devices = [...new Set(conflict.map((c) => c.server_device).filter(Boolean))].join(', ')
+  const newest = (k: 'local_time' | 'server_time'): number => Math.max(0, ...conflict.map((c) => c[k] || 0))
+  return (
+    <div className="conflict">
+      <div className="conflict__sides">
+        <div className="conflict__side">
+          <strong>To urządzenie</strong>
+          <span>{kinds}</span>
+          <span>zmienione {when(newest('local_time'))}</span>
+        </div>
+        <div className="conflict__side">
+          <strong>Serwer</strong>
+          <span>{devices ? `z urządzenia ${devices}` : 'inne urządzenie'}</span>
+          <span>zmienione {when(newest('server_time'))}</span>
+        </div>
+      </div>
+      <p className="details__muted">Druga wersja nie ginie — zostaje w historii na serwerze albo w kopii zapasowej na tym komputerze.</p>
+      <div className="launch__actions">
+        <button className="btn btn--primary" data-nav data-autofocus onClick={() => onChoose('local')}>
+          Zostaw z tego urządzenia
+        </button>
+        <button className="btn" data-nav onClick={() => onChoose('remote')}>
+          Weź z serwera
+        </button>
+        <button className="btn btn--ghost" data-nav onClick={() => onChoose('skip')}>
+          Pomiń (bez synchronizacji)
+        </button>
+      </div>
+    </div>
   )
 }

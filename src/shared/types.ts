@@ -361,7 +361,8 @@ export interface Job {
   title: string
   /** human readable phase, e.g. "Pobieranie", "Rozpakowywanie", "Gra uruchomiona" */
   phase: string
-  state: 'active' | 'running' | 'done' | 'error' | 'cancelled' | 'queued'
+  /** waiting = the job needs a decision from the player (e.g. a save conflict) */
+  state: 'active' | 'running' | 'done' | 'error' | 'cancelled' | 'queued' | 'waiting'
   progress?: JobProgress
   message?: string
   cancellable: boolean
@@ -371,7 +372,7 @@ export interface Job {
 
 /** EmuStart launch session as reported by the engine (launch_status). */
 export interface EmuLaunchStatus {
-  phase: 'idle' | 'preparing' | 'downloading' | 'extracting' | 'running' | 'finished' | 'error' | 'cancelled'
+  phase: 'idle' | 'preparing' | 'downloading' | 'extracting' | 'running' | 'finished' | 'error' | 'cancelled' | 'conflict'
   game_id?: number
   title?: string
   system?: string
@@ -382,7 +383,31 @@ export interface EmuLaunchStatus {
   missing_core?: boolean
   notice?: string
   progress?: { done: number; total: number; left?: number; speed?: number; eta?: number; file?: number; files?: number }
+  /** phase "conflict": save bundles changed here and on another device (syncclient Conflict.describe) */
+  conflict?: EmuSaveConflict[]
 }
+
+export interface EmuSaveConflict {
+  emulator: string
+  core: string
+  kind: 'saves' | 'states' | 'memcards' | string
+  server_revision: number
+  /** unix seconds */
+  server_time: number
+  server_device: string
+  local_time: number
+  local_files: number
+}
+
+/** Save sync of one game with the server (syncclient.status). */
+export interface EmuSaveSync {
+  state: 'synced' | 'pending' | 'never' | 'offline' | string
+  /** unix seconds */
+  last: number
+}
+
+/** How the player settles a save conflict: keep this device's version, take the server's, or skip sync this time. */
+export type SaveChoice = 'local' | 'remote' | 'skip'
 
 export interface SaveConflict {
   profile?: string
@@ -406,7 +431,9 @@ export interface JobsSnapshot {
 
 export type EmuMissing = { kind: 'emulator'; es: string; system: string; installable: boolean; steps: string[] }
 
-export type EmuReadiness = { ok: true; emulator: string; system: string; missing: EmuMissing[] } | { ok: false; reason: string }
+export type EmuReadiness =
+  | { ok: true; emulator: string; system: string; missing: EmuMissing[]; sync?: EmuSaveSync }
+  | { ok: false; reason: string }
 
 export interface EmuActionResult {
   ok: boolean

@@ -44,5 +44,8 @@ z folderów nie są wtedy usuwane.
 
 ## Serwer EmuStart
 
-Bez zmian i bez migracji: Lumen jest dla serwera zwykłym urządzeniem „pc” (ten sam protokół logowania,
-`/v1/…`, ta sama obsługa zapisów).
+Lumen jest dla serwera zwykłym urządzeniem „pc” z EmuStart 0.46.0 (ten sam protokół logowania i `/v1/…`).
+Do synchronizacji zapisów potrzebny jest **EmuStart Server 0.46.0** (API `/v1/savesync`); ze starszym
+serwerem biblioteka, pobieranie i granie działają, a gry ruszają na zapisach z urządzenia. Zaktualizuj też
+EmuStart na innych komputerach i telefonie — 0.46.0 zmienia układ zapisów (karta pamięci osobna dla gry
+w PCSX2/DuckStation, zapisy RetroArcha paczkami).

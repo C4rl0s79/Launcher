@@ -176,6 +176,7 @@ export function DetailsScreen({ gameId }: { gameId: string }) {
     ['Rozmiar', game.emu ? formatBytes(game.emu.size) : undefined],
     ['Wersja', game.emu?.tags || undefined],
     ['Emulator', isEmu && ready?.ok ? ready.emulator || 'nie wybrano' : undefined],
+    ['Zapisy na serwerze', isEmu && ready?.ok && ready.sync ? syncLabel(ready.sync.state, ready.sync.last) : undefined],
     ['Źródło', game.emu ? `Serwer EmuStart${emuSummary?.server?.name ? ` (${emuSummary.server.name})` : ''}` : undefined],
     ['Platforma', game.shortcut?.tags.join(', ') || undefined],
     ['Źródło', game.shortcut ? 'Skrót spoza Steam (uruchamiany przez Steam)' : undefined]
@@ -463,4 +464,11 @@ function EmuJobStatus({ job }: { job: Job }) {
       )}
     </div>
   )
+}
+
+function syncLabel(state: string, last: number): string {
+  if (state === 'synced') return `zsynchronizowane${last ? ` · ${formatLastPlayed(last) ?? ''}` : ''}`
+  if (state === 'pending') return 'czekają na wysłanie (brak połączenia z serwerem)'
+  if (state === 'never') return 'jeszcze nie synchronizowane'
+  return state
 }
