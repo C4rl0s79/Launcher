@@ -461,7 +461,9 @@ export interface EmuLocalState {
   /** picture the emulator stored with the state (data: URL) */
   thumb?: string
   resume?: boolean
-  /** state saved by another core of this game (another device) — listed, but it will not load */
+  /** name of the state in the game's save bundle — launch with "arc:<arc>" (EmuStart 0.48.1) */
+  arc?: string
+  /** state saved by another core of this game: playing it switches the game to that core */
   otherCore?: string
   /** "rdzeń bsnes — nie wczyta się w snes9x" */
   detail?: string

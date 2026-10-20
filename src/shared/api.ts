@@ -92,6 +92,8 @@ export interface LumenApi {
      * profile is playing on another device (lock) and the player chose to take it over
      */
     launch(gameId: string, state?: string, takeover?: boolean): Promise<EmuActionResult>
+    /** a state of another RetroArch core: switch this game to that core (downloads it if missing) */
+    playOtherCore(gameId: string, core: string): Promise<EmuActionResult>
     /** sync status, save states on this PC, PS2 states of all devices */
     saves(gameId: string): Promise<EmuSaves>
     /** copy a PS2 state to the other platform (or here) */
@@ -204,6 +206,7 @@ export const IPC = {
   padState: 'pad:state',
   emuLaunch: 'emu:launch',
   emuSaves: 'emu:saves',
+  emuPlayOtherCore: 'emu:playOtherCore',
   emuCopyState: 'emu:copyState',
   emuCancelLaunch: 'emu:cancelLaunch',
   emuDismiss: 'emu:dismiss',

@@ -86,7 +86,7 @@ export function registerEmustartIpc(handle: Handle, ctx: Ctx): void {
     // game_options: states in the emulator's folder of this profile (after taking the newest from the
     // server) and the sync status; save_manager: PS2 states of this PC and the phone (server only)
     const [opts, mgr] = await Promise.all([
-      call<{ states?: { path: string; name: string; label?: string; time: number; thumb?: string; resume?: boolean; other_core?: string; detail?: string }[]; sync?: EmuSaveSync & { bundles?: unknown[] } }>(
+      call<{ states?: { path: string; arc?: string; name: string; label?: string; time: number; thumb?: string; resume?: boolean; other_core?: string; detail?: string }[]; sync?: EmuSaveSync & { bundles?: unknown[] } }>(
         'game_options',
         [id],
         90_000
@@ -105,6 +105,7 @@ export function registerEmustartIpc(handle: Handle, ctx: Ctx): void {
         label: st.resume ? 'Kontynuuj (szybki zapis EmuStart)' : st.label || st.name,
         time: st.time,
         resume: st.resume,
+        arc: st.arc || undefined,
         otherCore: st.other_core || undefined,
         detail: st.detail || undefined,
         thumb: st.thumb ? await ctx.engineImage(st.thumb) : undefined
@@ -116,6 +117,12 @@ export function registerEmustartIpc(handle: Handle, ctx: Ctx): void {
       states,
       remote: mgr.ok ? { ok: true, here: mgr.here ?? 'windows', states: mgr.states ?? [] } : { ok: false, reason: mgr.reason ?? 'Nie udało się odczytać zapisów.' }
     }
+  })
+  handle(IPC.emuPlayOtherCore, async (gameId: string, core: string): Promise<EmuActionResult> => {
+    const r = await call<{ ok: boolean; reason?: string; label?: string }>('play_other_core', [idOf(gameId), String(core)], 600_000)
+    if (!r.ok) return fail(r.reason ?? 'Nie udało się przełączyć rdzenia.')
+    ctx.changed()
+    return { ok: true, message: r.label ? `Emulator tej gry: ${r.label}` : undefined }
   })
   handle(IPC.emuCopyState, async (gameId: string, rel: string, platform: string, emu: string): Promise<EmuActionResult> => {
     const r = await call<{ ok: boolean; reason?: string; same?: boolean; local?: boolean }>('save_copy', [idOf(gameId), String(rel), String(platform), String(emu)], 120_000)

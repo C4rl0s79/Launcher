@@ -33,6 +33,30 @@ Plan najbliższych zmian: [ROADMAP.md](ROADMAP.md).
 - Od EmuStart 0.48.0 zapisy przy logowaniu / starcie / wylogowaniu i blokada profilu są w EmuStart
   (Lumen nie dokłada już własnych — `lumen_saves.py` usunięty).
 
+## [0.48.1] — 2026-10-20
+
+Zakres: synchronizacja stanów (`syncclient.py`, `savebundles.py`, `savesync.py`, `savemigrate.py`,
+`api.py`, `launcher.py`, `web/options.js`; Android: `SaveSync.kt`, `Saves.kt`, `Bridge.kt`). Po
+aktualizacji serwera: panel → Konfiguracja → „Zapisy sprzed 0.46” → „Przenieś zapisy” (dołącza
+stany przeniesione wcześniej do historii).
+
+### Poprawione
+- **Lista „Wczytaj zapis” to zawsze stan serwera** (PC i telefon): przy otwarciu opcji gry
+  urządzenie najpierw synchronizuje zapisy tej gry z serwerem (nie dopiero przy uruchomieniu
+  gry) i pokazuje dokładnie paczkę stanów — bez lokalnych plików spoza niej (np. kopii pod
+  nazwą ZIP-a zamiast ROM-u). Pliki paczki nazwane od innej nazwy gry dostają nazwę, której
+  użyje emulator.
+- **Stany z dwóch urządzeń się sumują** zamiast konfliktu: brakujące sloty dochodzą, ten sam
+  slot z inną zawartością — nowszy zostaje, starszy dostaje następny wolny numer (z miniaturą);
+  wynik od razu na serwerze i na wszystkich urządzeniach. Zapisy w grze (.srm) — jak dotąd jedna
+  wersja, konflikt do decyzji gracza.
+- **Migracja zapisów sprzed 0.46: stany dołączają się do istniejącej paczki** (bieżące zostają w
+  swoich slotach, stare jako nowe sloty z miniaturami) — wcześniej szły do historii i urządzenia
+  ich nie widziały. Ponowne „Przenieś zapisy” w panelu dołącza też stany przeniesione wcześniej
+  do historii.
+- **Stan z innego rdzenia da się wczytać**: wybór przełącza grę (PC) / system (telefon) na
+  RetroArch z tym rdzeniem (brakujący rdzeń PC pobiera z serwera) i startuje z tego stanu.
+
 ## [0.48.0] — 2026-10-20
 
 Zakres: serwer (`plock.py`, `remote.py`), PC (`profiles.py`, `syncclient.py`, `api.py`, `web/app.js`),
