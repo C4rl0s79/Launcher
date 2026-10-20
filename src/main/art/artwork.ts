@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto'
 import type { ArtChoice, ArtKind, ArtSourcePriority, CacheStats, GameArtPrefs } from '@shared/types'
 import { fetchWithTimeout, HttpError, Limiter, NetworkError } from '../net'
 import { log } from '../logger'
-import { pickBestMatch, SgdbAuthError, type SgdbClient } from './sgdb'
+import { pickBestMatch, pickExactMatch, SgdbAuthError, type SgdbClient } from './sgdb'
 
 // Resolves the image file to display for (game, kind) and caches it on disk.
 //
@@ -158,7 +158,7 @@ export class ArtworkService {
       if (custom) return custom
     }
 
-    const sgdb = (): Promise<string | null> => this.fromSgdbAuto(gameId, appId, kind, name, prefs?.sgdbGameId)
+    const sgdb = (): Promise<string | null> => this.fromSgdbAuto(gameId, appId, kind, name ? [name] : [], prefs?.sgdbGameId, false)
     if (!appId) return sgdb()
     const steam = (): Promise<string | null> => this.fromSteam(gameId, appId, kind)
     const chain = this.deps.priority() === 'steamFirst' ? [steam, sgdb] : [sgdb, steam]
@@ -167,6 +167,36 @@ export class ArtworkService {
       if (r) return r
     }
     return null
+  }
+
+  /**
+   * Art for a game from another source (EmuStart): the user's choice, else SteamGridDB matched
+   * strictly by title (any of `names`). A file; null when the user chose "none"; undefined = use
+   * the source's own art (no choice, the "source" choice, or nothing found).
+   */
+  async resolveTitled(gameId: string, kind: ArtKind, names: string[], auto = true): Promise<string | null | undefined> {
+    await this.ensureLoaded()
+    const prefs = this.deps.prefsFor(gameId)
+    const choice = prefs?.[kind]
+    if (choice) {
+      if (choice.type === 'none') return null
+      if (choice.type === 'file') return (await exists(choice.file)) ? choice.file : undefined
+      if (choice.type === 'sgdb') return (await this.cachedDownload(`${gameId}|${kind}|sgdb-${choice.imageId}`, choice.url, gameId, kind)) ?? undefined
+      return undefined // 'steam' here means the source's own (official) art
+    }
+    if (!auto) return undefined
+    const key = `${gameId}|${kind}|titled`
+    let p = this.inflight.get(key)
+    if (!p) {
+      p = this.fromSgdbAuto(gameId, undefined, kind, names, prefs?.sgdbGameId, true)
+        .catch((e) => {
+          log.warn('art', `resolve ${key} failed: ${(e as Error).message}`)
+          return null
+        })
+        .finally(() => this.inflight.delete(key))
+      this.inflight.set(key, p)
+    }
+    return (await p) ?? undefined
   }
 
   // ---------- Steam sources ----------
@@ -247,11 +277,12 @@ export class ArtworkService {
     gameId: string,
     appId: number | undefined,
     kind: ArtKind,
-    name: string | undefined,
-    manualGameId: number | undefined
+    names: string[],
+    manualGameId: number | undefined,
+    strict: boolean
   ): Promise<string | null> {
     if (!this.deps.sgdb.enabled) return null
-    if (!appId && !manualGameId && !name) return null
+    if (!appId && !manualGameId && !names.length) return null
     const key = `${gameId}|${kind}|sgdb-auto${manualGameId ? `-${manualGameId}` : ''}`
     const entry = this.index.entries[key]
     if (entry?.file && (await exists(entry.file))) return entry.file
@@ -264,9 +295,9 @@ export class ArtworkService {
         : appId
           ? await this.deps.sgdb.images(kind, { steamAppId: appId })
           : []
-      if (!options.length && !manualGameId && name) {
+      if (!options.length && !manualGameId && names.length) {
         // fallback: match by title
-        const matchId = await this.autoMatch(gameId, name)
+        const matchId = await this.autoMatch(gameId, names, strict)
         if (matchId) options = await this.deps.sgdb.images(kind, { gameId: matchId })
       }
       const best = options[0]
@@ -292,12 +323,18 @@ export class ArtworkService {
     }
   }
 
-  private async autoMatch(gameId: string, name: string): Promise<number | undefined> {
+  /** strict: exact title match against any of `names` (games outside Steam), tried name by name */
+  private async autoMatch(gameId: string, names: string[], strict: boolean): Promise<number | undefined> {
     const key = `${gameId}|match`
     const entry = this.index.entries[key]
     if (entry?.sgdbGameId) return entry.sgdbGameId
     if (entry?.missUntil && entry.missUntil > Date.now()) return undefined
-    const match = pickBestMatch(name, await this.deps.sgdb.search(name))
+    let match
+    for (const name of strict ? names.slice(0, 3) : names.slice(0, 1)) {
+      const results = await this.deps.sgdb.search(name)
+      match = strict ? pickExactMatch(names, results) : pickBestMatch(name, results)
+      if (match) break
+    }
     this.index.entries[key] = match ? { sgdbGameId: match.id } : { missUntil: Date.now() + MISS_TTL_MS }
     this.scheduleSave()
     return match?.id

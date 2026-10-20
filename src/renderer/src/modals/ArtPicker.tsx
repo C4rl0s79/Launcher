@@ -26,6 +26,7 @@ export function ArtPicker({ game, onClose }: { game: Game; onClose: () => void }
   const [searching, setSearching] = useState(false)
   const gp = prefs.art[game.id]
   const current = gp?.[kind]
+  const isEmu = game.source === 'emustart'
 
   useEffect(() => {
     let alive = true
@@ -57,7 +58,7 @@ export function ArtPicker({ game, onClose }: { game: Game; onClose: () => void }
         ))}
       </div>
       <p className="details__muted">
-        Obecnie: {current ? CHOICE_LABEL[current.type] : 'automatycznie'}
+        Obecnie: {current ? (isEmu && current.type === 'steam' ? 'grafika z serwera EmuStart' : CHOICE_LABEL[current.type]) : 'automatycznie'}
         {result?.ok && result.sgdbGame && ` · SteamGridDB: ${result.sgdbGame.name}`}
       </p>
       <div className="modal__row">
@@ -74,6 +75,11 @@ export function ArtPicker({ game, onClose }: { game: Game; onClose: () => void }
         {game.source === 'steam' && kind !== 'icon' && (
           <button className="btn" data-nav onClick={() => void attempt(api().art.useSteam(game.id, kind)).then(done('Użyto grafiki Steam'))}>
             Oficjalna grafika Steam
+          </button>
+        )}
+        {isEmu && kind !== 'icon' && (
+          <button className="btn" data-nav onClick={() => void attempt(api().art.useSteam(game.id, kind)).then(done('Użyto grafiki z serwera EmuStart'))}>
+            Grafika z serwera EmuStart
           </button>
         )}
         <button className="btn" data-nav disabled={!current} onClick={() => void attempt(api().art.reset(game.id, kind)).then(done('Przywrócono automatyczny wybór'))}>
@@ -139,7 +145,7 @@ function MatchSearch({ game, onClose }: { game: Game; onClose: () => void }) {
   const choose = async (g: SgdbGame | null): Promise<void> => {
     const p = await attempt(api().art.setMatch(game.id, g))
     if (p) {
-      useStore.getState().toast(g ? `Dopasowano do „${g.name}”` : 'Przywrócono dopasowanie po identyfikatorze Steam')
+      useStore.getState().toast(g ? `Dopasowano do „${g.name}”` : game.source === 'steam' ? 'Przywrócono dopasowanie po identyfikatorze Steam' : 'Przywrócono automatyczne dopasowanie po tytule')
       onClose()
     }
   }
@@ -154,7 +160,7 @@ function MatchSearch({ game, onClose }: { game: Game; onClose: () => void }) {
       </div>
       {manual && (
         <button className="btn btn--ghost" data-nav onClick={() => void choose(null)}>
-          Użyj automatycznego dopasowania (po ID Steam)
+          Użyj automatycznego dopasowania ({game.source === 'steam' ? 'po ID Steam' : 'po tytule'})
         </button>
       )}
       {error && <p className="details__muted">{error}</p>}

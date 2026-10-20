@@ -83,6 +83,18 @@ export function pickBestMatch(name: string, results: SgdbGame[]): SgdbGame | und
   return n && (n.includes(target) || target.includes(n)) ? first : undefined
 }
 
+/** Title for exact comparison: normalised, without a leading or trailing article ("Daedalus Encounter, The"). */
+const titleKey = (s: string): string => norm(s).replace(/^(the|a|an) /, '').replace(/ (the|a|an)$/, '')
+
+/**
+ * Strict variant for games outside Steam (emulators): only an exact title match against any of
+ * the game's names counts — a loose match on short titles ("D", "Tetris") picks the wrong game.
+ */
+export function pickExactMatch(names: string[], results: SgdbGame[]): SgdbGame | undefined {
+  const keys = new Set(names.map(titleKey).filter(Boolean))
+  return results.find((r) => keys.has(titleKey(r.name)))
+}
+
 export class SgdbClient {
   readonly limiter = new Limiter(3, 'steamgriddb')
 

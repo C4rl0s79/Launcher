@@ -1,7 +1,7 @@
 import { stat } from 'node:fs/promises'
 import type { BrowserWindow } from 'electron'
 import { IPC } from '@shared/api'
-import type { EmuActionResult, EmuEmulatorOption, EmuOptions, EmuOptionsPatch, EmuReadiness, EmuSettings, JobsSnapshot } from '@shared/types'
+import type { EmuActionResult, EmuEmulatorOption, EmuLocalState, EmuRemoteState, EmuSaves, EmuSaveSync, EmuOptions, EmuOptionsPatch, EmuReadiness, EmuSettings, JobsSnapshot } from '@shared/types'
 import type { EmustartEngine } from './engine'
 import type { EmustartProvider } from './provider'
 
@@ -15,6 +15,8 @@ interface Ctx {
   dataDir: () => string
   /** shared settings changed here — refresh the library and the TV interface */
   changed: () => void
+  /** a picture served by the engine (state thumbnails) as a data: URL; undefined when missing */
+  engineImage: (url: string) => Promise<string | undefined>
 }
 
 /** EmuStart's get_settings → the shared options (engine keys stay in the engine). */
@@ -68,16 +70,56 @@ export function registerEmustartIpc(handle: Handle, ctx: Ctx): void {
   }
   const call = <T>(method: string, args: unknown[] = [], timeout?: number): Promise<T> => engine.call<T>(method, args, timeout)
 
-  handle(IPC.emuLaunch, async (gameId: string): Promise<EmuActionResult> => {
+  handle(IPC.emuLaunch, async (gameId: string, state?: string): Promise<EmuActionResult> => {
     const r = await call<{ ok: boolean; reason?: string; warning?: string; need_install?: { es: string; system: string; steps: string[] }; profile_pin?: boolean }>(
       'launch',
-      [idOf(gameId), '', false],
+      [idOf(gameId), typeof state === 'string' ? state : '', false],
       60_000
     )
     if (r.need_install) return { ok: false, error: `Brak emulatora: ${r.need_install.system}.`, needInstall: r.need_install }
     if (r.profile_pin) return fail(`${r.reason ?? 'Profil wymaga PIN-u lub hasła.'} Odblokuj profil w trybie pełnoekranowym (Menu → Zmień profil).`)
     if (!r.ok) return fail(r.reason ?? 'Nie udało się uruchomić gry.')
     return { ok: true, message: r.warning }
+  })
+  handle(IPC.emuSaves, async (gameId: string): Promise<EmuSaves> => {
+    const id = idOf(gameId)
+    // game_options: states in the emulator's folder of this profile (after taking the newest from the
+    // server) and the sync status; save_manager: PS2 states of this PC and the phone (server only)
+    const [opts, mgr] = await Promise.all([
+      call<{ states?: { path: string; name: string; label?: string; time: number; thumb?: string; resume?: boolean }[]; sync?: EmuSaveSync & { bundles?: unknown[] } }>(
+        'game_options',
+        [id],
+        90_000
+      ),
+      // the save manager lists PS2 states only — for other systems it has nothing to show
+      provider.row(gameId)?.es !== 'ps2'
+        ? { ok: true, here: 'windows', states: [] as EmuRemoteState[], reason: undefined as string | undefined }
+        : call<{ ok: boolean; reason?: string; here?: string; states?: EmuRemoteState[] }>('save_manager', [id], 90_000).catch(
+        (e: Error): { ok: boolean; reason?: string; here?: string; states?: EmuRemoteState[] } => ({ ok: false, reason: e.message })
+      )
+    ])
+    const states: EmuLocalState[] = []
+    for (const st of opts?.states ?? []) {
+      states.push({
+        path: st.path,
+        label: st.resume ? 'Kontynuuj (szybki zapis EmuStart)' : st.label || st.name,
+        time: st.time,
+        resume: st.resume,
+        thumb: st.thumb ? await ctx.engineImage(st.thumb) : undefined
+      })
+    }
+    const sync = opts?.sync ?? { state: 'never', last: 0 }
+    return {
+      sync: { state: sync.state, last: sync.last ?? 0, bundles: Array.isArray(sync.bundles) ? sync.bundles.length : 0 },
+      states,
+      remote: mgr.ok ? { ok: true, here: mgr.here ?? 'windows', states: mgr.states ?? [] } : { ok: false, reason: mgr.reason ?? 'Nie udało się odczytać zapisów.' }
+    }
+  })
+  handle(IPC.emuCopyState, async (gameId: string, rel: string, platform: string, emu: string): Promise<EmuActionResult> => {
+    const r = await call<{ ok: boolean; reason?: string; same?: boolean; local?: boolean }>('save_copy', [idOf(gameId), String(rel), String(platform), String(emu)], 120_000)
+    if (!r.ok) return fail(r.reason ?? 'Nie udało się skopiować.')
+    if (r.same) return { ok: true, message: 'Ten stan już tam jest.' }
+    return { ok: true, message: platform === 'windows' ? (r.local ? 'Skopiowano — stan jest na liście tego komputera.' : 'Skopiowano — pobierze się przy następnej grze.') : 'Skopiowano — telefon pobierze go przy następnym uruchomieniu gry.' }
   })
   handle(IPC.emuCancelLaunch, () => call('launch_cancel'))
   handle(IPC.emuDismiss, () => call('launch_dismiss'))

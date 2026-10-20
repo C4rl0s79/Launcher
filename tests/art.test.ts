@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import type { ArtKind, ArtOption, GameArtPrefs, SgdbGame } from '@shared/types'
 import { ArtworkService } from '../src/main/art/artwork'
-import { pickBestMatch, queryFor, toOptions, SgdbAuthError, type SgdbClient } from '../src/main/art/sgdb'
+import { pickBestMatch, pickExactMatch, queryFor, toOptions, SgdbAuthError, type SgdbClient } from '../src/main/art/sgdb'
 import { NetworkError } from '../src/main/net'
 
 const tmp = (): string => mkdtempSync(path.join(tmpdir(), 'lumen-art-'))
@@ -56,6 +56,12 @@ describe('SteamGridDB helpers', () => {
     ])
     expect(r.map((o) => o.id)).toEqual([1])
     expect(toOptions(null)).toEqual([])
+  })
+
+  it('exact match ignores articles and punctuation, never a loose hit', () => {
+    expect(pickExactMatch(['Daedalus Encounter, The'], [{ id: 1, name: 'Daedalus' }, { id: 2, name: 'The Daedalus Encounter' }])?.id).toBe(2)
+    expect(pickExactMatch(['D'], [{ id: 3, name: 'D-Day' }, { id: 4, name: 'Dd' }])).toBeUndefined()
+    expect(pickExactMatch(['Makaimura', "Ghosts'n Goblins"], [{ id: 5, name: "Ghosts 'n Goblins" }])?.id).toBe(5)
   })
 
   it('picks the best title match', () => {
@@ -161,6 +167,30 @@ describe('ArtworkService', () => {
     expect(await offline.svc.resolve('steam:1', 1, 'grid', 'X')).toBeNull()
     const badKey = service({ sgdb: fakeSgdb({ images: vi.fn(async () => Promise.reject(new SgdbAuthError('401'))) }), fetch: async () => null })
     expect(await badKey.svc.resolve('steam:1', 1, 'grid', 'X')).toBeNull()
+  })
+
+  it('EmuStart games: SteamGridDB poster by an exact title match (any of the names)', async () => {
+    const sgdb = fakeSgdb({
+      search: vi.fn(async (t: string): Promise<SgdbGame[]> =>
+        t === 'Daedalus Encounter, The' ? [{ id: 7, name: 'The Daedalus Encounter' }] : [{ id: 8, name: 'Something Else' }]
+      )
+    })
+    const { svc } = service({ sgdb })
+    const f = await svc.resolveTitled('emugrp:abc', 'grid', ['Daedalus Encounter Episode 1', 'Daedalus Encounter, The'])
+    expect(f).toBeTruthy()
+    expect(sgdb.search).toHaveBeenCalledTimes(2)
+    expect(sgdb.images).toHaveBeenCalledWith('grid', { gameId: 7 })
+  })
+
+  it('EmuStart games: no exact match or no key = the source art (undefined), choices win', async () => {
+    const loose = fakeSgdb({ search: vi.fn(async (): Promise<SgdbGame[]> => [{ id: 1, name: 'D-Day' }]) })
+    expect(await service({ sgdb: loose }).svc.resolveTitled('emu:1', 'grid', ['D'])).toBeUndefined()
+    expect(await service({ sgdb: fakeSgdb({}, false) }).svc.resolveTitled('emu:1', 'grid', ['D'])).toBeUndefined()
+    const { svc, sgdb } = service({ prefs: { 'emu:2': { grid: { type: 'steam' }, hero: { type: 'none' } } } })
+    expect(await svc.resolveTitled('emu:2', 'grid', ['X'])).toBeUndefined()
+    expect(await svc.resolveTitled('emu:2', 'hero', ['X'])).toBeNull()
+    expect(await svc.resolveTitled('emu:3', 'logo', ['X'], false)).toBeUndefined()
+    expect(sgdb.search).not.toHaveBeenCalled()
   })
 
   it('clears the cache directory and reports stats', async () => {

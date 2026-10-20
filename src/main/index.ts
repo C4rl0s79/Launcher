@@ -15,7 +15,7 @@ import { SettingsStore } from './store/settings'
 import { LibraryService } from './library/service'
 import { StoreMetadataProvider } from './steam/storeMeta'
 import { openSteam, openSteamUri, shortcutRunUri } from './steam/actions'
-import { pickBestMatch, SgdbAuthError, SgdbClient } from './art/sgdb'
+import { pickBestMatch, pickExactMatch, SgdbAuthError, SgdbClient } from './art/sgdb'
 import { LaunchBoxService } from './launchbox/service'
 import { XInputPoller } from './input/xinput'
 import { platformForTags } from './launchbox/match'
@@ -263,12 +263,54 @@ function registerArtProtocol(): void {
  */
 const emuArtLimit = new Limiter(6, 'emustart-art')
 const emuArtCache = new Map<string, { type: string; body: Buffer }>()
+
+/** Names to look a game up in SteamGridDB: its LaunchBox name and the titles of its versions. */
+function emuTitles(gameId: string): string[] {
+  const rows = [emu.row(gameId), ...emu.versionsOf(gameId).map((v) => emu.row(v.id))]
+  const out = new Set<string>()
+  for (const r of rows) if (r?.title) out.add(r.title)
+  const lb = rows.find((r) => r?.lb)?.lb
+  const lbName = lb ? launchbox.nameById(lb) : undefined
+  return lbName ? [lbName, ...[...out].filter((n) => n !== lbName)] : [...out]
+}
+
+const IMAGE_TYPES: Record<string, string> = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp' }
+async function fileResponse(file: string): Promise<Response> {
+  const type = IMAGE_TYPES[path.extname(file).toLowerCase()] ?? 'application/octet-stream'
+  return new Response(new Uint8Array(await fs.readFile(file)), { status: 200, headers: { 'Content-Type': type, 'Cache-Control': 'max-age=86400' } })
+}
+
+/**
+ * EmuStart art. The server keeps real box art (3DO: longbox ~1:2, jewel case ~1:1), not 2:3
+ * posters, so the poster, background and icon come first from the user's choice or SteamGridDB
+ * (600x900 grids, matched strictly by title); the logo first from the server (LaunchBox Clear Logo).
+ * The first SteamGridDB lookup can take a while: after a short wait the server's art is shown and
+ * the poster is swapped in when it arrives (art revision bump).
+ */
 async function emuArt(gameId: string, kind: string): Promise<Response> {
+  const k = kind as ArtKind
+  const names = emuTitles(gameId)
+  const titled = artwork.resolveTitled(gameId, k, names, k !== 'logo')
+  const first = await Promise.race([titled, new Promise<'late'>((r) => setTimeout(() => r('late'), 2500))])
+  if (first === 'late') void titled.then((f) => f && notifyArt(gameId))
+  else if (first === null) return new Response('none', { status: 404 })
+  else if (first) return fileResponse(first)
+  const own = await engineArt(gameId, kind)
+  if (own) return own
+  if (k === 'logo' && first !== 'late') {
+    const f = await artwork.resolveTitled(gameId, k, names, true)
+    if (f) return fileResponse(f)
+  }
+  return new Response('not found', { status: 404 })
+}
+
+/** The engine's offline copy of the server's media (box art, screenshot, Clear Logo). */
+async function engineArt(gameId: string, kind: string): Promise<Response | null> {
   const field = emuArtField(kind)
   const row = emu.row(gameId)
   // a game with several versions: art of the shown version, else of any version that has it
   const url = (field && (row?.[field] || emu.versionsOf(gameId).map((v) => emu.row(v.id)?.[field]).find(Boolean))) || ''
-  if (!url || !engine.baseUrl) return new Response('not found', { status: 404 })
+  if (!url || !engine.baseUrl) return null
   const full = new URL(url, engine.baseUrl).toString()
   let hit = emuArtCache.get(full)
   if (!hit) {
@@ -327,6 +369,11 @@ function registerEmuUiProtocol(): void {
 
 function bumpArt(gameId: string, kind?: ArtKind): void {
   artwork.invalidate(gameId, kind)
+  notifyArt(gameId)
+}
+
+/** Tell the interface to reload a game's art (a new image is ready; nothing to forget). */
+function notifyArt(gameId: string): void {
   const rev = (artRev.get(gameId) ?? 0) + 1
   artRev.set(gameId, rev)
   send(IPC.artChanged, gameId, rev)
@@ -497,7 +544,6 @@ function registerIpc(): void {
   })
 
   handle(IPC.artOptions, async (gameId: string, kind: ArtKind) => {
-    if (isEmuGameId(gameId)) return { ok: false, error: 'Grafiki gier EmuStart wybiera się na serwerze EmuStart.' }
     if (!sgdb.enabled) return { ok: false, error: 'Dodaj klucz SteamGridDB w Ustawieniach, aby przeglądać grafiki.' }
     const appId = steamAppIdOf(gameId)
     const manual = prefs.get().art[gameId]
@@ -508,6 +554,13 @@ function registerIpc(): void {
           sgdbGame: { id: manual.sgdbGameId, name: manual.sgdbGameName ?? `#${manual.sgdbGameId}` },
           options: await sgdb.images(kind, { gameId: manual.sgdbGameId })
         }
+      }
+      if (isEmuGameId(gameId)) {
+        // EmuStart: exact title match, like the automatic poster (correct it with "Zmień dopasowanie")
+        const names = emuTitles(gameId)
+        let match: SgdbGame | undefined
+        for (const n of names.slice(0, 3)) if ((match = pickExactMatch(names, await sgdb.search(n)))) break
+        return { ok: true, sgdbGame: match, options: match ? await sgdb.images(kind, { gameId: match.id }) : [] }
       }
       if (!appId) {
         // non-Steam shortcut: match by title (the user can correct it with "Zmień dopasowanie")
@@ -603,6 +656,16 @@ function registerIpc(): void {
     changed: () => {
       void emu.refresh()
       modes?.emuContents?.send(EMU_UI.open, 'refresh')
+    },
+    engineImage: async (url) => {
+      if (!engine.baseUrl || !/^\/media\//.test(url)) return undefined
+      try {
+        const res = await fetch(new URL(url, engine.baseUrl), { signal: AbortSignal.timeout(15_000) })
+        if (!res.ok) return undefined
+        return `data:${res.headers.get('content-type') ?? 'image/png'};base64,${Buffer.from(await res.arrayBuffer()).toString('base64')}`
+      } catch {
+        return undefined
+      }
     }
   })
 

@@ -7,6 +7,7 @@ import { focusEl, focusFirst } from '../nav/engine'
 import { Art } from '../components/Art'
 import { CategoryPicker } from '../modals/CategoryPicker'
 import { ArtPicker } from '../modals/ArtPicker'
+import { EmuSaves } from '../components/EmuSaves'
 import { formatBytes, formatEta, formatLastPlayed, formatPlaytime, htmlToParagraphs, STATE_LABEL, stateLabel, versionCountLabel } from '../lib/format'
 
 interface PrimaryAction {
@@ -23,7 +24,7 @@ export function DetailsScreen({ gameId }: { gameId: string }) {
   const collections = useStore((s) => s.snapshot?.collections ?? null)
   const close = (): void => useStore.getState().openDetails(null)
   const [details, setDetails] = useState<DetailsResult | null>(null)
-  const [modal, setModal] = useState<'categories' | 'art' | null>(null)
+  const [modal, setModal] = useState<'categories' | 'art' | 'saves' | null>(null)
   const [logoOk, setLogoOk] = useState(true)
   const [busy, setBusy] = useState(false)
   const isEmu = game?.source === 'emustart'
@@ -245,11 +246,9 @@ export function DetailsScreen({ gameId }: { gameId: string }) {
           <button className="btn" data-nav data-key="cats" onClick={() => setModal('categories')}>
             Kategorie{myCats.length ? ` (${myCats.length})` : ''}
           </button>
-          {!game.emu && (
-            <button className="btn" data-nav data-key="art" onClick={() => setModal('art')}>
-              Grafiki
-            </button>
-          )}
+          <button className="btn" data-nav data-key="art" onClick={() => setModal('art')}>
+            Grafiki
+          </button>
           {game.emu && emuSummary?.engine === 'ready' && (
             <>
               <button
@@ -276,6 +275,9 @@ export function DetailsScreen({ gameId }: { gameId: string }) {
                   Usuń z dysku
                 </button>
               )}
+              <button className="btn" data-nav data-key="saves" onClick={() => setModal('saves')}>
+                Zapisy
+              </button>
               <button className="btn" data-nav data-key="tv" onClick={() => void api().ui.setMode('fullscreen')}>
                 Opcje gry w trybie TV
               </button>
@@ -342,11 +344,12 @@ export function DetailsScreen({ gameId }: { gameId: string }) {
           </p>
         )}
         {details?.ok && details.stale && !game.emu && <p className="details__muted">Informacje z pamięci podręcznej (brak połączenia ze sklepem).</p>}
-        {details?.ok && d?.source === 'emustart' && <p className="details__muted">Opis i grafiki: biblioteka serwera EmuStart.</p>}
+        {details?.ok && d?.source === 'emustart' && <p className="details__muted">Opis: biblioteka serwera EmuStart. Plakat i tło: SteamGridDB, gdy jest klucz (zmiana: „Grafiki”), inaczej grafiki z serwera.</p>}
       </div>
 
       {modal === 'categories' && <CategoryPicker gameId={gameId} onClose={() => setModal(null)} />}
       {modal === 'art' && <ArtPicker game={game} onClose={() => setModal(null)} />}
+      {modal === 'saves' && <EmuSaves game={game} onClose={() => setModal(null)} />}
     </div>,
     document.body
   )

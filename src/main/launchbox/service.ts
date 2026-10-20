@@ -140,6 +140,17 @@ export class LaunchBoxService extends EventEmitter {
     }
   }
 
+  /** LaunchBox name of a game (EmuStart's metadata carries the LaunchBox id) */
+  nameById(id: number): string | undefined {
+    const db = this.open()
+    if (!db) return undefined
+    try {
+      return (db.prepare('SELECT name FROM games WHERE id = ?').get(id) as { name?: string } | undefined)?.name
+    } catch {
+      return undefined
+    }
+  }
+
   details(name: string, platform: string | undefined): GameDetails | null {
     const g = this.find(name, platform)
     return g ? toDetails(g) : null

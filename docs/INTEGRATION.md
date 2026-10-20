@@ -185,7 +185,10 @@ Lumen **nie dodaje** własnej synchronizacji — używa klienta EmuStart 0.46.0 
   wywołanie `launch_choice`). Druga wersja zostaje w historii na serwerze (10 ostatnich) albo w kopii
   zapasowej na urządzeniu,
 - stan zapisów gry („zsynchronizowane / czekają na wysłanie / jeszcze nie synchronizowane”) jest
-  w szczegółach gry (pulpit) i w opcjach gry (TV),
+  w szczegółach gry (pulpit) i w opcjach gry (TV); w trybie pulpitu przycisk **„Zapisy”** w szczegółach
+  gry otwiera okno z tym stanem, stanami gry na tym komputerze (obrazek, data, „Graj od tego stanu” —
+  `game_options` i `launch(id, stan)` silnika, jak „Wczytaj zapis” w trybie TV) i — dla PS2 — stanami
+  komputera i telefonu z kopiowaniem między nimi (`save_manager` / `save_copy`, tylko przez serwer),
 - **wymaga EmuStart Server 0.46.0** — starszy serwer nie ma API zapisów: gra rusza wtedy na zapisach
   z urządzenia, bez synchronizacji,
 - poza paczkami (stany PS2 `.p2s`, Dolphin, PPSSPP, RPCS3) — jak dotąd: folder profilu na serwerze,
@@ -252,6 +255,24 @@ wartości (`save_settings` silnika, per profil tam, gdzie EmuStart trzyma je per
 trybie odświeża bibliotekę i ekran drugiego od razu. W trybie TV zostaje tylko to, czego pulpit nie ma:
 logowanie do serwera, konta i PIN-y.
 
+## 6g. Plakaty gier EmuStart
+
+Serwer EmuStart trzyma prawdziwe okładki pudełek (3DO: pudełko „longbox” ~1:2, pudełko CD ~1:1, kartridże
+poziomo), a nie plakaty 2:3, więc w siatce trybu pulpitu były przycinane. Teraz:
+- **plakat, tło i ikona**: najpierw wybór gracza („Grafiki” w szczegółach gry — także dla gier EmuStart),
+  potem SteamGridDB (gdy jest klucz; plakaty 600×900) dopasowany **dokładnie po tytule** — nazwa
+  z LaunchBox (po `lb_id` z metadanych serwera, z lokalnej bazy LaunchBox, jeśli jest pobrana) i tytuły
+  wszystkich wersji gry; luźne dopasowanie („D” → „D-Day”) jest wyłączone. Wynik (także brak) jest
+  pamiętany w pamięci grafik. Pierwsze wyszukanie może trwać — po 2,5 s pokazuje się okładka z serwera,
+  a plakat podmienia się, gdy dojdzie;
+- **logo**: najpierw z serwera (Clear Logo z LaunchBox), potem SteamGridDB;
+- okładka, która nie ma proporcji 2:3 (gdy SteamGridDB nic nie ma), jest pokazana **w całości** na
+  rozmytym tle z tej samej okładki, zamiast przycięta;
+- „Grafika z serwera EmuStart” w oknie „Grafiki” wraca do okładki z serwera dla danej gry.
+
+LaunchBox Games DB ma też okładki („Box - Front”), ale to te same pudełka co na serwerze (EmuStart bierze
+je stamtąd) — plakatów 2:3 tam nie ma; z LaunchBox Lumen bierze tylko nazwę gry do wyszukiwania.
+
 ## 6e. Aktualizacja programu (jak EmuStart)
 
 `src/main/updater.ts` + `releaseSigning.ts`, ten sam przebieg co `emustart/updater.py`: najnowsze wydanie
@@ -304,7 +325,7 @@ z działającym silnikiem, zadanie usunięte. Instalator (`/S`) — niesprawdzon
 
 **Niewdrożone / ograniczenia:**
 - pauza pobierania (EmuStart ma tylko anuluj + wznowienie od miejsca przerwania),
-- logowanie, profile i ustawienia systemów są tylko w trybie TV (świadomie — jedna implementacja),
+- logowanie do serwera, konta i PIN-y są tylko w trybie TV (ustawienia biblioteki i systemów — w obu, §6f),
 - weryfikacja integralności gier: zgodność rozmiaru z serwerem (EmuStart); emulatory: SHA-256 z manifestu,
 - kontrola Steam ograniczona do `steam://` (bez postępu na żywo, pauzy, anulowania — jak w Lumen).
 

@@ -435,6 +435,38 @@ export interface EmuSaveSync {
   last: number
 }
 
+/** A save state of a game on this PC (EmuStart's "Wczytaj zapis" list) */
+export interface EmuLocalState {
+  path: string
+  /** "Kontynuuj", "Stan #3", or the file name */
+  label: string
+  /** unix seconds */
+  time: number
+  /** picture the emulator stored with the state (data: URL) */
+  thumb?: string
+  resume?: boolean
+}
+
+/** A PS2 state on the server, from this PC or the phone (EmuStart's save manager) */
+export interface EmuRemoteState {
+  platform: 'windows' | 'android' | string
+  label: string
+  slot: string
+  rel: string
+  name: string
+  size: number
+  mtime: number
+  targets: { platform: string; emu: string; label: string; ok: boolean | null; note: string }[]
+}
+
+/** Everything the desktop shows about a game's saves */
+export interface EmuSaves {
+  sync: EmuSaveSync & { bundles: number }
+  states: EmuLocalState[]
+  /** PS2 states of this PC and the phone; absent with a reason when the server is out of reach */
+  remote: { ok: true; here: string; states: EmuRemoteState[] } | { ok: false; reason: string }
+}
+
 /** How the player settles a save conflict: keep this device's version, take the server's, or skip sync this time. */
 export type SaveChoice = 'local' | 'remote' | 'skip'
 

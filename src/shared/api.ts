@@ -1,4 +1,4 @@
-import type {
+import type { EmuSaves,
   ActionResult,
   ArtKind,
   ArtOption,
@@ -84,7 +84,12 @@ export interface LumenApi {
   }
   /** EmuStart games: every action runs in the EmuStart engine (engine/emustart) */
   emustart: {
-    launch(gameId: string): Promise<EmuActionResult>
+    /** `state`: path of a save state on this PC (from saves()) to start from */
+    launch(gameId: string, state?: string): Promise<EmuActionResult>
+    /** sync status, save states on this PC, PS2 states of all devices */
+    saves(gameId: string): Promise<EmuSaves>
+    /** copy a PS2 state to the other platform (or here) */
+    copyState(gameId: string, rel: string, platform: string, emu: string): Promise<EmuActionResult>
     /** stop the download of the game being launched */
     cancelLaunch(): Promise<void>
     /** close the finished / failed launch session */
@@ -190,6 +195,8 @@ export const IPC = {
   launchboxChanged: 'launchbox:changed',
   padState: 'pad:state',
   emuLaunch: 'emu:launch',
+  emuSaves: 'emu:saves',
+  emuCopyState: 'emu:copyState',
   emuCancelLaunch: 'emu:cancelLaunch',
   emuDismiss: 'emu:dismiss',
   emuResolve: 'emu:resolveConflict',

@@ -533,6 +533,20 @@ button {
 .art.is-loaded {
   opacity: 1;
 }
+.art--fit {
+  position: relative;
+  object-fit: contain;
+  background: none;
+}
+.art-fit__bg {
+  position: absolute;
+  inset: -8%;
+  width: 116%;
+  height: 116%;
+  object-fit: cover;
+  filter: blur(18px) brightness(0.55) saturate(1.2);
+  pointer-events: none;
+}
 .art--logo {
   object-fit: contain;
   background: none;
@@ -1912,4 +1926,69 @@ p.card__desc[data-nav]:focus {
 .sysrow.is-off .sysrow__name,
 .sysrow.is-off .sysrow__emu {
   color: var(--text-3);
+}
+
+/* ---------- EmuStart saves (Details → Zapisy) ---------- */
+.saves__h {
+  margin: 18px 0 6px;
+  font-size: 1rem;
+}
+.saves__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.saves__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--bg-2);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.saves__row:focus,
+.saves__row:hover {
+  outline: 2px solid var(--accent);
+}
+.saves__row--static {
+  cursor: default;
+  flex-wrap: wrap;
+}
+.saves__row--static:hover {
+  outline: none;
+}
+.saves__thumb {
+  width: 96px;
+  height: 72px;
+  flex: 0 0 auto;
+  border-radius: 6px;
+  object-fit: cover;
+  background: var(--bg-1, #000);
+}
+.saves__text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.saves__text small {
+  opacity: 0.7;
+}
+.saves__act {
+  opacity: 0.7;
+  font-size: 0.85em;
+}
+.saves__row:focus .saves__act {
+  opacity: 1;
+}
+.saves__targets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
