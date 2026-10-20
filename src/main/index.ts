@@ -2,7 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, shell } from 
 import { existsSync, promises as fs } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { ART_SCHEME, EMU_UI_SCHEME, IPC } from '@shared/api'
+import { ART_SCHEME, EMU_UI_SCHEME, IPC, type PickPathOptions } from '@shared/api'
 import { EMU_UI, isModeCombo } from '@shared/emuPad'
 import type { ActionResult, ArtKind, ArtOption, Game, JobsSnapshot, LibrarySnapshot, Prefs, SecretName, SettingsPatch, SgdbGame, UiMode } from '@shared/types'
 import { initLogger, log } from './logger'
@@ -528,6 +528,16 @@ function registerIpc(): void {
     await shell.openExternal(url)
   })
   handle(IPC.appQuit, () => app.quit())
+  handle(IPC.appPickPath, async (o: PickPathOptions) => {
+    if (!win) return null
+    const r = await dialog.showOpenDialog(win, {
+      title: String(o?.title ?? ''),
+      defaultPath: o?.defaultPath || undefined,
+      properties: o?.kind === 'file' ? ['openFile'] : ['openDirectory', 'createDirectory'],
+      filters: o?.kind === 'file' && Array.isArray(o.filters) ? o.filters : undefined
+    })
+    return r.canceled ? null : (r.filePaths[0] ?? null)
+  })
 
   registerEmustartIpc(handle, {
     engine,

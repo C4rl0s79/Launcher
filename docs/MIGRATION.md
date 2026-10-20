@@ -26,13 +26,13 @@ Dane EmuStart leżą obok programu (`config.json`, `data\`, `cache\`, `profiles\
 1. **Nowy folder (domyślnie)** — `%APPDATA%\Lumen\emustart\`. Zaloguj urządzenie do serwera w trybie TV
    (Menu → Ustawienia → Zaloguj, link z panelu serwera). Biblioteka, grafiki, profile i zapisy przychodzą
    z serwera; pobrane wcześniej gry pobiorą się ponownie przy pierwszym uruchomieniu.
-2. **Istniejący folder EmuStart** — Ustawienia → EmuStart → „Folder danych EmuStart” = folder programu
+2. **Istniejący folder EmuStart** — Ustawienia → EmuStart → „Folder danych EmuStart” → **Wybierz…** → folder programu
    EmuStart (np. `D:\emustart`). Silnik używa jego `config.json`, pamięci podręcznej gier, profili
    i klucza urządzenia na miejscu, bez kopiowania. Lumen nie uruchomi silnika, gdy z tego folderu
    działa samodzielny `EmuStart.exe` (dwa procesy na jednych danych to ryzyko uszkodzenia bazy).
    Samodzielnego EmuStart można dalej używać zamiennie (nie jednocześnie) — format danych się nie zmienił.
 
-Powrót: wyczyść pole „Folder danych EmuStart” albo wyłącz „Gry z serwera EmuStart”. Dane w żadnym
+Powrót: „Przywróć domyślny” przy „Folder danych EmuStart” albo wyłącz „Gry z serwera EmuStart”. Dane w żadnym
 z folderów nie są wtedy usuwane.
 
 ## Serwer EmuStart

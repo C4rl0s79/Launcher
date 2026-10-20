@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import type { CacheStats, Category, EmuSettings, LaunchBoxStatus, SecretName, SettingsPatch } from '@shared/types'
+import type { PickPathOptions } from '@shared/api'
 import { api, attempt, gamesForCategory, sortedCategories, useStore } from '../store'
 import { useActions } from '../nav/input'
 import { TextField } from '../components/TextField'
@@ -405,8 +406,6 @@ function EmustartSection() {
   const settings = useStore((s) => s.settings)!
   const emu = useStore((s) => s.snapshot?.emustart)
   const [es, setEs] = useState<EmuSettings | null>(null)
-  const [home, setHome] = useState(settings.emustartHome ?? '')
-  const [python, setPython] = useState(settings.pythonPath ?? '')
   const ready = emu?.engine === 'ready'
   useEffect(() => {
     if (ready) void api().emustart.settings().then(setEs).catch(() => setEs(null))
@@ -523,35 +522,69 @@ function EmustartSection() {
         Logowanie (kod z panelu serwera albo adres), profile graczy z PIN-em i wybór emulatora dla każdego systemu są w ustawieniach EmuStart
         w trybie TV — to te same ekrany co w programie EmuStart.
       </p>
-      <div className="field-row">
-        <TextField
-          label="Folder danych EmuStart"
-          placeholder="puste = folder Lumen (np. D:\emustart, aby użyć istniejącej instalacji EmuStart)"
-          value={home}
-          onChange={setHome}
-          onSubmit={() => void patch({ emustartHome: home })}
-        />
-        <button className="btn" data-nav onClick={() => void patch({ emustartHome: home })}>
-          Zapisz
-        </button>
-      </div>
+      <PathRow
+        label="Folder danych EmuStart"
+        value={settings.emustartHome}
+        fallback={`domyślny — folder Lumen${es?.dataDir && !settings.emustartHome ? ` (${es.dataDir})` : ''}`}
+        pick={{ kind: 'folder', title: 'Folder danych EmuStart (np. folder istniejącej instalacji EmuStart)' }}
+        onChange={(v) => void patch({ emustartHome: v })}
+      />
       <p className="card__desc">
         Folder istniejącej instalacji EmuStart (z config.json, cache, profiles) zostaje użyty na miejscu — nic nie jest kopiowane ani
         kasowane. Nie uruchamiaj w tym czasie samodzielnego EmuStart z tego samego folderu (Lumen to sprawdza).
       </p>
-      <div className="field-row">
-        <TextField
-          label="Python dla silnika (wersja ze źródeł)"
-          placeholder="puste = dołączony silnik albo „py -3”"
-          value={python}
-          onChange={setPython}
-          onSubmit={() => void patch({ pythonPath: python })}
-        />
-        <button className="btn" data-nav onClick={() => void patch({ pythonPath: python })}>
-          Zapisz
-        </button>
-      </div>
+      <PathRow
+        label="Python dla silnika (wersja ze źródeł)"
+        value={settings.pythonPath}
+        fallback="domyślny — dołączony silnik albo „py -3”"
+        pick={{ kind: 'file', title: 'Python (python.exe) dla silnika EmuStart', filters: [{ name: 'Python', extensions: ['exe'] }] }}
+        onChange={(v) => void patch({ pythonPath: v })}
+      />
     </Section>
+  )
+}
+
+/**
+ * A file or folder setting: chosen only with the Windows dialog (never typed), shown read-only,
+ * with a way back to the default. `onChange('')` = default.
+ */
+function PathRow({
+  label,
+  value,
+  fallback,
+  pick,
+  onChange
+}: {
+  label: string
+  value?: string
+  fallback: string
+  pick: Omit<PickPathOptions, 'defaultPath'>
+  onChange: (v: string) => void
+}) {
+  return (
+    <div className="path-row">
+      <div className="path-row__text">
+        <span className="path-row__label">{label}</span>
+        <span className={`path-row__value ${value ? '' : 'is-default'}`} title={value || fallback}>
+          {value || fallback}
+        </span>
+      </div>
+      <button
+        className="btn"
+        data-nav
+        onClick={async () => {
+          const v = await attempt(api().app.pickPath({ ...pick, defaultPath: value || undefined }))
+          if (v) onChange(v)
+        }}
+      >
+        Wybierz…
+      </button>
+      {value && (
+        <button className="btn btn--ghost" data-nav onClick={() => onChange('')}>
+          Przywróć domyślny
+        </button>
+      )}
+    </div>
   )
 }
 

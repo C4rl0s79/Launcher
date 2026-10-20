@@ -20,6 +20,13 @@ import type {
   SgdbGame
 } from './types'
 
+export interface PickPathOptions {
+  kind: 'folder' | 'file'
+  title: string
+  defaultPath?: string
+  filters?: { name: string; extensions: string[] }[]
+}
+
 /** The API exposed on window.lumen by the preload script. */
 export interface LumenApi {
   library: {
@@ -106,6 +113,8 @@ export interface LumenApi {
     clearCache(): Promise<CacheStats>
     openLogs(): Promise<void>
     openExternal(url: string): Promise<void>
+    /** Windows file / folder dialog — paths are always picked, never typed; null = cancelled */
+    pickPath(o: PickPathOptions): Promise<string | null>
     quit(): Promise<void>
     onFocusChange(cb: (focused: boolean) => void): () => void
     /** XInput controller state from the main process (see main/input/xinput.ts) */
@@ -144,6 +153,7 @@ export const IPC = {
   appOpenLogs: 'app:openLogs',
   appOpenExternal: 'app:openExternal',
   appQuit: 'app:quit',
+  appPickPath: 'app:pickPath',
   appFocus: 'app:focus',
   launchboxStatus: 'launchbox:status',
   launchboxUpdate: 'launchbox:update',

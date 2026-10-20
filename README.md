@@ -98,7 +98,7 @@ Aby zobaczyć wszystkie posiadane gry:
    → Zaloguj) → wklej link → „Mam konto” / „Nowe konto” → nazwa i hasło konta.
 3. Biblioteka przychodzi z serwera; każda platforma pojawia się jako grupa na górnym pasku. Folder
    emulatorów i pobranych gier: Ustawienia → EmuStart. Emulatory i BIOS-y pobierają się z serwera.
-4. Istniejąca instalacja EmuStart: Ustawienia → EmuStart → „Folder danych EmuStart” = folder programu
+4. Istniejąca instalacja EmuStart: Ustawienia → EmuStart → „Folder danych EmuStart” → **Wybierz…** → folder programu
    EmuStart (dane używane na miejscu, bez kopiowania — szczegóły w [docs/MIGRATION.md](docs/MIGRATION.md)).
 
 Gry EmuStart: „Pobierz i graj” / „Graj”, „Pobierz na dysk” (zostaje na stałe), „Usuń z dysku”.

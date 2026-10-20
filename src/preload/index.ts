@@ -89,6 +89,7 @@ const api: LumenApi = {
     clearCache: () => invoke(IPC.appClearCache),
     openLogs: () => invoke(IPC.appOpenLogs),
     openExternal: (url) => invoke(IPC.appOpenExternal, url),
+    pickPath: (o) => invoke(IPC.appPickPath, o),
     quit: () => invoke(IPC.appQuit),
     onFocusChange: (cb) => subscribe(IPC.appFocus, cb),
     onPadState: (cb) => subscribe(IPC.padState, cb),
