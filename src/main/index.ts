@@ -278,8 +278,28 @@ function registerArtProtocol(): void {
  * through Node with a limit — a poster grid asked Chromium's network service for dozens at once
  * (net::ERR_INSUFFICIENT_RESOURCES, posters stayed empty) — and recent images stay in memory.
  */
-const emuArtLimit = new Limiter(6, 'emustart-art')
+const emuArtLimit = new Limiter(6, 'emustart-art', true)
+/** recent EmuStart images in memory, least recently shown dropped first (a byte budget, not a count) */
 const emuArtCache = new Map<string, { type: string; body: Buffer }>()
+const EMU_ART_BUDGET = 256 * 1024 * 1024
+let emuArtBytes = 0
+function emuArtGet(url: string): { type: string; body: Buffer } | undefined {
+  const hit = emuArtCache.get(url)
+  if (hit) {
+    emuArtCache.delete(url)
+    emuArtCache.set(url, hit)
+  }
+  return hit
+}
+function emuArtPut(url: string, hit: { type: string; body: Buffer }): void {
+  emuArtCache.set(url, hit)
+  emuArtBytes += hit.body.length
+  for (const [k, v] of emuArtCache) {
+    if (emuArtBytes <= EMU_ART_BUDGET) break
+    emuArtCache.delete(k)
+    emuArtBytes -= v.body.length
+  }
+}
 
 /** Names to look a game up in SteamGridDB: its LaunchBox name and the titles of its versions. */
 function emuTitles(gameId: string): string[] {
@@ -333,8 +353,12 @@ async function fileResponse(file: string): Promise<Response> {
 async function emuArt(gameId: string, kind: string): Promise<Response> {
   const k = kind as ArtKind
   const names = emuTitles(gameId)
-  const titled = artwork.resolveTitled(gameId, k, names, k !== 'logo')
-  const first = await Promise.race([titled, new Promise<'late'>((r) => setTimeout(() => r('late'), 2500))])
+  const auto = k !== 'logo'
+  // a SteamGridDB lookup not made yet never holds the poster back: the source's art now, the
+  // lookup in the background (the poster is swapped when it finds something)
+  const decided = !auto || (await artwork.titledDecided(gameId, k))
+  const titled = artwork.resolveTitled(gameId, k, names, auto)
+  const first = decided ? await titled : 'late'
   if (first === 'late') void titled.then((f) => f && notifyArt(gameId))
   else if (first === null) return new Response('none', { status: 404 })
   else if (first) return fileResponse(first)
@@ -357,14 +381,18 @@ async function emuArt(gameId: string, kind: string): Promise<Response> {
   return new Response('not found', { status: 404 })
 }
 
-/** A file from the engine's media (offline copy of the server's media), cached in memory. */
+/**
+ * A file from the engine's media (offline copy of the server's media), kept in memory. The engine
+ * keeps it on disk and fetches a missing one from the server itself. null: not there / engine error.
+ */
 async function engineMedia(url: string): Promise<Response | null> {
   if (!engine.baseUrl) return null
   const full = new URL(url, engine.baseUrl).toString()
-  let hit = emuArtCache.get(full)
+  let hit = emuArtGet(full)
   if (!hit) {
     try {
       hit = await emuArtLimit.run(async () => {
+        // the engine is local — also in the "no network" test mode (LUMEN_OFFLINE)
         const res = await fetch(full, { signal: AbortSignal.timeout(60_000) })
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         return { type: res.headers.get('content-type') ?? 'image/webp', body: Buffer.from(await res.arrayBuffer()) }
@@ -372,8 +400,7 @@ async function engineMedia(url: string): Promise<Response | null> {
     } catch {
       return null
     }
-    emuArtCache.set(full, hit)
-    if (emuArtCache.size > 400) emuArtCache.delete(emuArtCache.keys().next().value!)
+    emuArtPut(full, hit)
   }
   return new Response(new Uint8Array(hit.body), { status: 200, headers: { 'Content-Type': hit.type, 'Cache-Control': 'max-age=86400' } })
 }
@@ -384,20 +411,7 @@ async function engineArt(gameId: string, kind: string): Promise<Response | null>
   const row = emu.row(gameId)
   // a game with several versions: art of the shown version, else of any version that has it
   const url = (field && (row?.[field] || emu.versionsOf(gameId).map((v) => emu.row(v.id)?.[field]).find(Boolean))) || ''
-  if (!url || !engine.baseUrl) return null
-  const full = new URL(url, engine.baseUrl).toString()
-  let hit = emuArtCache.get(full)
-  if (!hit) {
-    hit = await emuArtLimit.run(async () => {
-      // the engine is local — also in the "no network" test mode (LUMEN_OFFLINE)
-      const res = await fetch(full, { signal: AbortSignal.timeout(60_000) })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      return { type: res.headers.get('content-type') ?? 'image/webp', body: Buffer.from(await res.arrayBuffer()) }
-    })
-    emuArtCache.set(full, hit)
-    if (emuArtCache.size > 400) emuArtCache.delete(emuArtCache.keys().next().value!)
-  }
-  return new Response(new Uint8Array(hit.body), { status: 200, headers: { 'Content-Type': hit.type, 'Cache-Control': 'max-age=86400' } })
+  return url ? engineMedia(url) : null
 }
 
 function bumpArt(gameId: string, kind?: ArtKind): void {
@@ -704,6 +718,7 @@ function registerIpc(): void {
     changed: () => void emu.refresh(),
     artChanged: (gameId) => {
       emuArtCache.clear()
+      emuArtBytes = 0
       bumpArt(gameId)
     },
     engineImage: async (url) => {

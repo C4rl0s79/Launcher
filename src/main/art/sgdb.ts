@@ -96,7 +96,7 @@ export function pickExactMatch(names: string[], results: SgdbGame[]): SgdbGame |
 }
 
 export class SgdbClient {
-  readonly limiter = new Limiter(3, 'steamgriddb')
+  readonly limiter = new Limiter(3, 'steamgriddb', true)
 
   constructor(private readonly getKey: () => string | undefined) {}
 

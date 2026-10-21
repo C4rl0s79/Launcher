@@ -43,9 +43,11 @@ export class Limiter {
   private waiting: (() => void)[] = []
   private pausedUntil = 0
 
+  /** lifo: the newest waiting call goes first (images: what is on screen now beats what was scrolled past) */
   constructor(
     private readonly max: number,
-    private readonly name: string
+    private readonly name: string,
+    private readonly lifo = false
   ) {}
 
   pause(ms: number): void {
@@ -65,7 +67,7 @@ export class Limiter {
       return await fn()
     } finally {
       this.active--
-      this.waiting.shift()?.()
+      ;(this.lifo ? this.waiting.pop() : this.waiting.shift())?.()
     }
   }
 

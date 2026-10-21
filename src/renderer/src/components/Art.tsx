@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from "react";
+import { memo, useState } from "react";
 import type { ArtKind } from "@shared/types";
 import { api, useStore } from "../store";
 import { hueOf } from "../lib/format";
@@ -14,6 +14,12 @@ interface Props {
   onState?: (ok: boolean) => void;
 }
 
+/**
+ * Images already shown this session (src → shown whole over a blurred copy): the browser keeps
+ * them, so they appear at once — no empty frame and no fade-in when the list changes back.
+ */
+const shown = new Map<string, boolean>();
+
 /** Image served by the main process (lumen-art://) with a tasteful generated placeholder. */
 export const Art = memo(function Art({
   gameId,
@@ -25,16 +31,20 @@ export const Art = memo(function Art({
   onState,
 }: Props) {
   const rev = useStore((s) => s.artRev[gameId] ?? 0);
-  const [state, setState] = useState<"loading" | "ok" | "error">("loading");
+  const src = api().art.url(gameId, kind, rev);
+  const [state, setState] = useState<"loading" | "ok" | "error">(() =>
+    shown.has(src) ? "ok" : "loading",
+  );
   // a poster image that is not 2:3 (box art from an emulator library: longbox, jewel case, cartridge
   // box) is shown whole over a blurred copy of itself instead of being cropped
-  const [fit, setFit] = useState(false);
-  const src = api().art.url(gameId, kind, rev);
-
-  useEffect(() => {
-    setState("loading");
-    setFit(false);
-  }, [src]);
+  const [fit, setFit] = useState(() => shown.get(src) ?? false);
+  const [seen, setSeen] = useState(src);
+  if (seen !== src) {
+    // a new image (art changed or another game in this slot): known ones at once
+    setSeen(src);
+    setState(shown.has(src) ? "ok" : "loading");
+    setFit(shown.get(src) ?? false);
+  }
 
   const hue = hueOf(name);
   if (state === "error") {
@@ -73,11 +83,15 @@ export const Art = memo(function Art({
         style={state === "loading" ? { ["--h" as string]: hue } : undefined}
         onLoad={(e) => {
           const { naturalWidth: w, naturalHeight: h } = e.currentTarget;
-          if (kind === "grid" && w && h) setFit(Math.abs(w / h - 2 / 3) > 0.06);
+          const f = kind === "grid" && !!w && !!h && Math.abs(w / h - 2 / 3) > 0.06;
+          setFit(f);
+          shown.set(src, f);
+          if (shown.size > 5000) shown.delete(shown.keys().next().value!);
           setState("ok");
           onState?.(true);
         }}
         onError={() => {
+          shown.delete(src);
           setState("error");
           onState?.(false);
         }}

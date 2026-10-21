@@ -75,7 +75,7 @@ export class ArtworkService {
   private loaded = false
   private saveTimer: NodeJS.Timeout | undefined
   private inflight = new Map<string, Promise<string | null>>()
-  private downloads = new Limiter(4, 'image-download')
+  private downloads = new Limiter(4, 'image-download', true)
   private fetchBytes: NonNullable<ArtDeps['fetchBytes']>
   private localDirCache = new Map<number, string[] | null>()
 
@@ -199,6 +199,21 @@ export class ArtworkService {
       this.inflight.set(key, p)
     }
     return (await p) ?? undefined
+  }
+
+  /**
+   * Whether resolveTitled(…, auto) answers without the network: the user's choice, or an earlier
+   * SteamGridDB result or miss in the cache. Otherwise the caller shows the source's own art now
+   * and lets the lookup finish in the background.
+   */
+  async titledDecided(gameId: string, kind: ArtKind): Promise<boolean> {
+    await this.ensureLoaded()
+    const prefs = this.deps.prefsFor(gameId)
+    if (prefs?.[kind] || !this.deps.sgdb.enabled) return true
+    const entry = this.index.entries[`${gameId}|${kind}|sgdb-auto${prefs?.sgdbGameId ? `-${prefs.sgdbGameId}` : ''}`]
+    if (entry?.file || (entry?.missUntil && entry.missUntil > Date.now())) return true
+    const match = this.index.entries[`${gameId}|match`]
+    return !prefs?.sgdbGameId && !!match?.missUntil && match.missUntil > Date.now()
   }
 
   /** An image by address (LaunchBox Games DB), downloaded once and kept in the cache. */

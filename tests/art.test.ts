@@ -5,7 +5,7 @@ import path from 'node:path'
 import type { ArtKind, ArtOption, GameArtPrefs, SgdbGame } from '@shared/types'
 import { ArtworkService } from '../src/main/art/artwork'
 import { pickBestMatch, pickExactMatch, queryFor, toOptions, SgdbAuthError, type SgdbClient } from '../src/main/art/sgdb'
-import { NetworkError } from '../src/main/net'
+import { Limiter, NetworkError } from '../src/main/net'
 
 const tmp = (): string => mkdtempSync(path.join(tmpdir(), 'lumen-art-'))
 const opt = (id: number): ArtOption => ({ id, url: `https://cdn2.steamgriddb.com/grid/${id}.png`, thumb: '', width: 600, height: 900 })
@@ -191,6 +191,26 @@ describe('ArtworkService', () => {
     expect(await svc.resolveTitled('emu:2', 'hero', ['X'])).toBeNull()
     expect(await svc.resolveTitled('emu:3', 'logo', ['X'], false)).toBeUndefined()
     expect(sgdb.search).not.toHaveBeenCalled()
+  })
+
+  it('EmuStart games: tells whether the SteamGridDB answer is already known (no waiting otherwise)', async () => {
+    const { svc } = service({})
+    expect(await svc.titledDecided('emu:1', 'grid')).toBe(false) // never looked up: show the source's art now
+    await svc.resolveTitled('emu:1', 'grid', ['Nothing Like It'])
+    expect(await svc.titledDecided('emu:1', 'grid')).toBe(true) // the miss is remembered
+    expect(await service({ sgdb: fakeSgdb({}, false) }).svc.titledDecided('emu:2', 'grid')).toBe(true)
+    expect(await service({ prefs: { 'emu:3': { grid: { type: 'none' } } } }).svc.titledDecided('emu:3', 'grid')).toBe(true)
+  })
+
+  it('image queues serve the newest request first', async () => {
+    const lim = new Limiter(1, 'test', true)
+    const order: number[] = []
+    let release!: () => void
+    const first = lim.run(() => new Promise<void>((r) => (release = r)))
+    const rest = [1, 2, 3].map((n) => lim.run(async () => void order.push(n)))
+    release()
+    await Promise.all([first, ...rest])
+    expect(order).toEqual([3, 2, 1])
   })
 
   it('clears the cache directory and reports stats', async () => {
