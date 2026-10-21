@@ -61,19 +61,19 @@ Lumen.exe (Electron, jeden proces aplikacji, jedno okno)
 ├─ proces główny (src/main) ─────────────── wspólny rdzeń
 │   core/unifiedLibrary.ts   jedna biblioteka: Steam + EmuStart (bez łączenia po tytule)
 │   core/jobs.ts             jedna lista zadań (pobieranie Steam, uruchamianie/pobieranie/emulatory/zapisy EmuStart)
-│   core/uiMode.ts           dwa tryby w jednym oknie (pokaż/ukryj widok — bez restartu, bez przeładowania)
-│   core/fullscreenBridge.ts most UI EmuStart → silnik; Steam jako system „Steam”
+│   core/uiMode.ts           dwa układy jednego interfejsu (pulpit / TV — pełny ekran, gra przechodzi między nimi)
 │   library/, steam/, art/…  integracja Steam (bez zmian funkcjonalnych)
 │   emustart/engine.ts       proces silnika: start, handshake, token, restart, wywołania
 │   emustart/provider.ts     biblioteka i stan EmuStart z silnika (+ kopia offline)
 │   emustart/mapping.ts      model EmuStart → wspólny model `Game`
-│   emustart/ipc.ts          akcje EmuStart dla trybu pulpitu
-├─ widok pulpitu (src/renderer, React) ───── wygląd Lumen
-└─ widok TV (WebContentsView, engine/web) ── wygląd EmuStart, preload src/preload/emu.ts
+│   emustart/ipc.ts          akcje EmuStart (gry, opcje gry, zapisy, konto i profile — lista dozwolonych metod)
+└─ interfejs (src/renderer, React) ───────── jeden; układ pulpitu (wygląd Lumen) i układ TV
+                                              (src/renderer/src/tv, wygląd EmuStart)
         │ IPC
         ▼
 EmuStartEngine.exe / py engine/engine_main.py  (silnik bez okna, 127.0.0.1, token sesji)
-   emustart/lumen.py  LumenApi = Api EmuStart + zestawienia biblioteki i zadań
+   emustart/lumen.py  LumenApi = Api EmuStart + zestawienia biblioteki, zadań i opcji gry; urządzenie
+                      „Lumen” na serwerze; bez interfejsu (engine/web nie jest używany ani pakowany)
    emustart/*.py      cała logika klienta EmuStart (bez zmian funkcjonalnych)
         │ HTTPS (przypięty certyfikat, klucz urządzenia)
         ▼
@@ -88,9 +88,9 @@ EmuStart Server (osobny program, API /v1 bez zmian)
 - **Usługi współdzielone**: pobieranie, emulatory, BIOS-y, uruchamianie emulatorów, synchronizacja zapisów
   i cache gier EmuStart są **w silniku** (jedna implementacja); grafiki/metadane Steam, ustawienia, logi —
   w Lumen.
-- **Prezentacja**: oba tryby wołają te same funkcje rdzenia/silnika. Np. „Graj” na grze EmuStart:
-  pulpit → `emustart.launch` → silnik `launch`; tryb TV → `api().launch` → most → silnik `launch`.
-  Ta sama sesja uruchamiania jest widoczna w obu trybach.
+- **Prezentacja**: jeden interfejs (React), dwa układy — każda funkcja napisana raz (np. „Graj”:
+  `lib/primary.ts` → `emustart.launch` → silnik `launch`; opcje gry, zapisy, konto, profile, menu w grze —
+  te same komponenty w obu układach). Od Lumen 1.0.0 nie ma już osobnego widoku z interfejsem EmuStart.
 
 ### Silnik EmuStart (`engine/`)
 
@@ -370,9 +370,8 @@ Od Lumen 0.6.0 (plan: `docs/PLAN-TV-REACT.md`, etap 1) — **jeden interfejs, dw
   nazwy, usuwanie, hasło konta, PIN tego urządzenia, profil tego komputera, RetroAchievements
   (logowanie, hardcore, import konta z emulatora). Tekst — klawiatura ekranowa (pad) albo klawiatura
   (Enter zatwierdza).
-- Interfejs EmuStart (osobny widok) zostaje tylko przy ustawieniu „Tryb TV: dotychczasowy interfejs
-  EmuStart”. Ustawienia → Tryb interfejsu → „Tryb TV: dotychczasowy
-  interfejs EmuStart” przywraca poprzedni tryb TV w całości.
+- Od Lumen 1.0.0 nie ma osobnego widoku z interfejsem EmuStart (usunięte: `WebContentsView`, most
+  `fullscreenBridge`, preload `emu`, protokół `lumen-emu://`; `engine/web` = wersja EmuStart, nie pakowana).
 - **Opcje gry** (Lumen 0.7.0, `components/GameOptions.tsx`) — jedno okno dla obu układów (TV: X na
   grze EmuStart; pulpit: szczegóły → „Opcje gry”), strony jak w EmuStart: Graj / Graj od początku,
   wersja (tłumaczenie, `set_variant` — uruchamia się wybrana wersja: `lumen_play_id`), emulator dla

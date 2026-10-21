@@ -169,11 +169,7 @@ export interface LumenApi {
   /** desktop (Lumen look) ⇄ fullscreen (EmuStart look); both use the same core */
   ui: {
     getMode(): Promise<UiMode>
-    /**
-     * `then` opens EmuStart's own interface for what the TV layout does not have yet:
-     * "settings" — login, account, profiles; "game" — options of the selected game
-     */
-    setMode(mode: UiMode, then?: 'settings' | 'game'): Promise<void>
+    setMode(mode: UiMode): Promise<void>
     /** the game the user is looking at (kept when switching modes) */
     select(gameId: string | null): void
     onMode(cb: (mode: UiMode, selection: string | null) => void): () => void
@@ -283,10 +279,7 @@ export const IPC = {
   updateCancel: 'update:cancel',
   updateApply: 'update:apply',
   updateChanged: 'update:changed'
-  // channels of the fullscreen view: shared/emuPad.ts (EMU_UI), kept apart so the two sandboxed
-  // preload bundles share no module
 } as const
 
 export const ART_SCHEME = 'lumen-art'
 /** EmuStart's fullscreen UI files (engine/web) and its /media, /assets proxied to the engine */
-export const EMU_UI_SCHEME = 'lumen-emu'

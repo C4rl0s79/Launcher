@@ -1,7 +1,7 @@
 # Architektura i ograniczenia
 
-> Od 0.2.0 Lumen obsługuje także gry z serwera EmuStart (silnik EmuStart w `engine/`) i ma drugi,
-> pełnoekranowy tryb w stylu EmuStart. Ten dokument opisuje część Steam; całość integracji, wspólny
+> Od 0.2.0 Lumen obsługuje także gry z serwera EmuStart (silnik EmuStart w `engine/`); od 1.0.0 to jeden
+> interfejs w dwóch układach (pulpit i pełnoekranowy TV w wyglądzie EmuStart). Ten dokument opisuje część Steam; całość integracji, wspólny
 > rdzeń i stan sprawdzenia: [INTEGRATION.md](INTEGRATION.md).
 
 ## Decyzja: osobna aplikacja + lokalne pliki Steam + steam:// + opcjonalne Web API

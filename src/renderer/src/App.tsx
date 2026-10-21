@@ -33,7 +33,7 @@ export function App() {
   const detailsId = useStore((s) => s.detailsId)
   const loaded = useStore((s) => !!s.snapshot && !!s.prefs && !!s.settings)
   const tabs = useTabs()
-  const tvLayout = useStore((s) => s.uiMode === 'fullscreen' && s.settings?.tvInterface !== 'emustart')
+  const tvLayout = useStore((s) => s.uiMode === 'fullscreen')
   const pads = useStore((s) => s.pads)
   const rootRef = useRef<HTMLDivElement>(null)
   // group screens are mounted on first visit and then kept, so scroll position and focus survive tab switches

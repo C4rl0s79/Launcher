@@ -112,7 +112,7 @@ const api: LumenApi = {
   },
   ui: {
     getMode: () => invoke(IPC.uiGetMode),
-    setMode: (mode, then) => invoke(IPC.uiSetMode, mode, then),
+    setMode: (mode) => invoke(IPC.uiSetMode, mode),
     select: (id) => ipcRenderer.send(IPC.uiSelect, id),
     onMode: (cb) => subscribe(IPC.uiMode, cb)
   },

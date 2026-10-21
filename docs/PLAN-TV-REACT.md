@@ -107,7 +107,7 @@ Legenda — pulpit Lumena dziś: ✔ jest, ◐ częściowo, ✘ brak.
 4. ✔ **(Lumen 0.9.0) Menu w grze (A+Y) i pady** — menu w grze, kolejność padów.
 5. ✔ **(Lumen 0.10.0) Reszta ustawień** — strumienie, wykrywanie emulatorów, logo systemów, klucze grafik, (po
    decyzji) foldery lokalne i edytor wyglądu.
-6. **Usunięcie starego trybu TV** — bez `WebContentsView`, mostu `fullscreenBridge`, preloadu
+6. ✔ **(Lumen 1.0.0) Usunięcie starego trybu TV** — bez `WebContentsView`, mostu `fullscreenBridge`, preloadu
    `emu`, kodu `?lumen` w `engine/web`; PyInstaller bez `web/`; dokumentacja.
 
 Każdy etap: testy jednostkowe komponentów i mapowań API, przejście klawiaturą/padem w obu

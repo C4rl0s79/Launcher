@@ -1,10 +1,11 @@
-"""lumen — EmuStart jako silnik Lumen (bez własnego okna).
+"""lumen — EmuStart jako silnik Lumen (bez własnego okna i bez własnego interfejsu).
 
 Lumen (Electron) uruchamia `engine_main.py` i woła metody `Api` przez lokalne
-`POST /api/<metoda>` z tokenem sesji. Pełnoekranowy interfejs EmuStart (web/) działa
-w oknie Lumen i woła te same metody przez most Lumen, a widok pulpitowy Lumen —
-metody `lumen_*` poniżej. Logika (pobieranie, uruchamianie, zapisy, emulatory) jest
-jedna: ta z `emustart/api.py`; tu tylko zestawienia dla biblioteki i kolejki zadań.
+`POST /api/<metoda>` z tokenem sesji — jeden interfejs Lumen (React) w dwóch układach,
+pulpit i TV. Logika (pobieranie, uruchamianie, zapisy, emulatory, konto, profile) jest
+jedna: ta z `emustart/api.py`; tu tylko zestawienia dla biblioteki, kolejki zadań i opcji
+gry (`lumen_*`) oraz to, czym Lumen różni się od samodzielnego EmuStart (urządzenie na
+serwerze, łączenie płyt). Interfejs EmuStart (`web/`) nie jest używany ani pakowany.
 
 Okno: Lumen podaje tytuł swojego okna (`LUMEN_WINDOW_TITLE`), żeby menu w grze (A+Y)
 i powrót po grze wyciągały na wierzch okno Lumen, jak dotąd okno EmuStart.
@@ -183,7 +184,7 @@ class LumenApi(api_mod.Api):
         return st
 
     def quit(self) -> None:
-        # „Wyjdź z EmuStart” w trybie pełnoekranowym zamyka Lumen — decyduje Lumen
+        # silnik nie ma własnego okna: zamknięcie (np. po aktualizacji EmuStart) — decyduje Lumen
         emit({"type": "quit"})
 
     # ── biblioteka dla Lumen ──
@@ -215,14 +216,6 @@ class LumenApi(api_mod.Api):
                 "profile": {"id": prof.get("id"), "name": prof.get("name", "")},   # bez PIN-u / tokenu
                 "server": self._server_state(),
                 "configured": bool(self._cfg.get("emu_root")) or bool(self._cfg.get("server_key"))}
-
-    def list_games(self, es: str) -> list:
-        """Lista gier EmuStart (tryb TV) + liczba płyt (ikona przy grach wielopłytowych)."""
-        rows = super().list_games(es)
-        discs = disc_counts(es)
-        for r in rows:
-            r["discs"] = discs.get(r["id"], 1)
-        return rows
 
     def lumen_status(self) -> dict:
         """Kolejka zadań EmuStart: uruchamianie, pobieranie, emulatory, wysyłka zapisów."""

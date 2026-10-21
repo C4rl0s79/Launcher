@@ -318,12 +318,6 @@ export interface Settings {
   gamepadBackend: GamepadBackend
   /** interface shown at start: desktop (Lumen look) or fullscreen (EmuStart look) */
   startMode: UiMode
-  /**
-   * TV (fullscreen) interface: "lumen" — the TV layout of Lumen's own interface (one interface,
-   * EmuStart look); "emustart" — EmuStart's own interface in a separate view (until the TV layout
-   * has every function, docs/PLAN-TV-REACT.md)
-   */
-  tvInterface: 'lumen' | 'emustart'
   /** regional version shown by default for games with several versions */
   regionOrder: RegionOrder
   /** run the EmuStart engine (emulated games from an EmuStart server) */
@@ -352,7 +346,6 @@ export type SettingsPatch = Partial<
     | 'demoMode'
     | 'gamepadBackend'
     | 'startMode'
-    | 'tvInterface'
     | 'regionOrder'
     | 'emustartEnabled'
     | 'emustartHome'

@@ -1,12 +1,11 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import type { Game } from '../src/shared/types'
 import { emuArtField, emuDetails, emuGames, emuGameId, isEmuGameId, type EmuLibrary, type EmuLibraryRow } from '../src/main/emustart/mapping'
 import { emuJobs, steamJobs } from '../src/main/core/jobs'
 import { toEngineSettings, toOptions } from '../src/main/emustart/ipc'
-import { createFullscreenBridge, STEAM_START_TIMEOUT_MS, type BridgeDeps } from '../src/main/core/fullscreenBridge'
 import type { EmuStatusRaw } from '../src/main/emustart/provider'
 import { defaultPrefs, migratePrefs, ops } from '../src/main/store/prefs'
-import { isModeCombo, padActions, PadRepeater } from '../src/shared/emuPad'
+import { isModeCombo } from '../src/shared/pad'
 import { gamesForCategory, storeGames } from '../src/renderer/src/store'
 
 // All data below is synthetic (no real library, server or account).
@@ -195,175 +194,12 @@ describe('job list', () => {
   })
 })
 
-function bridge(o: Partial<BridgeDeps> = {}) {
-  let now = 1_000_000
-  const games = [steamGame(10, { name: 'Alpha' }), steamGame(20, { name: 'Beta', installState: 'notInstalled', installed: false })]
-  const deps: BridgeDeps = {
-    engineReady: () => true,
-    engineMessage: () => undefined,
-    engineCall: vi.fn(async (m: string) => (m === 'get_state' ? { systems: [{ es: 'snes' }], copying: [5] } : m === 'list_systems' ? [{ es: 'snes' }] : { engine: m })),
-    steamGames: () => games,
-    steamStatus: () => 'running',
-    artUrl: (id, kind) => `lumen-art://img/${id}/${kind}`,
-    steamDetails: async () => ({ ok: true, details: { appId: 10, fetchedAt: 0, source: 'steamStore', descriptionHtml: '<p>A&amp;B</p>' }, stale: false }),
-    play: vi.fn(async () => ({ ok: true as const, message: 'Uruchamianie' })),
-    install: vi.fn(async () => ({ ok: true as const })),
-    openInSteam: vi.fn(async () => ({ ok: true as const })),
-    toggleFavorite: vi.fn(async () => true),
-    isFavorite: () => false,
-    runningAppId: () => undefined,
-    steamJobs: () => [],
-    setMode: vi.fn(),
-    select: vi.fn(),
-    emuLumenId: (n) => (n === 7 ? 'emu:gabc' : undefined),
-    quit: vi.fn(),
-    log: () => undefined,
-    now: () => now,
-    ...o
-  }
-  return { b: createFullscreenBridge(deps), deps, tick: (ms: number) => (now += ms) }
-}
-
-describe('fullscreen bridge (EmuStart UI)', () => {
-  it('adds Steam as the first system and passes EmuStart calls to the engine', async () => {
-    const { b, deps } = bridge()
-    const st = (await b.call('get_state')) as { systems: { es: string }[] }
-    expect(st.systems.map((s) => s.es)).toEqual(['steam', 'snes'])
-    expect(await b.call('game_options', [7])).toEqual({ engine: 'game_options' })
-    expect(deps.engineCall).toHaveBeenCalledWith('game_options', [7])
-  })
-
-  it('lists Steam games in EmuStart rows with Lumen art', async () => {
-    const { b, deps } = bridge()
-    const rows = (await b.call('list_games', ['steam'])) as Record<string, unknown>[]
-    expect(rows.map((r) => r.id)).toEqual(['steam:10', 'steam:20'])
-    expect(rows[0]).toMatchObject({ cached: 1, box: 'lumen-art://img/steam:10/grid', source: 'steam' })
-    expect(deps.engineCall).not.toHaveBeenCalledWith('list_games', expect.anything())
-    const d = (await b.call('game_detail', ['steam:10'])) as { meta: { description: string }; steam_status: string }
-    expect(d.meta.description).toBe('A&B')
-    expect(d.steam_status).toContain('zainstalowana')
-  })
-
-  it('plays an installed Steam game through Steam and follows RunningAppID', async () => {
-    let running: number | undefined
-    const { b, deps, tick } = bridge({ runningAppId: () => running })
-    expect(await b.call('launch', ['steam:10', '', false])).toEqual({ ok: true })
-    expect(deps.play).toHaveBeenCalledWith('steam:10')
-    expect(await b.call('launch_status')).toMatchObject({ phase: 'preparing' })
-    running = 10
-    expect(await b.call('launch_status')).toMatchObject({ phase: 'running' })
-    running = undefined
-    expect(await b.call('launch_status')).toMatchObject({ phase: 'finished' })
-    await b.call('launch_dismiss')
-    expect(b.steamSessionActive()).toBe(false)
-    // never reported as running: the launch screen closes after the timeout
-    await b.call('launch', ['steam:10'])
-    tick(STEAM_START_TIMEOUT_MS + 1)
-    expect(await b.call('launch_status')).toMatchObject({ phase: 'finished' })
-  })
-
-  it('a Steam game that is not installed is handed to Steam to install — not reported as installed', async () => {
-    const { b, deps } = bridge()
-    await b.call('launch', ['steam:20'])
-    expect(deps.install).toHaveBeenCalledWith('steam:20')
-    expect(deps.play).not.toHaveBeenCalled()
-    const st = (await b.call('launch_status')) as { phase: string; message: string }
-    expect(st.phase).toBe('steam')
-    expect(st.message).toMatch(/Steam/)
-  })
-
-  it('Y on a Steam game toggles the shared favourite; EmuStart-only options refuse Steam ids', async () => {
-    const { b, deps } = bridge()
-    expect(await b.call('toggle_pin', ['steam:10'])).toMatchObject({ ok: true, favorite: true })
-    expect(deps.toggleFavorite).toHaveBeenCalledWith('steam:10')
-    expect(await b.call('remove_local', ['steam:10'])).toMatchObject({ ok: false })
-  })
-
-  it('keeps working with Steam when the engine is down', async () => {
-    const { b, deps } = bridge({ engineReady: () => false, engineMessage: () => 'brak Pythona' })
-    const st = (await b.call('get_state')) as { systems: { es: string }[]; engine_down: string }
-    expect(st.systems.map((s) => s.es)).toEqual(['steam'])
-    expect(st.engine_down).toContain('brak Pythona')
-    expect(await b.call('list_games', ['steam'])).toHaveLength(2)
-    expect(await b.call('launch_status')).toEqual({ phase: 'idle' })
-    expect(await b.call('install_start', [['snes']])).toMatchObject({ ok: false })
-    expect(deps.engineCall).not.toHaveBeenCalled()
-  })
-
-  it('the save-conflict choice from the TV interface goes to the engine', async () => {
-    const { b, deps } = bridge()
-    await b.call('launch_choice', ['remote'])
-    expect(deps.engineCall).toHaveBeenCalledWith('launch_choice', ['remote'])
-  })
-
-  it('mode switch, selection and quit go to Lumen', async () => {
-    const { b, deps } = bridge()
-    await b.call('lumen_mode', ['desktop'])
-    expect(deps.setMode).toHaveBeenCalledWith('desktop')
-    await b.call('lumen_selected', [7])
-    expect(deps.select).toHaveBeenCalledWith('emu:gabc')
-    await b.call('quit')
-    expect(deps.quit).toHaveBeenCalled()
-  })
-})
-
-describe('EmuStart settings shared by both interfaces', () => {
-  it('reads EmuStart settings into the desktop options', () => {
-    const o = toOptions(
-      { hide_beta: true, hide_demo: true, hide_arcade_clones: false, cache_recent: 12, stream_play: true, winfsp: 'dostępny', machine_profile: 2,
-        systems: [{ es: 'snes', display: 'Super Nintendo', enabled: true, label: 'RetroArch + bsnes' }, { es: 'x', display: 'X', enabled: false, label: '' }] },
-      [{ id: 2, name: 'Jezus' }]
-    )
-    expect(o.hide).toEqual({ beta: true, demo: true, pirate: false, unl: false, program: false })
-    expect(o).toMatchObject({ arcadeClones: false, cacheRecent: 12, streamPlay: true, machineProfile: 2 })
-    expect(o.systems).toEqual([
-      { es: 'snes', display: 'Super Nintendo', enabled: true, emulator: 'RetroArch + bsnes', known: true },
-      { es: 'x', display: 'X', enabled: false, emulator: '', known: true }
-    ])
-    expect(toOptions({}, []).arcadeClones).toBe(true) // EmuStart default
-  })
-
-  it('writes only known settings, in EmuStart keys and ranges', () => {
-    expect(toEngineSettings({ hide: { beta: false, pirate: true }, cacheRecent: 500, streamMinSeconds: -5, askProfile: true })).toEqual({
-      hide_beta: false,
-      hide_pirate: true,
-      cache_recent: 100,
-      stream_min_seconds: 0,
-      ask_profile: true
-    })
-    expect(toEngineSettings({ ...({ emu_root: 'C:\\x' } as object) })).toEqual({})
-  })
-
-  it('a setting changed in the TV interface refreshes the desktop library', async () => {
-    const changed = vi.fn()
-    const { b, deps } = bridge({ onEmuChanged: changed })
-    await b.call('save_settings', [{ hide_beta: true }])
-    expect(deps.engineCall).toHaveBeenCalledWith('save_settings', [{ hide_beta: true }])
-    expect(changed).toHaveBeenCalledTimes(1)
-    await b.call('profile_select', [2])
-    expect(changed).toHaveBeenCalledTimes(2)
-    await b.call('get_settings')
-    expect(changed).toHaveBeenCalledTimes(2)
-  })
-})
-
-describe('controller in the fullscreen interface', () => {
-  const pad = (buttons: number, o = {}) => ({ index: 0, buttons, lt: 0, rt: 0, lx: 0, ly: 0, ...o })
-  it('maps XInput to EmuStart actions', () => {
-    expect(padActions(pad(0x1000 | 0x0001))).toEqual(['up', 'a'])
-    expect(padActions(pad(0, { ly: -30000, rt: 255 }))).toEqual(['down', 'rt'])
+describe('View + Start switches the layout', () => {
+  const pad = (buttons: number) => ({ index: 0, buttons, lt: 0, rt: 0, lx: 0, ly: 0 })
+  it('needs both buttons', () => {
     expect(isModeCombo(pad(0x0020 | 0x0010))).toBe(true)
     expect(isModeCombo(pad(0x0010))).toBe(false)
-  })
-  it('repeats held directions like EmuStart and releases', () => {
-    const out: string[] = []
-    const r = new PadRepeater((a, up) => out.push(up ? `${a}^` : a))
-    r.update(new Set(['down', 'a']), 0)
-    r.update(new Set(['down', 'a']), 300)
-    r.update(new Set(['down', 'a']), 400)
-    r.update(new Set(['down', 'a']), 480)
-    r.update(new Set(), 500)
-    expect(out).toEqual(['down', 'a', 'down', 'down', 'down^', 'a^'])
+    expect(isModeCombo(pad(0x0020))).toBe(false)
   })
 })
 
@@ -379,5 +215,22 @@ describe('test mode: login only to a local test server', () => {
     expect(loopbackLogin(link([{ u: 'https://127.0.0.1:47741' }, { u: 'https://emustart.emucloud.org' }]))).toBe(false)
     expect(loopbackLogin('emustart://login?d=zepsute')).toBe(false)
     expect(loopbackLogin('')).toBe(false)
+  })
+})
+
+describe('EmuStart settings shared by both layouts', () => {
+  it('maps the desktop options to the engine settings and back', () => {
+    expect(toEngineSettings({ hide: { beta: true }, arcadeClones: false, cacheRecent: 250, gamesLogo: true, machineProfile: 2 })).toEqual({
+      hide_beta: true,
+      hide_arcade_clones: false,
+      cache_recent: 100,
+      games_logo: true,
+      machine_profile: 2
+    })
+    const o = toOptions({ hide_demo: true, games_logo: true, stream_play: false, systems: [] }, [{ id: 1, name: 'Gracz' }])
+    expect(o.hide.demo).toBe(true)
+    expect(o.gamesLogo).toBe(true)
+    expect(o.streamPlay).toBe(false)
+    expect(o.arcadeClones).toBe(true) // EmuStart's default
   })
 })

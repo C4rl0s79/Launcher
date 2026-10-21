@@ -1,9 +1,10 @@
 # Lumen — launcher gier Steam i EmuStart do obsługi z kanapy
 
 > **Lumen + EmuStart:** jedna aplikacja dla gier Steam i gier na emulowane platformy z serwera
-> [EmuStart](engine/README.md). Dwa wyglądy tej samej aplikacji: **tryb pulpitu** (Lumen) i **tryb TV**
-> (pełnoekranowy, w stylu EmuStart) — wspólna biblioteka, ustawienia i lista zadań, przełączanie
-> F10 albo View + Start bez restartu. Architektura i stan integracji: [docs/INTEGRATION.md](docs/INTEGRATION.md),
+> [EmuStart](engine/README.md). Jeden interfejs w dwóch układach: **tryb pulpitu** i **tryb TV**
+> (pełnoekranowy, w wyglądzie EmuStart) — te same funkcje, biblioteka, ustawienia, konto i lista zadań;
+> przełączanie F10 albo View + Start bez restartu. EmuStart działa w Lumenie tylko jako silnik (bez
+> własnego interfejsu). Architektura i stan integracji: [docs/INTEGRATION.md](docs/INTEGRATION.md),
 > migracja danych: [docs/MIGRATION.md](docs/MIGRATION.md).
 
 Lumen to lokalna aplikacja desktopowa (Windows) z przejrzystym, ciemnym interfejsem do przeglądania
@@ -77,7 +78,7 @@ Pliki nie są podpisane certyfikatem, więc Windows SmartScreen może przy pierw
 ### Aktualizacje (jak w EmuStart)
 
 Lumen sam sprawdza wydania na GitHubie (C4rl0s79/Launcher) — przy starcie i raz dziennie — i pokazuje
-„⬆ Nowa wersja” na górnym pasku. Ustawienia → **Aktualizacja Lumen** (albo tryb TV: Menu → „Aktualizuj Lumen”):
+„⬆ Nowa wersja” na górnym pasku. Ustawienia → **Aktualizacja Lumen** (albo tryb TV: Menu → „Sprawdź aktualizację Lumen”):
 **Pobierz** → **Zainstaluj i uruchom ponownie**. Pobrany plik musi mieć skrót SHA-256 zgodny z wydaniem
 **i poprawny podpis wydania Lumen** (Ed25519, `<plik>.sig`, klucz publiczny w programie) — inaczej nic nie jest
 instalowane. Podmianę robi skrypt po zamknięciu Lumen (jednorazowe zadanie Harmonogramu „Lumen Update”,
@@ -127,8 +128,8 @@ Aby zobaczyć wszystkie posiadane gry:
 
 1. Na komputerze z serwerem: panel EmuStart Server → **Dodaj urządzenie** (link logowania / kod QR)
    albo `EmuStartServer.exe --login-link` (link do schowka).
-2. W Lumen: **Ustawienia → EmuStart → „Zaloguj do serwera (tryb TV)”** (albo F10 → Start → Ustawienia
-   → Zaloguj) → wklej link → „Mam konto” / „Nowe konto” → nazwa i hasło konta.
+2. W Lumen: **Ustawienia → EmuStart → „Zaloguj do serwera”** (albo w trybie TV: Start → „Zaloguj do
+   serwera”) → wklej link → „Mam konto” / „Nowe konto” → nazwa i hasło konta → kod do porównania.
 3. Biblioteka przychodzi z serwera; każda platforma pojawia się jako grupa na górnym pasku. Folder
    emulatorów i pobranych gier: Ustawienia → EmuStart. Emulatory i BIOS-y pobierają się z serwera.
 4. Istniejąca instalacja EmuStart: Ustawienia → EmuStart → „Folder danych EmuStart” → **Wybierz…** → folder programu

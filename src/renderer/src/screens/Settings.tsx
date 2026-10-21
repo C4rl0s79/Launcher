@@ -414,16 +414,6 @@ function InterfaceSection() {
         value={settings.startMode === 'fullscreen'}
         onChange={(v) => void patch({ startMode: v ? 'fullscreen' : 'desktop' })}
       />
-      <Toggle
-        label="Tryb TV: dotychczasowy interfejs EmuStart"
-        desc={
-          settings.tvInterface === 'emustart'
-            ? 'Tryb TV pokazuje interfejs programu EmuStart (osobny widok).'
-            : 'Tryb TV to układ tego samego interfejsu Lumen w stylu EmuStart. Logowanie, profile i opcje emulatora gry otwierają się na razie w interfejsie EmuStart.'
-        }
-        value={settings.tvInterface === 'emustart'}
-        onChange={(v) => void patch({ tvInterface: v ? 'emustart' : 'lumen' })}
-      />
     </Section>
   )
 }

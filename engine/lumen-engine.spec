@@ -29,7 +29,8 @@ a = Analysis(
     ["engine_main.py"],
     pathex=["."],
     binaries=[],
-    datas=[("web", "web"), (str(_logos), "assets")],
+    # bez web/ — interfejs to Lumen; assets: logo systemów (karuzela, lokalne kopie)
+    datas=[(str(_logos), "assets")],
     hiddenimports=hiddenimports,
     # wybór folderu i okno robi Lumen — pywebview / .NET nie są potrzebne
     excludes=["tkinter", "test", "unittest", "pytest", "webview", "clr_loader", "pythonnet"],

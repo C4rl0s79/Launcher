@@ -2,8 +2,8 @@ import { app, BrowserWindow, ipcMain, Menu, net, protocol, shell } from 'electro
 import { existsSync, mkdirSync, promises as fs } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { ART_SCHEME, EMU_UI_SCHEME, IPC } from '@shared/api'
-import { EMU_UI, isModeCombo } from '@shared/emuPad'
+import { ART_SCHEME, IPC } from '@shared/api'
+import { isModeCombo } from '@shared/pad'
 import type { ActionResult, ArtKind, ArtOption, FsEntry, FsListOptions, Game, JobsSnapshot, LibrarySnapshot, Prefs, SecretName, SettingsPatch, SgdbGame, UiMode } from '@shared/types'
 import { initLogger, log } from './logger'
 import { chooseDataDir, migrateDataDir } from './dataDir'
@@ -28,7 +28,6 @@ import { EmustartProvider } from './emustart/provider'
 import { emuArtField, emuDetails, isEmuGameId } from './emustart/mapping'
 import { registerEmustartIpc } from './emustart/ipc'
 import { UnifiedLibrary } from './core/unifiedLibrary'
-import { createFullscreenBridge } from './core/fullscreenBridge'
 import { UiModeManager } from './core/uiMode'
 
 const ART_KINDS: ArtKind[] = ['grid', 'hero', 'logo', 'icon']
@@ -36,8 +35,7 @@ const ART_KINDS: ArtKind[] = ['grid', 'hero', 'logo', 'icon']
 const WINDOW_TITLE = 'Lumen'
 
 protocol.registerSchemesAsPrivileged([
-  { scheme: ART_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
-  { scheme: EMU_UI_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }
+  { scheme: ART_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }
 ])
 
 // Data folder: LumenData next to the exe in packaged builds (installer and portable) — settings,
@@ -85,7 +83,6 @@ const paths = {
 
 /** engine/ next to the app: the project root in development, resources/ when packaged */
 const engineRoot = (): string => (app.isPackaged ? process.resourcesPath : app.getAppPath())
-const emuWebDir = (): string => path.join(engineRoot(), 'engine', 'web')
 
 const settings = new SettingsStore(paths.settings, paths.secrets)
 const prefs = new PrefsStore(paths.prefs)
@@ -153,8 +150,6 @@ function fail(error: string): ActionResult {
   return { ok: false, error }
 }
 
-const artUrl = (gameId: string, kind: ArtKind): string => `${ART_SCHEME}://img/${encodeURIComponent(gameId)}/${kind}?r=${artRev.get(gameId) ?? 0}`
-
 // ---------------- window ----------------
 
 function createWindow(): void {
@@ -182,12 +177,11 @@ function createWindow(): void {
   win.once('ready-to-show', () => {
     if (win) activateWindow(win)
     if (settings.get().startMode === 'fullscreen') modes?.setMode('fullscreen')
-    else modes?.preload()
   })
   win.on('focus', () => {
     send(IPC.appFocus, true)
-    // keyboard focus belongs to the visible interface
-    modes?.activeContents.focus()
+    // keyboard focus belongs to the interface (both layouts are the window's own page)
+    win?.webContents.focus()
   })
   win.on('minimize', () => log.info('window', 'minimized'))
   win.on('restore', () => log.info('window', 'restored'))
@@ -202,17 +196,7 @@ function createWindow(): void {
   if (process.env.ELECTRON_RENDERER_URL) void win.loadURL(process.env.ELECTRON_RENDERER_URL)
   else void win.loadFile(path.join(__dirname, '../renderer/index.html'))
 
-  modes = new UiModeManager(win, {
-    preloadDir: path.join(__dirname, '../preload'),
-    locate: (gameId) => {
-      const g = findGame(gameId)
-      if (g?.source === 'steam') return { es: 'steam', id: g.id }
-      const row = emu.row(gameId)
-      return row ? { es: row.es, id: row.id } : null
-    },
-    onInput: (input, wc) => hotkeys(input, wc),
-    legacyTv: () => settings.get().tvInterface === 'emustart'
-  })
+  modes = new UiModeManager(win)
   modes.on('mode', (mode: UiMode, selection: string | null) => send(IPC.uiMode, mode, selection))
 }
 
@@ -414,47 +398,6 @@ async function engineArt(gameId: string, kind: string): Promise<Response | null>
     if (emuArtCache.size > 400) emuArtCache.delete(emuArtCache.keys().next().value!)
   }
   return new Response(new Uint8Array(hit.body), { status: 200, headers: { 'Content-Type': hit.type, 'Cache-Control': 'max-age=86400' } })
-}
-
-const UI_TYPES: Record<string, string> = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.png': 'image/png',
-  '.svg': 'image/svg+xml',
-  '.webp': 'image/webp',
-  '.jpg': 'image/jpeg',
-  '.ico': 'image/x-icon',
-  '.woff2': 'font/woff2'
-}
-
-/**
- * lumen-emu://ui/… — EmuStart's UI files (engine/web) for the fullscreen interface; /media and
- * /assets go to the engine (art from the server, system logos). A fixed origin keeps the UI
- * working while the engine restarts or is missing (Steam games still work then).
- */
-function registerEmuUiProtocol(): void {
-  protocol.handle(EMU_UI_SCHEME, async (req) => {
-    try {
-      const u = new URL(req.url)
-      const rel = decodeURIComponent(u.pathname).replace(/^\/+/, '')
-      if (rel.startsWith('media/') || rel.startsWith('assets/')) {
-        if (!engine.baseUrl) return new Response('engine not running', { status: 503 })
-        return await net.fetch(`${engine.baseUrl}/${rel}${u.search}`)
-      }
-      const base = emuWebDir()
-      const file = path.resolve(base, rel || 'index.html')
-      if (!file.startsWith(base + path.sep) || !existsSync(file)) return new Response('not found', { status: 404 })
-      const body = await fs.readFile(file)
-      return new Response(body, {
-        status: 200,
-        headers: { 'Content-Type': UI_TYPES[path.extname(file).toLowerCase()] ?? 'application/octet-stream', 'Cache-Control': 'no-cache' }
-      })
-    } catch (e) {
-      log.warn('ui', `lumen-emu error: ${(e as Error).message}`)
-      return new Response('error', { status: 500 })
-    }
-  })
 }
 
 function bumpArt(gameId: string, kind?: ArtKind): void {
@@ -758,10 +701,7 @@ function registerIpc(): void {
     win: () => win,
     jobs: () => unified.jobs,
     dataDir: () => settings.get().emustartHome || paths.emustartHome,
-    changed: () => {
-      void emu.refresh()
-      modes?.emuContents?.send(EMU_UI.open, 'refresh')
-    },
+    changed: () => void emu.refresh(),
     artChanged: (gameId) => {
       emuArtCache.clear()
       bumpArt(gameId)
@@ -798,52 +738,8 @@ function registerIpc(): void {
   handle(IPC.updateApply, () => updater.apply())
 
   handle(IPC.uiGetMode, () => modes?.mode ?? 'desktop')
-  handle(IPC.uiSetMode, (mode: UiMode, then?: 'settings' | 'game') =>
-    modes?.setMode(mode === 'fullscreen' ? 'fullscreen' : 'desktop', then === 'settings' || then === 'game' ? then : undefined)
-  )
+  handle(IPC.uiSetMode, (mode: UiMode) => modes?.setMode(mode === 'fullscreen' ? 'fullscreen' : 'desktop'))
   ipcMain.on(IPC.uiSelect, (_e, gameId: unknown) => modes?.select(typeof gameId === 'string' ? gameId : null))
-
-  registerFullscreenBridge()
-}
-
-/** Fullscreen interface (EmuStart's UI): EmuStart calls go to the engine, Steam is answered here. */
-function registerFullscreenBridge(): void {
-  const bridge = createFullscreenBridge({
-    engineReady: () => engine.state === 'ready',
-    engineMessage: () => engine.message,
-    engineCall: (m, a) => engine.call(m, a, m === 'launch' || m === 'install_missing' || m === 'server_enroll' ? 120_000 : 60_000),
-    steamGames: () => library.current.games,
-    steamStatus: () => library.current.steam.status,
-    artUrl: (id, kind) => artUrl(id, kind),
-    steamDetails: (id) => {
-      const appId = steamAppIdOf(id)
-      return appId ? meta.get(appId) : Promise.resolve({ ok: false as const, error: 'Brak danych.' })
-    },
-    play: playSteam,
-    install: installSteam,
-    openInSteam,
-    toggleFavorite: async (id) => (await updatePrefs((p) => ops.toggleFavorite(p, id))).favorites.includes(id),
-    updater,
-    // settings changed in the TV interface (filters, system emulator, profile) → the desktop library follows
-    onEmuChanged: () => void emu.refresh(),
-    isFavorite: (id) => prefs.get().favorites.includes(id),
-    runningAppId: () => library.current.steam.runningAppId,
-    steamJobs: () => unified.jobs.jobs.filter((j) => j.source === 'steam'),
-    setMode: (m) => modes?.setMode(m),
-    select: (id) => modes?.select(id),
-    emuLumenId: (n) => emu.lumenId(n),
-    quit: () => app.quit(),
-    log: (m) => log.info('emu-ui', m.slice(0, 300))
-  })
-  ipcMain.handle(EMU_UI.call, async (e, name: unknown, args: unknown) => {
-    if (!modes?.emuContents || e.sender !== modes.emuContents) throw new Error('forbidden')
-    try {
-      return await bridge.call(String(name), Array.isArray(args) ? args : [])
-    } catch (err) {
-      log.warn('emu-ui', `${String(name)}: ${(err as Error).message}`)
-      throw new Error((err as Error).message)
-    }
-  })
 }
 
 /**
@@ -877,7 +773,6 @@ app.whenReady().then(async () => {
   if (migrated.length) log.info('app', `copied from ${legacyDataDir} (left unchanged): ${migrated.join(', ')}`)
   await Promise.all([settings.init(), prefs.init(), emu.init()])
   registerArtProtocol()
-  registerEmuUiProtocol()
   registerIpc()
 
   launchbox.on('changed', () => void launchbox.status().then((st) => send(IPC.launchboxChanged, st)))
@@ -900,8 +795,6 @@ app.whenReady().then(async () => {
   })
   engine.on('state', (st) => {
     if (st !== 'ready') return
-    // the fullscreen UI reads the engine state when it loads — reload it once the engine is up
-    modes?.reloadEmu()
     void emustartDefaults()
   })
   library.on('snapshot', (s: LibrarySnapshot) => {
@@ -925,7 +818,7 @@ app.whenReady().then(async () => {
     () =>
       // LUMEN_NO_PAD=1: automated UI tests ignore controllers connected to this PC
       process.env.LUMEN_NO_PAD !== '1' &&
-      (settings.get().gamepadBackend === 'xinput' || !!modes?.legacyShown) &&
+      settings.get().gamepadBackend === 'xinput' &&
       !!win &&
       !win.isDestroyed() &&
       win.isFocused() &&
@@ -936,8 +829,7 @@ app.whenReady().then(async () => {
       if (nowCombo && !combo) modes?.toggle()
       combo = nowCombo
       if (nowCombo) return
-      if (modes?.legacyShown) modes.emuContents?.send(EMU_UI.pad, state)
-      else send(IPC.padState, state)
+      send(IPC.padState, state)
     }
   )
   library.start().catch((e) => log.error('library', 'start failed', e))
