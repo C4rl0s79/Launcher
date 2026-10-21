@@ -123,8 +123,11 @@ export function emuPrimary(
     const r = await attempt(api().emustart.launch(game.id))
     setBusy(false)
     if (!r) return
-    if (!r.ok) useStore.getState().toast(r.error ?? 'Nie udało się uruchomić gry.', 'error')
-    else if (r.message) useStore.getState().toast(r.message, 'info')
+    if (!r.ok) {
+      useStore.getState().toast(r.error ?? 'Nie udało się uruchomić gry.', 'error')
+      // the profile is locked on this device (PIN / account password): choose or unlock it
+      if (r.profileLocked) useStore.getState().setProfiles('normal')
+    } else if (r.message) useStore.getState().toast(r.message, 'info')
   }
   if (g.cached) return { label: 'Graj', run, note: `${g.system}${ready?.ok && ready.emulator ? ` · ${ready.emulator}` : ''}` }
   return {

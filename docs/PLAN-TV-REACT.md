@@ -102,7 +102,7 @@ Legenda — pulpit Lumena dziś: ✔ jest, ◐ częściowo, ✘ brak.
    klawiatura ekranowa. Stary tryb TV dostępny przełącznikiem.
 2. ✔ **(Lumen 0.7.0) Opcje gry** — emulator dla gry, ustawienia emulatora z historią, bez shadera, metadane i
    opis, grafiki z serwera EmuStart, „Graj od początku”, warianty.
-3. **Konto i profile** — logowanie / wylogowanie, zatwierdzanie urządzeń, ekran profili, PIN i
+3. ✔ **(Lumen 0.8.0) Konto i profile** — logowanie / wylogowanie, zatwierdzanie urządzeń, ekran profili, PIN i
    hasła, wybór gracza przy starcie, RetroAchievements.
 4. **Menu w grze (A+Y) i pady** — menu w grze, kolejność padów.
 5. **Reszta ustawień** — strumienie, wykrywanie emulatorów, logo systemów, klucze grafik, (po

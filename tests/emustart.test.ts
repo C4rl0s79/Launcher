@@ -366,3 +366,18 @@ describe('controller in the fullscreen interface', () => {
     expect(out).toEqual(['down', 'a', 'down', 'down', 'down^', 'a^'])
   })
 })
+
+
+describe('test mode: login only to a local test server', () => {
+  it('accepts loopback addresses and links whose every endpoint is local', async () => {
+    const { loopbackLogin } = await import('../src/main/emustart/ipc')
+    const link = (e: { u: string }[]): string => 'emustart://login?d=' + Buffer.from(JSON.stringify({ v: 1, e })).toString('base64url')
+    expect(loopbackLogin('127.0.0.1:47740')).toBe(true)
+    expect(loopbackLogin('https://localhost:47741')).toBe(true)
+    expect(loopbackLogin(link([{ u: 'https://127.0.0.1:47741' }]))).toBe(true)
+    expect(loopbackLogin('emustart.emucloud.org')).toBe(false)
+    expect(loopbackLogin(link([{ u: 'https://127.0.0.1:47741' }, { u: 'https://emustart.emucloud.org' }]))).toBe(false)
+    expect(loopbackLogin('emustart://login?d=zepsute')).toBe(false)
+    expect(loopbackLogin('')).toBe(false)
+  })
+})

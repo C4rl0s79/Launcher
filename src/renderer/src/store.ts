@@ -42,6 +42,14 @@ interface State {
   uiMode: UiMode
   /** the game selected when the mode switched (the TV layout opens on its system) */
   uiSelection: string | null
+  /** an open text / choice dialog (askText, askChoice) — rendered by components/Dialogs.tsx */
+  dialog: Dialog | null
+  /** "Kto gra?" — profiles screen: normal (from a menu), startup (ask at start), setup (new PC) */
+  profiles: 'normal' | 'startup' | 'setup' | null
+  setProfiles(mode: 'normal' | 'startup' | 'setup' | null): void
+  /** login waiting for approval on another device of the account (code to compare) */
+  enroll: { code: string; account: string; mode: string } | null
+  setEnroll(e: { code: string; account: string; mode: string } | null): void
   setUiMode(mode: UiMode, selection?: string | null): void
   setSnapshot(s: LibrarySnapshot): void
   setJobs(j: JobsSnapshot): void
@@ -87,6 +95,11 @@ export const useStore = create<State>((set) => ({
   toasts: [],
   uiMode: 'desktop',
   uiSelection: null,
+  dialog: null,
+  profiles: null,
+  setProfiles: (profiles) => set({ profiles }),
+  enroll: null,
+  setEnroll: (enroll) => set({ enroll }),
   setUiMode: (uiMode, uiSelection = null) => set({ uiMode, uiSelection }),
   setSnapshot: (snapshot) => set({ snapshot }),
   setJobs: (jobs) => set({ jobs }),
@@ -116,6 +129,26 @@ export const useStore = create<State>((set) => ({
     }),
   dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }))
 }))
+
+export type Dialog =
+  | { id: number; kind: 'text'; label: string; initial: string; secret: boolean; resolve: (v: string | null) => void }
+  | { id: number; kind: 'choice'; title: string; items: string[]; resolve: (i: number | null) => void }
+
+let dialogId = 0
+
+/** Text from the on-screen keyboard (physical keys work too); null = cancelled. */
+export function askText(label: string, opts: { initial?: string; secret?: boolean } = {}): Promise<string | null> {
+  return new Promise((resolve) => {
+    useStore.setState({ dialog: { id: ++dialogId, kind: 'text', label, initial: opts.initial ?? '', secret: !!opts.secret, resolve } })
+  })
+}
+
+/** One of `items` (index) in a pad-friendly list; null = cancelled (B). */
+export function askChoice(title: string, items: string[]): Promise<number | null> {
+  return new Promise((resolve) => {
+    useStore.setState({ dialog: { id: ++dialogId, kind: 'choice', title, items, resolve } })
+  })
+}
 
 let pickerId = 0
 

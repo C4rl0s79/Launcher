@@ -471,6 +471,49 @@ export interface EmuSaveSync {
   last: number
 }
 
+/**
+ * Account, login and profile calls of the EmuStart engine the interface may make (the logic is
+ * EmuStart's: api.py — login with a device key, profiles, PIN, account passwords, RetroAchievements).
+ */
+export type EmuAccountMethod =
+  | 'get_state'
+  | 'server_enroll'
+  | 'server_enroll_poll'
+  | 'server_enroll_cancel'
+  | 'server_logout'
+  | 'enroll_pending'
+  | 'enroll_decide'
+  | 'account_request'
+  | 'account_requests_poll'
+  | 'profiles_list'
+  | 'profile_select'
+  | 'profile_setup'
+  | 'profile_create'
+  | 'profile_rename'
+  | 'profile_delete'
+  | 'profile_join'
+  | 'profile_login'
+  | 'profile_logout'
+  | 'profile_unlock'
+  | 'profile_set_pin'
+  | 'profile_clear_pin'
+  | 'profile_set_password'
+  | 'ra_status'
+  | 'ra_login'
+  | 'ra_logout'
+  | 'ra_hardcore'
+  | 'ra_import'
+
+/** A profile on this device (profiles_list) */
+export interface EmuProfile {
+  id: number
+  name: string
+  nas_name?: string
+  /** ok | need_pin | need_password | set_password */
+  pin: string
+  has_pin: boolean
+}
+
 /** Metadata fields of an EmuStart game (server metadata; an administrator can correct them) */
 export type EmuMetaField = 'title' | 'developer' | 'publisher' | 'year' | 'genre' | 'players' | 'description'
 
@@ -592,6 +635,8 @@ export interface EmuActionResult {
   ok: boolean
   message?: string
   error?: string
+  /** the profile is locked on this device (PIN / account password) — choose or unlock it */
+  profileLocked?: boolean
   /** launch could not start: these components are missing */
   needInstall?: { es: string; system: string; steps: string[] }
 }

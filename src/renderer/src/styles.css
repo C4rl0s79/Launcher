@@ -2046,3 +2046,84 @@ p.card__desc[data-nav]:focus {
   overflow: auto;
   color: var(--text-dim, #8d97ab);
 }
+
+/* ---------- "Kto gra?" — profiles (EmuStart's cards, both layouts) ---------- */
+.profiles {
+  position: fixed;
+  inset: 0;
+  z-index: 35; /* above both layouts, below dialogs (40), hints (60) and toasts */
+  padding: 10vh 8vw 9vh;
+  background: radial-gradient(120% 90% at 50% 0%, #1b2236 0%, #0b0d12 60%) fixed, #0b0d12;
+  color: #e9edf5;
+  text-align: center;
+  overflow: auto;
+}
+.profiles h1 {
+  margin: 0;
+  font-weight: 600;
+}
+.profiles__intro {
+  max-width: 70ch;
+  margin: 1em auto 0;
+  color: #e6b450;
+  line-height: 1.5;
+}
+.profiles__empty {
+  margin-top: 10vh;
+  color: #8d97ab;
+}
+.profiles__cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2vw;
+  justify-content: center;
+  margin-top: 8vh;
+}
+.pcard {
+  width: 11vw;
+  min-width: 130px;
+  padding: 1.2em 0.5em;
+  border-radius: 16px;
+  border: 2px solid transparent;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.pcard.sel {
+  border-color: #4f8cff;
+  background: color-mix(in srgb, #4f8cff 15%, transparent);
+}
+.pcard__av {
+  width: 7vw;
+  min-width: 90px;
+  aspect-ratio: 1;
+  margin: 0 auto 0.6em;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.6em;
+  font-weight: 700;
+  background: linear-gradient(135deg, #4f8cff, #8a5cff);
+}
+.pcard.add .pcard__av {
+  background: rgba(255, 255, 255, 0.08);
+  color: #8d97ab;
+}
+.pcard__name {
+  display: block;
+  font-size: 1.15em;
+}
+.pcard.cur .pcard__name::after {
+  content: ' ●';
+  color: #3fbf7f;
+}
+.enroll__code {
+  margin: 0.6em 0;
+  font-size: 2.4em;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}

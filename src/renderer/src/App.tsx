@@ -12,6 +12,9 @@ import { DetailsScreen } from './screens/Details'
 import { EmuLaunchOverlay, JobsPanel } from './components/Jobs'
 import { PathPicker } from './modals/PathPicker'
 import { TvApp } from './tv/TvApp'
+import { Dialogs } from './components/Dialogs'
+import { Profiles } from './components/Profiles'
+import { accountRequestsCheck, enrollCheck, enrollResume } from './lib/account'
 
 /** Start, the pinned groups (in their order), Settings. */
 export function useTabs(): Tab[] {
@@ -58,6 +61,35 @@ export function App() {
     ]
     return () => offs.forEach((off) => off())
   }, [])
+
+  // EmuStart account at start (as EmuStart does): who plays on a new PC / at start, a login waiting
+  // for approval, requests of other devices to approve (then every minute)
+  const engineReady = useStore((s) => s.snapshot?.emustart?.engine === 'ready')
+  useEffect(() => {
+    if (!engineReady) return
+    let alive = true
+    void (async () => {
+      const st = await api()
+        .emustart.account<{ server?: unknown; setup_needed?: boolean; ask_profile?: boolean }>('get_state')
+        .catch(() => null)
+      if (!alive || !st) return
+      // a new PC logged in to the server: whose PC is it; otherwise the question at start (if set)
+      if (st.server && st.setup_needed) useStore.getState().setProfiles('setup')
+      else if (st.ask_profile) useStore.getState().setProfiles('startup')
+      await enrollResume()
+    })()
+    const first = setTimeout(() => void enrollCheck(), 4000)
+    const every = setInterval(() => {
+      if (useStore.getState().dialog || useStore.getState().profiles) return
+      void enrollCheck()
+      void accountRequestsCheck()
+    }, 60_000)
+    return () => {
+      alive = false
+      clearTimeout(first)
+      clearInterval(every)
+    }
+  }, [engineReady])
 
   // controller backend: XInput from the main process (default) or the Chromium Gamepad API
   const backend = useStore((s) => (s.settings?.gamepadBackend === 'chromium' || s.settings?.xinputAvailable === false ? 'chromium' : s.settings ? 'xinput' : null))
@@ -147,6 +179,8 @@ export function App() {
         <JobsPanel />
         <EmuLaunchOverlay />
         <PathPicker />
+        <Profiles />
+        <Dialogs />
         <Toasts />
       </>
     )
@@ -176,6 +210,8 @@ export function App() {
       <JobsPanel />
       <EmuLaunchOverlay />
       <PathPicker />
+      <Profiles />
+      <Dialogs />
       <HintsBar />
       <Toasts />
     </>

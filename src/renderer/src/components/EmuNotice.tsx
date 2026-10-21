@@ -1,4 +1,5 @@
-import { api, useStore } from '../store'
+import { useStore } from '../store'
+import { loginFlow } from '../lib/account'
 
 /** State of the EmuStart side shown above a platform group — only when something needs attention. */
 export function EmuNotice() {
@@ -19,8 +20,8 @@ export function EmuNotice() {
     return (
       <div className="notice">
         <span>To urządzenie nie jest zalogowane do serwera EmuStart.</span>
-        <button className="btn btn--sm" tabIndex={-1} onClick={() => void api().ui.setMode('fullscreen', 'settings')}>
-          Zaloguj (tryb TV)
+        <button className="btn btn--sm" tabIndex={-1} onClick={() => void loginFlow()}>
+          Zaloguj
         </button>
       </div>
     )

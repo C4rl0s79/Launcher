@@ -105,10 +105,19 @@ export function OnScreenKeyboard({
     return true
   }
 
-  // physical keys also work while the OSK is open
+  // physical keys also work while the OSK is open: letters, space, Backspace; Enter submits (a
+  // controller's A goes through the input layer instead and presses the focused key)
+  const textRef = useRef(text)
+  textRef.current = text
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      const isChar = e.key.length === 1 && !e.ctrlKey && !e.altKey && e.key !== ' '
+      if (e.key === 'Enter' && !e.ctrlKey && !e.altKey) {
+        e.stopImmediatePropagation()
+        e.preventDefault()
+        onClose(true, textRef.current)
+        return
+      }
+      const isChar = e.key.length === 1 && !e.ctrlKey && !e.altKey
       if (!isChar && e.key !== 'Backspace') return
       e.stopImmediatePropagation()
       e.preventDefault()
@@ -120,7 +129,7 @@ export function OnScreenKeyboard({
     }
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
-  }, [onChange])
+  }, [onChange, onClose])
 
   return (
     <Modal

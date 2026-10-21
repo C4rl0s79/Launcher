@@ -64,6 +64,7 @@ const api: LumenApi = {
     saves: (id) => invoke(IPC.emuSaves, id),
     systemInfo: (es) => invoke(IPC.emuSystemInfo, es),
     gameOptions: (id) => invoke(IPC.emuGameOptions, id),
+    account: (method, ...args) => invoke(IPC.emuAccount, method, args),
     setVariant: (id, v) => invoke(IPC.emuSetVariant, id, v),
     setGameEmulator: (id, e) => invoke(IPC.emuSetGameEmulator, id, e),
     configureEmulator: (id) => invoke(IPC.emuConfigure, id),

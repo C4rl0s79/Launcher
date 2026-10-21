@@ -1,4 +1,4 @@
-import type { EmuServerArt, EmuMetaField, EmuSettingsChange, EmuGameOptions, EmuSystemInfo, LbArtOptionsResult, EmuSaves,
+import type { EmuAccountMethod, EmuServerArt, EmuMetaField, EmuSettingsChange, EmuGameOptions, EmuSystemInfo, LbArtOptionsResult, EmuSaves,
   ActionResult,
   ArtKind,
   ArtOption,
@@ -94,6 +94,8 @@ export interface LumenApi {
     launch(gameId: string, state?: string, takeover?: boolean): Promise<EmuActionResult>
     /** a state of another RetroArch core: switch this game to that core (downloads it if missing) */
     playOtherCore(gameId: string, core: string): Promise<EmuActionResult>
+    /** account, login and profiles (EmuStart engine calls on a whitelist) — raw engine result */
+    account<T = Record<string, unknown>>(method: EmuAccountMethod, ...args: unknown[]): Promise<T>
     /** "Opcje gry": versions, emulator, settings, metadata (one call) */
     gameOptions(gameId: string): Promise<EmuGameOptions>
     /** version of the game for this profile (translation id, 0 = original) */
@@ -233,6 +235,7 @@ export const IPC = {
   emuLaunch: 'emu:launch',
   emuSaves: 'emu:saves',
   emuGameOptions: 'emu:gameOptions',
+  emuAccount: 'emu:account',
   emuSetVariant: 'emu:setVariant',
   emuSetGameEmulator: 'emu:setGameEmulator',
   emuConfigure: 'emu:configure',

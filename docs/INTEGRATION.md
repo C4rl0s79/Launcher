@@ -360,9 +360,18 @@ Od Lumen 0.6.0 (plan: `docs/PLAN-TV-REACT.md`, etap 1) — **jeden interfejs, dw
   B wstecz, Start menu.
 - Przełączenie: F10, View + Start, przycisk „⛶ Tryb TV”, menu TV → „Tryb pulpitu”. Zaznaczona gra
   przechodzi między układami (pulpit → TV: jej system i gra; TV → pulpit: jej szczegóły).
-- **Interfejs EmuStart (osobny widok) — tymczasowo** dla funkcji, których układ TV jeszcze nie ma
-  (etap 3): logowanie, konto, profile, PIN, RetroAchievements („Konto, profile i logowanie
-  (EmuStart)” w menu TV, „Zaloguj / Konto i logowanie” w Ustawieniach). Ustawienia → Tryb interfejsu → „Tryb TV: dotychczasowy
+- **Konto i profile** (Lumen 0.8.0) — w interfejsie Lumen, oba układy, przepływy EmuStart 1:1
+  (`lib/account.ts`, `components/Profiles.tsx`, `components/Dialogs.tsx`; silnik: `api.account` —
+  lista dozwolonych metod w `ipc.ts`): logowanie (adres albo link z panelu → mam konto / nowe konto →
+  nazwa → hasło z wymaganiami serwera → kod i czekanie na zatwierdzenie), wylogowanie z wysłaniem
+  zapisów (niewysłane — pytanie), zatwierdzanie próśb innych urządzeń (przy starcie i co minutę),
+  prośby o konto, „Kto gra?” (nowy komputer, pytanie przy starcie, menu „Zmień profil”, Ustawienia →
+  Profile, profil zablokowany przy uruchomieniu gry): wybór, nowy profil / inny użytkownik, zmiana
+  nazwy, usuwanie, hasło konta, PIN tego urządzenia, profil tego komputera, RetroAchievements
+  (logowanie, hardcore, import konta z emulatora). Tekst — klawiatura ekranowa (pad) albo klawiatura
+  (Enter zatwierdza).
+- Interfejs EmuStart (osobny widok) zostaje tylko przy ustawieniu „Tryb TV: dotychczasowy interfejs
+  EmuStart”. Ustawienia → Tryb interfejsu → „Tryb TV: dotychczasowy
   interfejs EmuStart” przywraca poprzedni tryb TV w całości.
 - **Opcje gry** (Lumen 0.7.0, `components/GameOptions.tsx`) — jedno okno dla obu układów (TV: X na
   grze EmuStart; pulpit: szczegóły → „Opcje gry”), strony jak w EmuStart: Graj / Graj od początku,
@@ -409,3 +418,15 @@ Przy pierwszym ręcznym teście trybu TV (bez `LUMEN_DRY_RUN`) Lumen wysłał
 `steam://rungameid/798460` i Steam uruchomił grę. Polecenie nie pochodziło ze skryptu testowego —
 do okna trafiały naciśnięcia z podłączonego pada (XInput, gniazdo 0). Od tej pory testy automatyczne
 używają `LUMEN_DRY_RUN=1` (akcje Steam i uruchamianie emulatorów tylko w logu) i `LUMEN_NO_PAD=1`.
+
+### 9.1. Prośba o konto wysłana na prawdziwy serwer (20.10.2026, etap 3)
+
+Podczas automatycznego testu logowania w interfejsie Lumen (etap 3) pole adresu serwera miało
+wpisany domyślny adres EmuStart (`emustart.emucloud.org`). Wpisywanie linku testowego nie zadziałało
+(zdarzenia klawiszy wysłane na `window` zamiast do elementu z fokusem), a kolejne kroki przeszły — do
+**prawdziwego serwera** poszła prośba o **nowe konto „lumenetap3”** (hasło testowe) z kluczem urządzenia
+tego komputera. Konto nie powstało: prośba czeka na zatwierdzenie administratora i wygasa 21.10.2026
+22:39 UTC — **należy ją odrzucić w panelu serwera** (Urządzenia → prośby). Lokalnie: prośba usunięta z
+danych testowych, klucz `EmuStart-66fadc96a272` usunięty z TPM (sprawdzone). Zabezpieczenie: w trybie
+testowym (`LUMEN_DRY_RUN=1`) Lumen odrzuca logowanie na serwer inny niż lokalny
+(`ipc.ts: loopbackLogin`, test w `tests/emustart.test.ts`).

@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import type { CacheStats, Category, EmuSettings, LaunchBoxStatus, SecretName, SettingsPatch } from '@shared/types'
 import type { PickPathOptions } from '@shared/api'
+import { loginFlow, logoutFlow } from '../lib/account'
 import { api, attempt, gamesForCategory, pickPath, sortedCategories, useStore } from '../store'
 import { useActions } from '../nav/input'
 import { TextField } from '../components/TextField'
@@ -549,9 +550,14 @@ function EmustartSection() {
         </div>
       )}
       <div className="modal__row">
-        <button className="btn btn--primary" data-nav onClick={() => void api().ui.setMode('fullscreen', 'settings')}>
-          {emu?.server ? 'Konto i logowanie (tryb TV)' : 'Zaloguj do serwera (tryb TV)'}
+        <button className="btn btn--primary" data-nav onClick={() => void (emu?.server ? logoutFlow() : loginFlow())}>
+          {emu?.server ? 'Wyloguj z serwera' : 'Zaloguj do serwera'}
         </button>
+        {emu?.engine === 'ready' && (
+          <button className="btn" data-nav onClick={() => useStore.getState().setProfiles('normal')}>
+            Profile (kto gra, PIN, RetroAchievements)
+          </button>
+        )}
         {emu?.engine !== 'disabled' && (
           <button className="btn" data-nav onClick={() => void api().emustart.restartEngine()}>
             Uruchom silnik ponownie

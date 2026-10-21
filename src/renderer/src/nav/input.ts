@@ -35,6 +35,12 @@ const notify = (): void => {
 }
 let nextId = 1
 
+/**
+ * Layers from the bottom: screens first, then modal layers (dialogs, overlays) — a dialog stays on
+ * top even when a screen under it mounts again later (e.g. the library refreshes after a login).
+ */
+const stack = (): Layer[] => [...layers.filter((l) => !l.modal), ...layers.filter((l) => l.modal)]
+
 export function useActions(handlers: Handlers, opts: { enabled?: boolean; modal?: boolean; hints?: Hint[] } = {}): void {
   const ref = useRef(handlers)
   ref.current = handlers
@@ -75,8 +81,9 @@ export function useHints(): Hint[] {
     },
     () => version
   )
-  for (let i = layers.length - 1; i >= 0; i--) {
-    const l = layers[i]
+  const ls = stack()
+  for (let i = ls.length - 1; i >= 0; i--) {
+    const l = ls[i]
     if (l.enabled && l.hints.length) return l.hints
     if (l.enabled && l.modal) return []
   }
@@ -85,8 +92,9 @@ export function useHints(): Hint[] {
 
 export function dispatch(action: Action, source: InputMode): void {
   useStore.getState().setInputMode(source)
-  for (let i = layers.length - 1; i >= 0; i--) {
-    const l = layers[i]
+  const ls = stack()
+  for (let i = ls.length - 1; i >= 0; i--) {
+    const l = ls[i]
     if (!l.enabled) continue
     const h = l.handlers.current[action]
     if (h && h() !== false) return

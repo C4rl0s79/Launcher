@@ -62,6 +62,27 @@ export function toEngineSettings(p: EmuOptionsPatch): Record<string, unknown> {
 
 const fail = (error: string): EmuActionResult => ({ ok: false, error })
 
+/** A server address or a login link (emustart://login?d=…) that points only at this computer. */
+export function loopbackLogin(text: string): boolean {
+  const local = (u: string): boolean => {
+    try {
+      const h = new URL(/^[a-z]+:\/\//i.test(u) ? u : `https://${u}`).hostname
+      return h === '127.0.0.1' || h === 'localhost' || h === '[::1]'
+    } catch {
+      return false
+    }
+  }
+  const t = text.trim()
+  const m = /^emustart:\/\/login\?d=([A-Za-z0-9_-]+)/.exec(t)
+  if (!m) return local(t)
+  try {
+    const d = JSON.parse(Buffer.from(m[1], 'base64url').toString('utf8')) as { e?: { u?: string }[] }
+    return !!d.e?.length && d.e.every((e) => !!e.u && local(e.u))
+  } catch {
+    return false
+  }
+}
+
 /** Desktop interface → EmuStart engine. Only thin translation; the logic is EmuStart's (api.py). */
 export function registerEmustartIpc(handle: Handle, ctx: Ctx): void {
   const { engine, provider } = ctx
@@ -88,7 +109,7 @@ export function registerEmustartIpc(handle: Handle, ctx: Ctx): void {
       60_000
     )
     if (r.need_install) return { ok: false, error: `Brak emulatora: ${r.need_install.system}.`, needInstall: r.need_install }
-    if (r.profile_pin) return fail(`${r.reason ?? 'Profil wymaga PIN-u lub hasła.'} Odblokuj profil w trybie pełnoekranowym (Menu → Zmień profil).`)
+    if (r.profile_pin) return { ok: false, error: r.reason ?? 'Profil wymaga PIN-u lub hasła.', profileLocked: true }
     if (!r.ok) return fail(r.reason ?? 'Nie udało się uruchomić gry.')
     return { ok: true, message: r.warning }
   })
@@ -160,6 +181,48 @@ export function registerEmustartIpc(handle: Handle, ctx: Ctx): void {
     return r.ok ? { ok: true, message: 'Usunięto lokalną kopię. Gra zostaje na serwerze.' } : fail(r.reason ?? 'Nie udało się usunąć.')
   })
   handle(IPC.emuReadiness, async (gameId: string) => call<EmuReadiness>('lumen_readiness', [await playIdOf(gameId)], 30_000))
+
+  // ---- account, login, profiles (both layouts; EmuStart's app.js / options.js flows) ----
+  const ACCOUNT: Record<string, { timeout: number; changes?: boolean }> = {
+    get_state: { timeout: 30_000 },
+    server_enroll: { timeout: 60_000 },
+    server_enroll_poll: { timeout: 30_000, changes: true },
+    server_enroll_cancel: { timeout: 30_000 },
+    server_logout: { timeout: 240_000, changes: true }, // sends the saves first (EmuStart 0.48)
+    enroll_pending: { timeout: 30_000 },
+    enroll_decide: { timeout: 30_000 },
+    account_request: { timeout: 30_000 },
+    account_requests_poll: { timeout: 30_000, changes: true },
+    profiles_list: { timeout: 30_000 },
+    profile_select: { timeout: 60_000, changes: true },
+    profile_setup: { timeout: 60_000, changes: true },
+    profile_create: { timeout: 60_000, changes: true },
+    profile_rename: { timeout: 30_000, changes: true },
+    profile_delete: { timeout: 30_000, changes: true },
+    profile_join: { timeout: 60_000, changes: true },
+    profile_login: { timeout: 60_000, changes: true },
+    profile_logout: { timeout: 30_000, changes: true },
+    profile_unlock: { timeout: 30_000, changes: true },
+    profile_set_pin: { timeout: 30_000 },
+    profile_clear_pin: { timeout: 30_000 },
+    profile_set_password: { timeout: 60_000 },
+    ra_status: { timeout: 30_000 },
+    ra_login: { timeout: 60_000 },
+    ra_logout: { timeout: 30_000 },
+    ra_hardcore: { timeout: 30_000 },
+    ra_import: { timeout: 30_000 }
+  }
+  handle(IPC.emuAccount, async (method: string, args: unknown[]) => {
+    const spec = ACCOUNT[String(method)]
+    if (!spec) throw new Error('Niedozwolone wywołanie silnika.')
+    // test mode: logging in only to a local test server — never a real one (20.10.2026 incident)
+    if (process.env.LUMEN_DRY_RUN === '1' && method === 'server_enroll' && !loopbackLogin(String((Array.isArray(args) && args[0]) ?? '')))
+      throw new Error('Tryb testowy (LUMEN_DRY_RUN=1): logowanie tylko na lokalny serwer testowy (127.0.0.1).')
+    const r = await call<Record<string, unknown>>(String(method), Array.isArray(args) ? args : [], spec.timeout)
+    // a profile / account change: library, hiding and saves of the new player
+    if (spec.changes && r && (r as { ok?: boolean }).ok !== false) ctx.changed()
+    return r
+  })
 
   // ---- "Opcje gry" (both layouts; EmuStart's game options: options.js) ----
   handle(IPC.emuGameOptions, async (gameId: string): Promise<EmuGameOptions> => {

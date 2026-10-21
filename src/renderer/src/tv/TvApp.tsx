@@ -6,6 +6,7 @@ import { SettingsScreen } from '../screens/Settings'
 import { TvSystems } from './TvSystems'
 import { TvGames } from './TvGames'
 import { useTvSystems } from './data'
+import { loginFlow, logoutFlow } from '../lib/account'
 import './tv.css'
 
 // The TV layout of Lumen's one interface (fullscreen mode) with EmuStart's look: system carousel →
@@ -142,14 +143,21 @@ function TvHints() {
 }
 
 function TvMenu({ onClose, onSettings }: { onClose: () => void; onSettings: () => void }) {
+  const loggedIn = useStore((s) => !!s.snapshot?.emustart?.server)
   const items: [string, () => void][] = [
     ['Ustawienia', onSettings],
     [
-      // login, account, profiles, PIN, RetroAchievements — EmuStart's interface until stage 3
-      'Konto, profile i logowanie (EmuStart)',
+      'Zmień profil',
       () => {
         onClose()
-        void api().ui.setMode('fullscreen', 'settings')
+        useStore.getState().setProfiles('normal')
+      }
+    ],
+    [
+      loggedIn ? 'Wyloguj z serwera' : 'Zaloguj do serwera',
+      () => {
+        onClose()
+        void (loggedIn ? logoutFlow() : loginFlow())
       }
     ],
     [
