@@ -96,6 +96,14 @@ export function EmuLibraryOptions() {
           />
         )}
       </Group>
+      <Group title="Tryb TV">
+        <Switch
+          label="Tytuły gier jako logo"
+          desc={o.gamesLogo ? 'tak — Clear Logo gry (z LaunchBox, gdy jest) zamiast tytułu' : 'nie — tytuł tekstem'}
+          value={o.gamesLogo}
+          onChange={(v) => set({ gamesLogo: v })}
+        />
+      </Group>
       <Group title="Profile">
         {o.profiles.length > 1 && (
           <div className="modal__row">

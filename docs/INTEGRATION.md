@@ -386,6 +386,12 @@ Od Lumen 0.6.0 (plan: `docs/PLAN-TV-REACT.md`, etap 1) — **jeden interfejs, dw
   wróć do gry, zapisz / wczytaj stan, reset, quicksave i wyjdź, shader, wyjdź z gry (pozycje, których
   emulator nie obsługuje — wyszarzone). Wejście: Lumen z fokusem — własny pad i klawiatura; bez fokusu
   — naciśnięcia odczytane przez silnik (żeby nie liczyć ich dwa razy).
+- **Reszta ustawień EmuStart** (Lumen 0.10.0): Ustawienia → EmuStart — „Wykryj emulatory” (`autodetect`),
+  „Pobierz brakujące emulatory” (`install_missing` → potwierdzenie → zadanie z postępem), administrator:
+  „Wyślij klucze źródeł grafik na serwer” (`art_keys_push`); Biblioteka EmuStart → Tryb TV → „Tytuły gier
+  jako logo”; układ TV: **X na systemie = Opcje systemu** (`components/SystemOptions.tsx`: emulator
+  systemu, pobierz emulator, ukryj system; administrator: logo z serwera, poświata, nazwa). Bez zmian
+  (decyzja 20.10): edytor wyglądu EmuStart i lokalne foldery z grami.
 - **Kolejność padów** (`components/PadsOrder.tsx`, menu TV i Ustawienia → EmuStart): jak w Windows /
   bezprzewodowe przed przewodowymi / ręcznie (każdy gracz naciska A na swoim padzie, B kończy) —
   kolejność stosuje silnik przy starcie gry (`pads_state` / `pads_set`).

@@ -219,10 +219,23 @@ function TvRow({ game, sel, fav, onClick }: { game: Game; sel: boolean; fav: boo
 function TvPreview({ game, details: dr, note }: { game: Game; details: DetailsResult | null; note?: string }) {
   const [boxOk, setBoxOk] = useState(true)
   const [snapOk, setSnapOk] = useState(true)
+  const [logoOk, setLogoOk] = useState(true)
+  const [asLogo, setAsLogo] = useState(false)
+  // re-read after a settings change (the library snapshot changes with it)
+  const emuSnap = useStore((s) => s.snapshot?.emustart)
   useEffect(() => {
     setBoxOk(true)
     setSnapOk(true)
+    setLogoOk(true)
   }, [game.id])
+  // EmuStart's "Tytuły gier jako logo" (Ustawienia → Biblioteka EmuStart → Tryb TV)
+  useEffect(() => {
+    if (emuSnap?.engine !== 'ready') return
+    void api()
+      .emustart.options()
+      .then((o) => setAsLogo(o.gamesLogo))
+      .catch(() => undefined)
+  }, [emuSnap])
   const d = dr?.ok ? dr.details : undefined
   const e = game.emu
   const status = e
@@ -258,7 +271,11 @@ function TvPreview({ game, details: dr, note }: { game: Game; details: DetailsRe
         )}
       </div>
       <div className="tv-meta">
-        <h1>{game.name}</h1>
+        {asLogo && game.emu && logoOk ? (
+          <Art key={`l-${game.id}`} gameId={game.id} name={game.name} kind="logo" className="tv-gamelogo" fallback="none" eager onState={setLogoOk} />
+        ) : (
+          <h1>{game.name}</h1>
+        )}
         {e?.tags && <p className="tags">{e.tags}</p>}
         <dl>
           {rows

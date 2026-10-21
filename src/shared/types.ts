@@ -507,6 +507,36 @@ export type EmuAccountMethod =
   | 'ingame_action'
   | 'pads_state'
   | 'pads_set'
+  | 'autodetect'
+  | 'install_missing'
+  | 'art_keys_push'
+  | 'system_options'
+  | 'system_set'
+  | 'system_logo_choose'
+
+/** Options of one platform (EmuStart's system options: hold A on the logo; TV: X) */
+export interface EmuSystemOptions {
+  es: string
+  display: string
+  default_name: string
+  logo: string
+  glow: boolean
+  /** this device's account administers the server (logo, glow and name — for every device) */
+  admin: boolean
+  emulator: string
+  options: EmuEmulatorOption[]
+  /** what the server would install (empty when an emulator is there) */
+  install: { label: string }[]
+}
+
+/** A logo candidate of a platform on the server (administrator) */
+export interface EmuSystemLogo {
+  id: string
+  /** preview as a data: URL ('' = no logo, show the name) */
+  thumb: string
+  source: string
+  label?: string
+}
 
 /** In-game menu (A + Y over the emulator) as the engine shows it (ingame_poll) */
 export interface EmuInGameMenu {
@@ -692,6 +722,8 @@ export interface EmuOptions {
   machineProfile?: number
   profiles: { id: number; name: string }[]
   systems: { es: string; display: string; enabled: boolean; emulator: string; known: boolean }[]
+  /** TV layout: the game's Clear Logo instead of its title (when there is one) */
+  gamesLogo: boolean
 }
 
 export type EmuOptionsPatch = Partial<{
@@ -703,6 +735,7 @@ export type EmuOptionsPatch = Partial<{
   askProfile: boolean
   profileSettings: boolean
   machineProfile: number
+  gamesLogo: boolean
 }>
 
 export interface EmuEmulatorOption {

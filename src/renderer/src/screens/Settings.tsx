@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import type { CacheStats, Category, EmuSettings, LaunchBoxStatus, SecretName, SettingsPatch } from '@shared/types'
 import type { PickPathOptions } from '@shared/api'
 import { loginFlow, logoutFlow } from '../lib/account'
+import { detectEmulators, installMissing, pushArtKeys } from '../lib/emusettings'
 import { api, attempt, gamesForCategory, pickPath, sortedCategories, useStore } from '../store'
 import { useActions } from '../nav/input'
 import { TextField } from '../components/TextField'
@@ -430,6 +431,15 @@ function InterfaceSection() {
 function EmustartSection() {
   const settings = useStore((s) => s.settings)!
   const emu = useStore((s) => s.snapshot?.emustart)
+  // administrator of the server (art source keys) — from the engine, when it runs
+  const [admin, setAdmin] = useState(false)
+  useEffect(() => {
+    if (emu?.engine !== 'ready' || !emu.server) return setAdmin(false)
+    void api()
+      .emustart.account<{ admin?: boolean }>('get_state')
+      .then((st) => setAdmin(!!st.admin))
+      .catch(() => setAdmin(false))
+  }, [emu?.engine, emu?.server?.ok]) // eslint-disable-line react-hooks/exhaustive-deps
   const [es, setEs] = useState<EmuSettings | null>(null)
   const ready = emu?.engine === 'ready'
   useEffect(() => {
@@ -563,6 +573,23 @@ function EmustartSection() {
             Kolejność padów
           </button>
         )}
+      </div>
+      {emu?.engine === 'ready' && (
+        <div className="modal__row">
+          <button className="btn" data-nav onClick={() => void detectEmulators()}>
+            Wykryj emulatory
+          </button>
+          <button className="btn" data-nav onClick={() => void installMissing()}>
+            Pobierz brakujące emulatory
+          </button>
+          {admin && (
+            <button className="btn" data-nav onClick={() => void pushArtKeys()} title="Klucze z PyLinks na tym komputerze — na serwer (połączenie szyfrowane)">
+              Wyślij klucze źródeł grafik na serwer
+            </button>
+          )}
+        </div>
+      )}
+      <div className="modal__row">
         {emu?.engine !== 'disabled' && (
           <button className="btn" data-nav onClick={() => void api().emustart.restartEngine()}>
             Uruchom silnik ponownie

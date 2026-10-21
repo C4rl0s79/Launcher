@@ -1,7 +1,7 @@
 import { stat } from 'node:fs/promises'
 import type { BrowserWindow } from 'electron'
 import { IPC } from '@shared/api'
-import type { EmuServerArt, EmuSettingsChange, EmuGameOptions, EmuActionResult, EmuEmulatorOption, EmuSystemInfo, EmuLocalState, EmuRemoteState, EmuSaves, EmuSaveSync, EmuOptions, EmuOptionsPatch, EmuReadiness, EmuSettings, JobsSnapshot } from '@shared/types'
+import type { EmuServerArt, EmuSettingsChange, EmuGameOptions, EmuActionResult, EmuEmulatorOption, EmuSystemInfo, EmuSystemLogo, EmuLocalState, EmuRemoteState, EmuSaves, EmuSaveSync, EmuOptions, EmuOptionsPatch, EmuReadiness, EmuSettings, JobsSnapshot } from '@shared/types'
 import type { EmustartEngine } from './engine'
 import type { EmustartProvider } from './provider'
 
@@ -34,6 +34,7 @@ export function toOptions(s: Record<string, unknown>, profiles: { id: number; na
     winfsp: String(s.winfsp ?? ''),
     askProfile: b('ask_profile'),
     profileSettings: b('profile_settings', true),
+    gamesLogo: b('games_logo'),
     machineProfile: s.machine_profile === undefined ? undefined : Number(s.machine_profile),
     profiles,
     systems: systems.map((x) => ({
@@ -56,6 +57,7 @@ export function toEngineSettings(p: EmuOptionsPatch): Record<string, unknown> {
   if (typeof p.streamMinSeconds === 'number') out.stream_min_seconds = Math.max(0, Math.min(600, Math.round(p.streamMinSeconds)))
   if (typeof p.askProfile === 'boolean') out.ask_profile = p.askProfile
   if (typeof p.profileSettings === 'boolean') out.profile_settings = p.profileSettings
+  if (typeof p.gamesLogo === 'boolean') out.games_logo = p.gamesLogo
   if (typeof p.machineProfile === 'number') out.machine_profile = p.machineProfile
   return out
 }
@@ -215,8 +217,24 @@ export function registerEmustartIpc(handle: Handle, ctx: Ctx): void {
     ingame_poll: { timeout: 5_000 },
     ingame_action: { timeout: 15_000 },
     pads_state: { timeout: 10_000 },
-    pads_set: { timeout: 10_000 }
+    pads_set: { timeout: 10_000 },
+    // settings: emulators, platform options (the name / logo on the server — administrator)
+    autodetect: { timeout: 120_000, changes: true },
+    install_missing: { timeout: 60_000 },
+    art_keys_push: { timeout: 60_000 },
+    system_options: { timeout: 30_000 },
+    system_set: { timeout: 30_000, changes: true },
+    system_logo_choose: { timeout: 60_000, changes: true }
   }
+  handle(IPC.emuSystemLogos, async (es: string): Promise<EmuSystemLogo[]> => {
+    const list = await call<{ id?: string; url?: string; source?: string; label?: string }[]>('system_logo_candidates', [String(es)], 60_000)
+    const out: EmuSystemLogo[] = []
+    for (const c of list ?? []) {
+      if (!c?.id) continue
+      out.push({ id: String(c.id), thumb: (c.url && (await ctx.engineImage(c.url))) || '', source: c.source ?? '', label: c.label })
+    }
+    return out
+  })
   handle(IPC.emuAccount, async (method: string, args: unknown[]) => {
     const spec = ACCOUNT[String(method)]
     if (!spec) throw new Error('Niedozwolone wywołanie silnika.')

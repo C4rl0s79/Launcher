@@ -3,6 +3,7 @@ import type { EmuSystemInfo } from '@shared/types'
 import { api } from '../store'
 import { useActions } from '../nav/input'
 import { STEAM, systemMeta, type TvSystem } from './data'
+import { SystemOptions } from '../components/SystemOptions'
 
 // System carousel (EmuStart look): the selected platform's logo in the middle, neighbours smaller
 // and dimmed, the carousel wraps around; below — name, counts and the platform description.
@@ -86,6 +87,7 @@ export function TvSystems({
   const n = systems.length
   const sys = systems[index]
   const d = useSystemInfo(sys)
+  const [opts, setOpts] = useState(false)
   useActions(
     {
       left: () => {
@@ -106,14 +108,19 @@ export function TvSystems({
         onMenu()
         return true
       },
+      x: () => {
+        if (sys && sys.key !== STEAM) setOpts(true)
+        return true
+      },
       back: () => true
     },
     {
-      enabled: active,
+      enabled: active && !opts,
       hints: n
         ? [
             { action: 'left', label: 'System' },
             { action: 'confirm', label: 'Wybierz' },
+            ...(sys && sys.key !== STEAM ? [{ action: 'x' as const, label: 'Opcje systemu' }] : []),
             { action: 'menu', label: 'Menu' }
           ]
         : [{ action: 'menu', label: 'Menu' }]
@@ -146,6 +153,7 @@ export function TvSystems({
           )
         })}
       </div>
+      {opts && sys && <SystemOptions es={sys.key} onClose={() => setOpts(false)} />}
       <div className="tv-sysinfo">
         <h1>{sys.display}</h1>
         <p>{systemMeta(sys)}</p>

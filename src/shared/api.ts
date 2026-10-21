@@ -1,4 +1,4 @@
-import type { EmuAccountMethod, EmuServerArt, EmuMetaField, EmuSettingsChange, EmuGameOptions, EmuSystemInfo, LbArtOptionsResult, EmuSaves,
+import type { EmuSystemLogo, EmuAccountMethod, EmuServerArt, EmuMetaField, EmuSettingsChange, EmuGameOptions, EmuSystemInfo, LbArtOptionsResult, EmuSaves,
   ActionResult,
   ArtKind,
   ArtOption,
@@ -96,6 +96,8 @@ export interface LumenApi {
     playOtherCore(gameId: string, core: string): Promise<EmuActionResult>
     /** account, login and profiles (EmuStart engine calls on a whitelist) — raw engine result */
     account<T = Record<string, unknown>>(method: EmuAccountMethod, ...args: unknown[]): Promise<T>
+    /** administrator: logo candidates of a platform on the server (previews) */
+    systemLogos(es: string): Promise<EmuSystemLogo[]>
     /** "Opcje gry": versions, emulator, settings, metadata (one call) */
     gameOptions(gameId: string): Promise<EmuGameOptions>
     /** version of the game for this profile (translation id, 0 = original) */
@@ -236,6 +238,7 @@ export const IPC = {
   emuSaves: 'emu:saves',
   emuGameOptions: 'emu:gameOptions',
   emuAccount: 'emu:account',
+  emuSystemLogos: 'emu:systemLogos',
   emuSetVariant: 'emu:setVariant',
   emuSetGameEmulator: 'emu:setGameEmulator',
   emuConfigure: 'emu:configure',
