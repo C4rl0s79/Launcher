@@ -473,3 +473,12 @@
   margin-bottom: 0.4em;
   filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.8));
 }
+
+.tv-filters-on {
+  color: var(--tv-accent2);
+  font-size: 0.85em;
+  max-width: 30vw;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

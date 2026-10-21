@@ -8,7 +8,8 @@ import type { PadState } from '@shared/types'
 // then dispatched through a stack of handler layers (screens, modals). A modal layer stops
 // propagation, so lower screens never react while a dialog is open.
 
-export type Action = Dir | 'confirm' | 'back' | 'x' | 'y' | 'lb' | 'rb' | 'lt' | 'rt' | 'menu' | 'view'
+/** ls / rs — pressing the left / right stick (L3 / R3) */
+export type Action = Dir | 'confirm' | 'back' | 'x' | 'y' | 'lb' | 'rb' | 'lt' | 'rt' | 'menu' | 'view' | 'ls' | 'rs'
 
 export interface Hint {
   action: Action
@@ -175,6 +176,10 @@ export function keyToAction(e: Pick<KeyboardEvent, 'key' | 'ctrlKey' | 'altKey' 
       return 'menu'
     case 'v':
       return 'view'
+    case 'z':
+      return 'ls'
+    case 'u':
+      return 'rs'
   }
   return null
 }
@@ -219,6 +224,8 @@ const BUTTONS: [number, Action][] = [
   [7, 'rt'],
   [8, 'view'],
   [9, 'menu'],
+  [10, 'ls'],
+  [11, 'rs'],
   [12, 'up'],
   [13, 'down'],
   [14, 'left'],
@@ -253,6 +260,8 @@ const XI: [number, Action][] = [
   [0x0008, 'right'],
   [0x0010, 'menu'],
   [0x0020, 'view'],
+  [0x0040, 'ls'],
+  [0x0080, 'rs'],
   [0x0100, 'lb'],
   [0x0200, 'rb'],
   [0x1000, 'confirm'],

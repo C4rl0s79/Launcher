@@ -11,7 +11,9 @@ const PAD: Partial<Record<Action, string>> = {
   lt: 'LT',
   rt: 'RT',
   menu: '☰',
-  view: '⧉'
+  view: '⧉',
+  ls: 'L3',
+  rs: 'R3'
 }
 const KEYS: Partial<Record<Action, string>> = {
   confirm: 'Enter',
@@ -23,7 +25,9 @@ const KEYS: Partial<Record<Action, string>> = {
   lt: 'PgUp',
   rt: 'PgDn',
   menu: 'O',
-  view: 'V'
+  view: 'V',
+  ls: 'Z',
+  rs: 'U'
 }
 
 export function Glyph({ action }: { action: Action }) {

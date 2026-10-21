@@ -32,7 +32,7 @@ Legenda — pulpit Lumena dziś: ✔ jest, ◐ częściowo, ✘ brak.
 | --- | --- | --- |
 | Ekran systemów (karuzela z logo systemów, liczby gier) | ◐ grupy-platformy w górnym pasku | układ TV: karuzela systemów z logo |
 | Lista gier systemu (logo / okładka / zrzut, opis, rok, gracze) | ◐ siatka plakatów | układ TV: lista w stylu EmuStart (te same dane) |
-| Filtry listy (`flt`: pobrane, ulubione, tekst) | ◐ filtr + szukaj | wspólny komponent filtrów |
+| Filtry listy (`flt`: pobrane, ulubione, tekst) | ◐ filtr + szukaj | ✔ 1.0.1: okno filtrów EmuStart w TV (X), szukaj L3, ulubiona R3 — `tv/filters.ts`, `tv/TvFilters.tsx` |
 | System „Steam” w TV | ✔ (biblioteka Steam) | Steam jako system w układzie TV z Lumena, bez mostu |
 | Ulubione, „ostatnio grane” | ✔ | — |
 | Grafiki: logo gry zamiast tytułu („Tytuły gier jako logo”) | ✘ | opcja układu TV |

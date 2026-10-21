@@ -104,6 +104,8 @@ const PAD: Partial<Record<Action, [string, string]>> = {
   rt: ['RT', 'sq'],
   menu: ['Start', 'sq'],
   view: ['View', 'sq'],
+  ls: ['L3', 'sq'],
+  rs: ['R3', 'sq'],
   left: ['↔', 'sq'],
   up: ['↕', 'sq']
 }
@@ -118,6 +120,8 @@ const KEYS: Partial<Record<Action, string>> = {
   rt: 'PgDn',
   menu: 'O',
   view: 'V',
+  ls: 'Z',
+  rs: 'U',
   left: '←→',
   up: '↑↓'
 }

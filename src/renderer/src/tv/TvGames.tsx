@@ -1,13 +1,14 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { DetailsResult, Game } from '@shared/types'
-import { api, useStore } from '../store'
+import { api, askText, attempt, useStore } from '../store'
 import { useActions } from '../nav/input'
 import { Art } from '../components/Art'
-import { OnScreenKeyboard } from '../components/TextField'
 import { GameOptions } from '../components/GameOptions'
 import { usePrimaryAction } from '../lib/primary'
 import { formatBytes, formatLastPlayed, plural, formatPlaytime, htmlToParagraphs, stateLabel, versionCountLabel } from '../lib/format'
-import type { TvSystem } from './data'
+import { STEAM, type TvSystem } from './data'
+import { TvFilters } from './TvFilters'
+import { activeParts, apply, loadFilter, saveFilter, type Filter } from './filters'
 
 // Game list of one system (EmuStart look): titles on the left, cover | details | screenshot on the
 // right, the description below. The main action is the same as in the desktop details
@@ -48,13 +49,19 @@ const letterOf = (g: Game): string => {
 export function TvGames({ system, onBack, onMenu, active }: { system: TvSystem; onBack: () => void; onMenu: () => void; active: boolean }) {
   const favorites = useStore((s) => s.prefs?.favorites)
   const opened = useStore((s) => s.uiSelection)
-  const [query, setQuery] = useState('')
-  const [osk, setOsk] = useState(false)
+  const steam = system.key === STEAM
+  // EmuStart's filters, kept per system (X); search (L3) is the filter's first field
+  const [filter, setFilterState] = useState<Filter>(() => loadFilter(system.key))
+  const setFilter = (f: Filter): void => {
+    setFilterState(f)
+    saveFilter(system.key, f)
+    setIdx(0)
+  }
+  const [filters, setFilters] = useState(false)
   const [options, setOptions] = useState(false)
-  const games = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    return q ? system.games.filter((g) => g.name.toLowerCase().includes(q)) : system.games
-  }, [system.games, query])
+  const isFav = (id: string): boolean => !!favorites?.includes(id)
+  const games = useMemo(() => apply(system.games, filter, isFav), [system.games, filter, favorites]) // eslint-disable-line react-hooks/exhaustive-deps
+  const activeFilters = activeParts(filter, steam)
   const [idx, setIdx] = useState(() => Math.max(0, system.games.findIndex((g) => g.id === opened)))
   const sel = games[Math.min(idx, games.length - 1)]
   const { primary, busy } = usePrimaryAction(sel)
@@ -126,19 +133,26 @@ export function TvGames({ system, onBack, onMenu, active }: { system: TvSystem; 
       rt: () => jumpLetter(1),
       confirm: play,
       x: () => {
+        setFilters(true)
+        return true
+      },
+      y: () => {
         // EmuStart games: game options (the same window as on the desktop); Steam: details
         if (sel?.emu) setOptions(true)
         else if (sel) useStore.getState().openDetails(sel.id)
         return true
       },
-      y: () => {
-        setOsk(true)
+      ls: () => {
+        void askText(`Szukaj — ${system.display}`, { initial: filter.q }).then((v) => v !== null && setFilter({ ...filter, q: v.trim() }))
+        return true
+      },
+      rs: () => {
+        if (sel) void attempt(api().prefs.toggleFavorite(sel.id))
         return true
       },
       view: () => true,
       back: () => {
-        if (query) setQuery('')
-        else onBack()
+        onBack()
         return true
       },
       menu: () => {
@@ -147,14 +161,16 @@ export function TvGames({ system, onBack, onMenu, active }: { system: TvSystem; 
       }
     },
     {
-      enabled: active && !osk && !options,
+      enabled: active && !filters && !options,
       hints: [
         { action: 'confirm', label: primary?.label ?? 'Graj' },
-        { action: 'x', label: 'Opcje gry' },
-        { action: 'y', label: query ? `Szukaj: „${query}”` : 'Szukaj' },
+        { action: 'x', label: activeFilters.length ? `Filtry (${activeFilters.length})` : 'Filtry' },
+        { action: 'y', label: 'Opcje gry' },
+        { action: 'ls', label: 'Szukaj' },
+        { action: 'rs', label: sel && isFav(sel.id) ? 'Usuń z ulubionych' : 'Ulubiona' },
         { action: 'lb', label: 'Strona' },
         { action: 'rt', label: 'Litera' },
-        { action: 'back', label: query ? 'Wyczyść' : 'Wstecz' },
+        { action: 'back', label: 'Wstecz' },
         { action: 'menu', label: 'Menu' }
       ]
     }
@@ -167,31 +183,24 @@ export function TvGames({ system, onBack, onMenu, active }: { system: TvSystem; 
           {system.logo ? <img src={api().art.url(`emusys:${system.key}`, 'logo')} alt="" draggable={false} /> : <h2>{system.display}</h2>}
           <div className="tv-lhtext">
             <p>
-              {games.length} {plural(games.length, 'gra', 'gry', 'gier')}
-              {query ? ` · „${query}”` : ''}
+              {activeFilters.length || games.length !== system.games.length
+                ? `${games.length} z ${system.games.length} ${plural(system.games.length, 'gry', 'gier', 'gier')}`
+                : `${games.length} ${plural(games.length, 'gra', 'gry', 'gier')}`}
             </p>
+            {activeFilters.length > 0 && <p className="tv-filters-on">{activeFilters.join(' · ')}</p>}
           </div>
         </div>
         <div className="tv-rows" ref={rowsRef}>
           {games.slice(top, top + visible + 1).map((g, i) => (
             <TvRow key={g.id} game={g} sel={top + i === idx} fav={!!favorites?.includes(g.id)} onClick={() => (top + i === idx ? play() : setIdx(top + i))} />
           ))}
-          {!games.length && <p className="tv-dim">Brak gier{query ? ` dla „${query}”` : ''}.</p>}
+          {!games.length && <p className="tv-dim">Brak gier{activeFilters.length ? ' dla tych filtrów (X — zmień albo wyczyść)' : ''}.</p>}
         </div>
       </div>
       {sel && <TvPreview game={sel} details={d} note={primary?.note} />}
       {options && sel && <GameOptions game={sel} onClose={() => setOptions(false)} />}
-      {osk && (
-        <OnScreenKeyboard
-          label={`Szukaj — ${system.display}`}
-          initial={query}
-          secret={false}
-          onChange={setQuery}
-          onClose={() => {
-            setOsk(false)
-            setIdx(0)
-          }}
-        />
+      {filters && (
+        <TvFilters system={system.display} games={system.games} steam={steam} filter={filter} onChange={setFilter} onClose={() => setFilters(false)} />
       )}
     </section>
   )

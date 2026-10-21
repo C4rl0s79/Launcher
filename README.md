@@ -196,13 +196,14 @@ Klucze nigdy nie trafiają do repozytorium ani do logów.
 | Pełny ekran | F11 | — |
 | Tryb pulpitu ⇄ tryb TV | F10 | View + Start |
 
-W trybie TV obowiązuje sterowanie EmuStart (A — graj, przytrzymane A — opcje, Y — przypnij / ulubiona
-dla gier Steam, X — filtry, Start — menu, A + Y przez 2 s w grze — menu w grze).
+Na liście gier w trybie TV: **A** — graj, **X** (F) — filtry (szukaj, gatunek, dekada, gracze, region,
+producent, co pokazać, sortowanie; zapamiętane dla każdego systemu), **Y** (S) — opcje gry (Steam: szczegóły),
+**L3** (Z) — szukaj, **R3** (U) — ulubiona, LB/RB — strona, LT/RT — litera, Start — menu.
+A + Y przez 2 s w grze — menu w grze.
 
 Mysz działa wszędzie. Foldery i pliki (dane EmuStart, emulatory, pobrane gry, Python, własne grafiki)
 wybiera się we własnej przeglądarce Lumen — samym padem: gałka/D-pad, **A** otwórz, **X** wybierz ten
 folder, **B** wyżej (na pierwszej stronie: skróty i dyski). Okno wyboru Windows nie jest używane.
-W trybie TV foldery wybiera przeglądarka folderów EmuStart (A na ustawieniu ścieżki).
 Pola tekstowe przy obsłudze padem otwierają klawiaturę ekranową
 (A — wpisz, X — usuń, Y — spacja, LB — wielkie litery, Start — gotowe).
 

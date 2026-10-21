@@ -372,8 +372,12 @@ Od Lumen 0.6.0 (plan: `docs/PLAN-TV-REACT.md`, etap 1) — **jeden interfejs, dw
   (Enter zatwierdza).
 - Od Lumen 1.0.0 nie ma osobnego widoku z interfejsem EmuStart (usunięte: `WebContentsView`, most
   `fullscreenBridge`, preload `emu`, protokół `lumen-emu://`; `engine/web` = wersja EmuStart, nie pakowana).
-- **Opcje gry** (Lumen 0.7.0, `components/GameOptions.tsx`) — jedno okno dla obu układów (TV: X na
-  grze EmuStart; pulpit: szczegóły → „Opcje gry”), strony jak w EmuStart: Graj / Graj od początku,
+- **Lista gier w układzie TV** (Lumen 1.0.1): X — filtry EmuStart (`tv/TvFilters.tsx`, logika w
+  `tv/filters.ts`: szukaj w tytule, gatunek, dekada, gracze, region z nazwy, producent, co pokazać,
+  sortowanie; zapamiętane dla każdego systemu w `localStorage`; Steam — tylko szukaj, co pokazać i
+  sortowanie bez roku), Y — opcje gry (Steam: szczegóły), L3 / Z — szukaj, R3 / U — ulubiona.
+- **Opcje gry** (Lumen 0.7.0, `components/GameOptions.tsx`) — jedno okno dla obu układów (TV: Y na
+  grze EmuStart, od 1.0.1; pulpit: szczegóły → „Opcje gry”), strony jak w EmuStart: Graj / Graj od początku,
   wersja (tłumaczenie, `set_variant` — uruchamia się wybrana wersja: `lumen_play_id`), emulator dla
   gry albo systemu, ustawienia emulatora (zmiana w emulatorze bez gry, shader, historia zmian i
   przywracanie), zapisy, metadane i opis (administrator serwera: edycja, „Przywróć dane pobrane”,
