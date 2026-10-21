@@ -88,17 +88,20 @@ export function SettingsScreen({ active }: { active: boolean }) {
         else useStore.getState().setTab('home')
         return true
       },
+      // up / down never leave the pane they are in (the nearest control may lie in the other one)
+      up: () => (move('up', true, (inPane() ? paneRef.current : menuRef.current) ?? undefined), true),
+      down: () => (move('down', true, (inPane() ? paneRef.current : menuRef.current) ?? undefined), true),
       right: () => {
-        // from the list: into the section (its first control), whatever lies nearest
-        if (inPane() || !paneRef.current) return false
-        focusFirst(paneRef.current)
+        if (!paneRef.current) return false
+        // from the list: into the section (its first control)
+        if (!inPane()) focusFirst(paneRef.current)
+        else move('right', true, paneRef.current)
         return true
       },
       left: () => {
-        // leaving the section to the left lands on its own entry of the list, not the nearest one
-        if (!inPane()) return false
-        move('left')
-        if (!inPane()) toMenu()
+        // at the left edge of the section: back to its own entry of the list
+        if (!inPane()) return true
+        if (!move('left', true, paneRef.current ?? undefined)) toMenu()
         return true
       }
     },

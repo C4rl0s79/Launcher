@@ -77,7 +77,8 @@ export function currentFocus(): HTMLElement | null {
   return activeLayer().contains(a) ? a : null
 }
 
-export function move(dir: Dir, smooth = true): boolean {
+/** `within`: only targets inside this element (a pane that must not be left by moving) */
+export function move(dir: Dir, smooth = true, within?: HTMLElement): boolean {
   const cur = currentFocus()
   if (!cur) {
     // the focused element was removed (e.g. an unpinned group moved to the other list): continue
@@ -93,7 +94,7 @@ export function move(dir: Dir, smooth = true): boolean {
     }
     return focusFirst()
   }
-  const list = focusables().filter((e) => e !== cur)
+  const list = focusables(within).filter((e) => e !== cur)
   const from = cur.getBoundingClientRect()
   const idx = pickInDirection(from, list.map((e) => e.getBoundingClientRect()), dir)
   if (idx < 0) {
@@ -104,7 +105,15 @@ export function move(dir: Dir, smooth = true): boolean {
   }
   let target = list[idx]
   const tg = groupOf(target)
-  if (tg && tg !== groupOf(cur) && (dir === 'up' || dir === 'down')) target = remembered(tg) ?? target
+  if (tg && tg !== groupOf(cur) && (dir === 'up' || dir === 'down')) {
+    // entering a row (posters): back to where it was left; in a vertical list the next row wins
+    const m = remembered(tg)
+    if (m) {
+      const a = m.getBoundingClientRect()
+      const b = target.getBoundingClientRect()
+      if (a.top < b.bottom && b.top < a.bottom) target = m
+    }
+  }
   focusEl(target, smooth)
   return true
 }
