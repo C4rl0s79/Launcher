@@ -14,6 +14,8 @@ import { PathPicker } from './modals/PathPicker'
 import { TvApp } from './tv/TvApp'
 import { Dialogs } from './components/Dialogs'
 import { Profiles } from './components/Profiles'
+import { InGameMenu } from './components/InGameMenu'
+import { PadsOrder } from './components/PadsOrder'
 import { accountRequestsCheck, enrollCheck, enrollResume } from './lib/account'
 
 /** Start, the pinned groups (in their order), Settings. */
@@ -32,6 +34,7 @@ export function App() {
   const loaded = useStore((s) => !!s.snapshot && !!s.prefs && !!s.settings)
   const tabs = useTabs()
   const tvLayout = useStore((s) => s.uiMode === 'fullscreen' && s.settings?.tvInterface !== 'emustart')
+  const pads = useStore((s) => s.pads)
   const rootRef = useRef<HTMLDivElement>(null)
   // group screens are mounted on first visit and then kept, so scroll position and focus survive tab switches
   const [visited, setVisited] = useState<Set<string>>(() => new Set([tab]))
@@ -180,7 +183,9 @@ export function App() {
         <EmuLaunchOverlay />
         <PathPicker />
         <Profiles />
+        {pads && <PadsOrder onClose={() => useStore.getState().setPads(false)} />}
         <Dialogs />
+        <InGameMenu />
         <Toasts />
       </>
     )
@@ -211,7 +216,9 @@ export function App() {
       <EmuLaunchOverlay />
       <PathPicker />
       <Profiles />
+      {pads && <PadsOrder onClose={() => useStore.getState().setPads(false)} />}
       <Dialogs />
+      <InGameMenu />
       <HintsBar />
       <Toasts />
     </>

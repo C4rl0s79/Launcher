@@ -381,7 +381,14 @@ Od Lumen 0.6.0 (plan: `docs/PLAN-TV-REACT.md`, etap 1) — **jeden interfejs, dw
   „Pobierz opis z sieci”), grafiki (administrator: okładka / zrzut / logo na serwerze — dla wszystkich
   urządzeń), ulubiona, zachowaj / usuń z dysku. Dane: `lumen_game_options` (jedno wywołanie).
 - Fokus klawiatury i pada zawsze w widocznym interfejsie (ukryty widok EmuStart oddaje fokus).
-- Menu w grze (A + Y nad emulatorem) obsługuje nadal silnik EmuStart (etap 4).
+- **Menu w grze** (Lumen 0.9.0, `components/InGameMenu.tsx`, oba układy): silnik wykrywa A + Y nad
+  emulatorem, wyciąga okno Lumen na wierzch i otwiera menu (`ingame_poll` co 80 ms w trakcie gry):
+  wróć do gry, zapisz / wczytaj stan, reset, quicksave i wyjdź, shader, wyjdź z gry (pozycje, których
+  emulator nie obsługuje — wyszarzone). Wejście: Lumen z fokusem — własny pad i klawiatura; bez fokusu
+  — naciśnięcia odczytane przez silnik (żeby nie liczyć ich dwa razy).
+- **Kolejność padów** (`components/PadsOrder.tsx`, menu TV i Ustawienia → EmuStart): jak w Windows /
+  bezprzewodowe przed przewodowymi / ręcznie (każdy gracz naciska A na swoim padzie, B kończy) —
+  kolejność stosuje silnik przy starcie gry (`pads_state` / `pads_set`).
 
 ## 8. Co sprawdzono, a co nie (20.10.2026)
 

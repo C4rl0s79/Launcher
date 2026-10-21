@@ -503,6 +503,29 @@ export type EmuAccountMethod =
   | 'ra_logout'
   | 'ra_hardcore'
   | 'ra_import'
+  | 'ingame_poll'
+  | 'ingame_action'
+  | 'pads_state'
+  | 'pads_set'
+
+/** In-game menu (A + Y over the emulator) as the engine shows it (ingame_poll) */
+export interface EmuInGameMenu {
+  open: boolean
+  items: { id: string; label: string; on: boolean; hint?: string }[]
+  title: string
+  message: string
+  seq: number
+  /** controller presses the engine read itself since the last poll (up / down / a / b) */
+  inputs: string[]
+}
+
+/** XInput controllers and the player order the engine applies when a game starts */
+export interface EmuPadsState {
+  pads: { slot: number; wireless?: boolean; battery?: string; kind?: string; buttons: number }[]
+  order: number[]
+  mode: 'windows' | 'wireless_first' | 'manual'
+  manual: number[]
+}
 
 /** A profile on this device (profiles_list) */
 export interface EmuProfile {

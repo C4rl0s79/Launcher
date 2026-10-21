@@ -2127,3 +2127,77 @@ p.card__desc[data-nav]:focus {
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
+
+/* ---------- in-game menu (A + Y over the emulator; EmuStart look, both layouts) ---------- */
+.ingame {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  background: rgba(5, 7, 12, 0.72);
+  backdrop-filter: blur(8px);
+  color: #e9edf5;
+}
+.ingame__panel {
+  min-width: 36vw;
+  max-width: 60vw;
+  padding: 3vh 2.4vw;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(20, 24, 36, 0.96);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.6);
+}
+.ingame__sys {
+  margin: 0;
+  color: #8d97ab;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.8em;
+}
+.ingame__panel h2 {
+  margin: 0.3em 0 0.6em;
+  font-weight: 600;
+}
+.ingame__msg {
+  color: #e6b450;
+}
+.ingame__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.ingame__list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 2em;
+  padding: 0.75em 1em;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.ingame__list li small {
+  color: #8d97ab;
+}
+.ingame__list li.sel {
+  background: linear-gradient(90deg, #4f8cff, color-mix(in srgb, #4f8cff 35%, transparent));
+  color: #fff;
+}
+.ingame__list li.sel small {
+  color: rgba(255, 255, 255, 0.85);
+}
+.ingame__list li.off {
+  opacity: 0.45;
+  cursor: default;
+}
+.gopt__row--static {
+  cursor: default;
+}
+.gopt__row--static:hover {
+  background: none;
+  color: inherit;
+}
+.pads__prompt {
+  font-size: 1.4em;
+  letter-spacing: 0;
+}

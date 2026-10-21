@@ -558,6 +558,11 @@ function EmustartSection() {
             Profile (kto gra, PIN, RetroAchievements)
           </button>
         )}
+        {emu?.engine === 'ready' && (
+          <button className="btn" data-nav onClick={() => useStore.getState().setPads(true)}>
+            Kolejność padów
+          </button>
+        )}
         {emu?.engine !== 'disabled' && (
           <button className="btn" data-nav onClick={() => void api().emustart.restartEngine()}>
             Uruchom silnik ponownie

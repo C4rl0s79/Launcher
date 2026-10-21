@@ -49,6 +49,9 @@ interface State {
   setProfiles(mode: 'normal' | 'startup' | 'setup' | null): void
   /** login waiting for approval on another device of the account (code to compare) */
   enroll: { code: string; account: string; mode: string } | null
+  /** controller order window open (components/PadsOrder.tsx) */
+  pads: boolean
+  setPads(open: boolean): void
   setEnroll(e: { code: string; account: string; mode: string } | null): void
   setUiMode(mode: UiMode, selection?: string | null): void
   setSnapshot(s: LibrarySnapshot): void
@@ -100,6 +103,8 @@ export const useStore = create<State>((set) => ({
   setProfiles: (profiles) => set({ profiles }),
   enroll: null,
   setEnroll: (enroll) => set({ enroll }),
+  pads: false,
+  setPads: (pads) => set({ pads }),
   setUiMode: (uiMode, uiSelection = null) => set({ uiMode, uiSelection }),
   setSnapshot: (snapshot) => set({ snapshot }),
   setJobs: (jobs) => set({ jobs }),

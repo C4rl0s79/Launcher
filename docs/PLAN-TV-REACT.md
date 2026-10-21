@@ -104,7 +104,7 @@ Legenda — pulpit Lumena dziś: ✔ jest, ◐ częściowo, ✘ brak.
    opis, grafiki z serwera EmuStart, „Graj od początku”, warianty.
 3. ✔ **(Lumen 0.8.0) Konto i profile** — logowanie / wylogowanie, zatwierdzanie urządzeń, ekran profili, PIN i
    hasła, wybór gracza przy starcie, RetroAchievements.
-4. **Menu w grze (A+Y) i pady** — menu w grze, kolejność padów.
+4. ✔ **(Lumen 0.9.0) Menu w grze (A+Y) i pady** — menu w grze, kolejność padów.
 5. **Reszta ustawień** — strumienie, wykrywanie emulatorów, logo systemów, klucze grafik, (po
    decyzji) foldery lokalne i edytor wyglądu.
 6. **Usunięcie starego trybu TV** — bez `WebContentsView`, mostu `fullscreenBridge`, preloadu

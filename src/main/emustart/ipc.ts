@@ -210,7 +210,12 @@ export function registerEmustartIpc(handle: Handle, ctx: Ctx): void {
     ra_login: { timeout: 60_000 },
     ra_logout: { timeout: 30_000 },
     ra_hardcore: { timeout: 30_000 },
-    ra_import: { timeout: 30_000 }
+    ra_import: { timeout: 30_000 },
+    // in-game menu (A + Y) and controller order — also EmuStart's, used by both layouts
+    ingame_poll: { timeout: 5_000 },
+    ingame_action: { timeout: 15_000 },
+    pads_state: { timeout: 10_000 },
+    pads_set: { timeout: 10_000 }
   }
   handle(IPC.emuAccount, async (method: string, args: unknown[]) => {
     const spec = ACCOUNT[String(method)]

@@ -154,6 +154,13 @@ function TvMenu({ onClose, onSettings }: { onClose: () => void; onSettings: () =
       }
     ],
     [
+      'Kolejność padów',
+      () => {
+        onClose()
+        useStore.getState().setPads(true)
+      }
+    ],
+    [
       loggedIn ? 'Wyloguj z serwera' : 'Zaloguj do serwera',
       () => {
         onClose()
