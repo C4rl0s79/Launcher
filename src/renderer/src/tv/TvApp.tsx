@@ -255,6 +255,8 @@ function TvSettings({ onBack }: { onBack: () => void }) {
   useActions(
     {
       back: () => {
+        // inside a section B goes back to the list of sections (the settings screen handles it)
+        if (document.activeElement?.closest('.settings__pane')) return false
         onBack()
         return true
       }

@@ -23,7 +23,7 @@ aktywności znajomych.
 - **Grafiki** — SteamGridDB (opcjonalny klucz) albo oficjalne grafiki Steam; lokalny cache.
 - **Skróty spoza Steama** — gry dodane do Steama np. przez Steam ROM Manager (emulatory) są czytane z `shortcuts.vdf`, z grafikami z folderu `grid` Steama, i uruchamiane przez Steam.
 - **Opisy gier spoza Steama** — z bazy LaunchBox Games DB pobieranej przez program (Ustawienia → „Pobierz bazę LaunchBox”, ~110 MB, ok. 20–30 s); potem działa offline. Opisy są po angielsku (taka jest baza).
-- **Własne kategorie, ulubione, przypięcia** — zapisywane lokalnie (Ustawienia → Kategorie; gry przypisujesz w ekranie gry → „Kategorie”).
+- **Własne kategorie, ulubione, przypięcia** — zapisywane lokalnie (Ustawienia → Grupy; gry przypisujesz w ekranie gry → „Kategorie”).
 
 ## Wymagania
 
@@ -147,7 +147,7 @@ Gry Steam synchronizuje Steam Cloud.
 
 1. Zaloguj się na <https://www.steamgriddb.com> i skopiuj klucz z *Preferences → API*
    (<https://www.steamgriddb.com/profile/preferences/api>).
-2. W Lumen: **Ustawienia → Grafiki → Klucz SteamGridDB** → wklej → **Zapisz**.
+2. W Lumen: **Ustawienia → Grafiki i opisy → Klucz SteamGridDB** → wklej → **Zapisz**.
 3. Przełącznik „Najpierw grafiki ze SteamGridDB” decyduje, czy domyślnie używać SteamGridDB, czy oficjalnych grafik Steam.
 4. W ekranie gry: **Grafiki** — wybór plakatu / tła / logo / ikony, własny plik, „Zmień dopasowanie gry”.
 

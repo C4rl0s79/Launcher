@@ -319,7 +319,7 @@ poziomo), a nie plakaty 2:3, więc w siatce trybu pulpitu były przycinane. Tera
   rozmytym tle z tej samej okładki, zamiast przycięta;
 - „Grafika z serwera EmuStart” w oknie „Grafiki” wraca do okładki z serwera dla danej gry.
 
-**Grafiki z LaunchBox Games DB** (od 0.4.3): lokalna baza LaunchBox (Ustawienia → Opisy gier spoza
+**Grafiki z LaunchBox Games DB** (od 0.4.3): lokalna baza LaunchBox (Ustawienia → Grafiki i opisy → Opisy gier spoza
 Steama) trzyma listę grafik gier (`images`: pudełka wg regionu, tła „Fanart - Background”, zrzuty, logo,
 bannery, kartridże; ~1 mln wpisów, baza ~270 MB); baza zbudowana przez starszy Lumen przebudowuje się
 sama raz w tle. Gry EmuStart są dopasowane po `lb_id` z metadanych serwera (bez zgadywania po tytule),
@@ -376,6 +376,10 @@ Od Lumen 0.6.0 (plan: `docs/PLAN-TV-REACT.md`, etap 1) — **jeden interfejs, dw
   `tv/filters.ts`: szukaj w tytule, gatunek, dekada, gracze, region z nazwy, producent, co pokazać,
   sortowanie; zapamiętane dla każdego systemu w `localStorage`; Steam — tylko szukaj, co pokazać i
   sortowanie bez roku), Y — opcje gry (Steam: szczegóły), L3 / Z — szukaj, R3 / U — ulubiona.
+- **Ustawienia w dwóch panelach** (oba układy, `screens/Settings.tsx`): po lewej lista działów
+  (Interfejs, Steam, EmuStart, Biblioteka EmuStart, Systemy, Grupy, Grafiki i opisy, Zachowanie, Dane,
+  Aktualizacja, Sterowanie), po prawej wybrany dział, przewijany osobno. Ruch po liście pokazuje dział;
+  w prawo / A — do działu, B albo w lewo przy krawędzi — z powrotem na jego pozycję listy.
 - **Opcje gry** (Lumen 0.7.0, `components/GameOptions.tsx`) — jedno okno dla obu układów (TV: Y na
   grze EmuStart, od 1.0.1; pulpit: szczegóły → „Opcje gry”), strony jak w EmuStart: Graj / Graj od początku,
   wersja (tłumaczenie, `set_variant` — uruchamia się wybrana wersja: `lumen_play_id`), emulator dla

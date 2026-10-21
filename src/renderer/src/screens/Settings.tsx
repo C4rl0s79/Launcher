@@ -1,49 +1,140 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { CacheStats, Category, EmuSettings, LaunchBoxStatus, SecretName, SettingsPatch } from '@shared/types'
 import type { PickPathOptions } from '@shared/api'
 import { loginFlow, logoutFlow } from '../lib/account'
 import { detectEmulators, installMissing, pushArtKeys } from '../lib/emusettings'
 import { api, attempt, gamesForCategory, pickPath, sortedCategories, useStore } from '../store'
 import { useActions } from '../nav/input'
+import { focusEl, focusFirst, move } from '../nav/engine'
 import { TextField } from '../components/TextField'
 import { Modal } from '../components/Modal'
 import { formatBytes, gameCountLabel } from '../lib/format'
 import { UpdateSection } from '../components/Update'
 import { EmuLibraryOptions } from '../components/EmuOptions'
 
-export function SettingsScreen({ active }: { active: boolean }) {
-  useActions(
-    {
-      back: () => {
-        useStore.getState().setTab('home')
-        return true
-      }
-    },
-    { enabled: active, hints: [{ action: 'confirm', label: 'Wybierz' }, { action: 'back', label: 'Start' }, { action: 'lb', label: 'Poprzednia zakładka' }] }
-  )
-  return (
-    <div className="settings" data-scroll="center">
-      <InterfaceSection />
-      <SteamSection />
-      <EmustartSection />
+// Two panes: the list of sections on the left, the chosen section on the right (scrolled on its own).
+// Moving along the list shows the section; right / A goes into it, B (or left at its edge) back to the list.
+const PAGES: { id: string; label: string; render: () => ReactNode }[] = [
+  { id: 'interface', label: 'Interfejs', render: () => <InterfaceSection /> },
+  { id: 'steam', label: 'Steam', render: () => <SteamSection /> },
+  { id: 'emustart', label: 'EmuStart', render: () => <EmustartSection /> },
+  {
+    id: 'library',
+    label: 'Biblioteka EmuStart',
+    render: () => (
       <Section
         title="Biblioteka EmuStart"
         desc="Te same ustawienia co w EmuStart (tryb TV → Ustawienia) — zapisane raz, działają w obu trybach."
       >
-        <EmuLibraryOptions />
+        <EmuLibraryOptions part="library" />
       </Section>
-      <ArtSection />
-      <LaunchBoxSection />
-      <CategoriesSection />
-      <BehaviourSection />
-      <DataSection />
+    )
+  },
+  {
+    id: 'systems',
+    label: 'Systemy',
+    render: () => (
+      <Section title="Systemy" desc="Emulator dla każdego systemu na tym komputerze; wyłączony system znika z biblioteki.">
+        <EmuLibraryOptions part="systems" />
+      </Section>
+    )
+  },
+  { id: 'groups', label: 'Grupy', render: () => <CategoriesSection /> },
+  {
+    id: 'art',
+    label: 'Grafiki i opisy',
+    render: () => (
+      <>
+        <ArtSection />
+        <LaunchBoxSection />
+      </>
+    )
+  },
+  { id: 'behaviour', label: 'Zachowanie', render: () => <BehaviourSection /> },
+  { id: 'data', label: 'Dane', render: () => <DataSection /> },
+  {
+    id: 'update',
+    label: 'Aktualizacja',
+    render: () => (
       <Section
         title="Aktualizacja Lumen"
         desc="Jak w EmuStart: nowe wersje z wydań na GitHubie (C4rl0s79/Launcher), sprawdzane przy starcie i raz dziennie. Plik jest sprawdzany skrótem SHA-256 i podpisem wydania Lumen; dane w LumenData zostają nietknięte."
       >
         <UpdateSection />
       </Section>
-      <HelpSection />
+    )
+  },
+  { id: 'help', label: 'Sterowanie', render: () => <HelpSection /> }
+]
+let lastPage = PAGES[0].id // kept while the program runs
+
+export function SettingsScreen({ active }: { active: boolean }) {
+  const [page, setPageState] = useState(lastPage)
+  const setPage = (id: string): void => {
+    lastPage = id
+    setPageState(id)
+  }
+  const menuRef = useRef<HTMLElement>(null)
+  const paneRef = useRef<HTMLDivElement>(null)
+  const inPane = (): boolean => !!paneRef.current?.contains(document.activeElement)
+  const toMenu = (): void => {
+    const b = menuRef.current?.querySelector<HTMLElement>(`[data-page="${page}"]`)
+    if (b) focusEl(b, false)
+  }
+  useActions(
+    {
+      back: () => {
+        if (inPane()) toMenu()
+        else useStore.getState().setTab('home')
+        return true
+      },
+      right: () => {
+        // from the list: into the section (its first control), whatever lies nearest
+        if (inPane() || !paneRef.current) return false
+        focusFirst(paneRef.current)
+        return true
+      },
+      left: () => {
+        // leaving the section to the left lands on its own entry of the list, not the nearest one
+        if (!inPane()) return false
+        move('left')
+        if (!inPane()) toMenu()
+        return true
+      }
+    },
+    {
+      enabled: active,
+      hints: [
+        { action: 'confirm', label: 'Wybierz' },
+        { action: 'back', label: 'Wstecz' },
+        { action: 'lb', label: 'Poprzednia zakładka' }
+      ]
+    }
+  )
+  const current = PAGES.find((p) => p.id === page) ?? PAGES[0]
+  return (
+    <div className="settings">
+      <nav className="settings__menu" ref={menuRef} aria-label="Działy ustawień">
+        {PAGES.map((p) => (
+          <button
+            key={p.id}
+            className={`settings__item ${p.id === page ? 'is-on' : ''}`}
+            data-nav
+            data-page={p.id}
+            data-autofocus={p.id === page ? '' : undefined}
+            onFocus={() => setPage(p.id)}
+            onClick={() => {
+              setPage(p.id)
+              setTimeout(() => paneRef.current && focusFirst(paneRef.current), 0)
+            }}
+          >
+            {p.label}
+          </button>
+        ))}
+      </nav>
+      <div className="settings__pane" ref={paneRef} data-scroll="center" key={current.id}>
+        {current.render()}
+      </div>
     </div>
   )
 }
@@ -588,7 +679,7 @@ function EmustartSection() {
       </div>
       <p className="card__desc">
         Logowanie do serwera (kod z panelu albo adres), konta i PIN-y profili są w ustawieniach EmuStart w trybie TV —
-        pozostałe ustawienia EmuStart są niżej, w sekcji „Biblioteka EmuStart”.
+        pozostałe ustawienia EmuStart są w działach „Biblioteka EmuStart” i „Systemy”.
       </p>
       <PathRow
         label="Folder danych EmuStart"
