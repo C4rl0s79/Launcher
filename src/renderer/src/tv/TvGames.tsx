@@ -9,6 +9,7 @@ import { formatBytes, formatLastPlayed, plural, formatPlaytime, htmlToParagraphs
 import { STEAM, type TvSystem } from './data'
 import { TvFilters } from './TvFilters'
 import { activeParts, apply, loadFilter, saveFilter, type Filter } from './filters'
+import { useLook } from './look'
 
 // Game list of one system (EmuStart look): titles on the left, cover | details | screenshot on the
 // right, the description below. The main action is the same as in the desktop details
@@ -72,18 +73,20 @@ export function TvGames({ system, onBack, onMenu, active }: { system: TvSystem; 
   const rowsRef = useRef<HTMLDivElement>(null)
   const [visible, setVisible] = useState(15)
   const [top, setTop] = useState(0)
+  const look = useLook() // the row height comes from the look editor
+  const hasRows = games.length > 0
   useLayoutEffect(() => {
     const el = rowsRef.current
     if (!el) return
     const measure = (): void => {
-      const rh = parseFloat(getComputedStyle(el).getPropertyValue('--tv-row-px')) || el.clientHeight / 15
+      const rh = el.querySelector<HTMLElement>('.tv-row')?.offsetHeight || el.clientHeight / 15
       setVisible(Math.max(3, Math.floor(el.clientHeight / rh)))
     }
     measure()
     const ro = new ResizeObserver(measure)
     ro.observe(el)
     return () => ro.disconnect()
-  }, [])
+  }, [look, hasRows])
   useEffect(() => {
     if (idx < top) setTop(idx)
     else if (idx >= top + visible) setTop(idx - visible + 1)
@@ -292,7 +295,7 @@ function TvPreview({ game, details: dr, note, asLogo }: { game: Game; details: D
     ['Płyty', e && e.discs > 1 ? String(e.discs) : undefined],
     ['Wersje', e?.versions ? `${e.versions.length} — wybór w opcjach gry` : undefined]
   ]
-  const desc = d?.descriptionText ? d.descriptionText.split(/\n+/) : d?.descriptionHtml ? htmlToParagraphs(d.descriptionHtml, 6) : d?.shortDescription ? [d.shortDescription] : []
+  const desc = d?.descriptionText ? d.descriptionText.split(/\n+/) : d?.descriptionHtml ? htmlToParagraphs(d.descriptionHtml, 20) : d?.shortDescription ? [d.shortDescription] : []
   return (
     <div className="tv-preview">
       <div className="tv-box">
@@ -319,7 +322,7 @@ function TvPreview({ game, details: dr, note, asLogo }: { game: Game; details: D
       </div>
       <div className="tv-snap">{snapOk && <Art key={`s-${game.id}`} gameId={game.id} name={game.name} kind="hero" className="tv-snapart" fallback="none" eager onState={setSnapOk} />}</div>
       <div className="tv-desc">
-        {desc.slice(0, 6).map((p, i) => (
+        {desc.slice(0, 20).map((p, i) => (
           <p key={i}>{p}</p>
         ))}
         {game.source !== 'emustart' && !desc.length && <p>Gra z biblioteki Steam.</p>}

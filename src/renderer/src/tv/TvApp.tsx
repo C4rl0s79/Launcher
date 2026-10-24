@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type CSSProperties } from 'react'
 import { api, attempt, useStore } from '../store'
 import { useActions, useHints, type Action } from '../nav/input'
 import { focusFirst } from '../nav/engine'
@@ -7,6 +7,8 @@ import { TvSystems } from './TvSystems'
 import { TvGames } from './TvGames'
 import { useTvSystems } from './data'
 import { loginFlow, logoutFlow } from '../lib/account'
+import { lookStyle, useLook } from './look'
+import { TvLook, useLookSync } from './TvLook'
 import './tv.css'
 
 // The TV layout of Lumen's one interface (fullscreen mode) with EmuStart's look: system carousel →
@@ -20,7 +22,10 @@ export function TvApp() {
   const [screen, setScreen] = useState<Screen>('systems')
   const [sysIdx, setSysIdx] = useState(0)
   const [menu, setMenu] = useState(false)
+  const [lookEd, setLookEd] = useState(false)
   const selection = useStore((s) => s.detailsId)
+  useLookSync()
+  const look = useLook()
 
   // opened from the desktop with a game selected: start on its system
   const opened = useStore((s) => s.uiSelection)
@@ -36,7 +41,7 @@ export function TvApp() {
 
   const sys = systems[sysIdx]
   return (
-    <div className="tv" data-layer inert={selection ? true : undefined}>
+    <div className="tv" data-layer inert={selection ? true : undefined} style={lookStyle(look) as CSSProperties}>
       <TvTopBar />
       {screen === 'systems' && (
         <TvSystems
@@ -45,10 +50,10 @@ export function TvApp() {
           onIndex={setSysIdx}
           onOpen={() => sys && setScreen('games')}
           onMenu={() => setMenu(true)}
-          active={!menu}
+          active={!menu && !lookEd}
         />
       )}
-      {screen === 'games' && sys && <TvGames key={sys.key} system={sys} onBack={() => setScreen('systems')} onMenu={() => setMenu(true)} active={!menu} />}
+      {screen === 'games' && sys && <TvGames key={sys.key} system={sys} onBack={() => setScreen('systems')} onMenu={() => setMenu(true)} active={!menu && !lookEd} />}
       {screen === 'settings' && <TvSettings onBack={() => setScreen('systems')} />}
       {menu && (
         <TvMenu
@@ -57,6 +62,18 @@ export function TvApp() {
             setMenu(false)
             setScreen('settings')
           }}
+          onLook={() => {
+            setMenu(false)
+            if (screen === 'settings') setScreen('systems') // the editor shows its changes on the layout underneath
+            setLookEd(true)
+          }}
+        />
+      )}
+      {lookEd && (
+        <TvLook
+          onClose={() => setLookEd(false)}
+          previewLabel={screen === 'games' ? 'systemy' : 'gry'}
+          onPreview={() => setScreen((s) => (s === 'games' || !sys ? 'systems' : 'games'))}
         />
       )}
       <TvHints />
@@ -146,10 +163,11 @@ function TvHints() {
   )
 }
 
-function TvMenu({ onClose, onSettings }: { onClose: () => void; onSettings: () => void }) {
+function TvMenu({ onClose, onSettings, onLook }: { onClose: () => void; onSettings: () => void; onLook: () => void }) {
   const loggedIn = useStore((s) => !!s.snapshot?.emustart?.server)
   const items: [string, () => void][] = [
     ['Ustawienia', onSettings],
+    ['Wygląd', onLook],
     [
       'Zmień profil',
       () => {

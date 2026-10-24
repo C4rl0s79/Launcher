@@ -58,6 +58,7 @@ export function toEngineSettings(p: EmuOptionsPatch): Record<string, unknown> {
   if (typeof p.askProfile === 'boolean') out.ask_profile = p.askProfile
   if (typeof p.profileSettings === 'boolean') out.profile_settings = p.profileSettings
   if (typeof p.gamesLogo === 'boolean') out.games_logo = p.gamesLogo
+  if (p.lookScope === 'profile' || p.lookScope === 'machine') out.look_scope = p.lookScope
   if (typeof p.machineProfile === 'number') out.machine_profile = p.machineProfile
   return out
 }
@@ -224,7 +225,9 @@ export function registerEmustartIpc(handle: Handle, ctx: Ctx): void {
     art_keys_push: { timeout: 60_000 },
     system_options: { timeout: 30_000 },
     system_set: { timeout: 30_000, changes: true },
-    system_logo_choose: { timeout: 60_000, changes: true }
+    system_logo_choose: { timeout: 60_000, changes: true },
+    // TV look editor (EmuStart's look.js): config.json "look", kept with the profile unless look_scope = machine
+    look_save: { timeout: 30_000 }
   }
   handle(IPC.emuSystemLogos, async (es: string): Promise<EmuSystemLogo[]> => {
     const list = await call<{ id?: string; url?: string; source?: string; label?: string }[]>('system_logo_candidates', [String(es)], 60_000)

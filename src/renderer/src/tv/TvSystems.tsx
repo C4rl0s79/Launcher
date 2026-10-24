@@ -4,11 +4,11 @@ import { api } from '../store'
 import { useActions } from '../nav/input'
 import { STEAM, systemMeta, type TvSystem } from './data'
 import { SystemOptions } from '../components/SystemOptions'
+import { carouselGap, useLook } from './look'
 
 // System carousel (EmuStart look): the selected platform's logo in the middle, neighbours smaller
 // and dimmed, the carousel wraps around; below — name, counts and the platform description.
 
-const GAP_VW = 25
 const info: Record<string, EmuSystemInfo> = {}
 
 const STEAM_INFO: EmuSystemInfo = {
@@ -47,14 +47,14 @@ function useSystemInfo(sys: TvSystem | undefined): EmuSystemInfo | null {
   return d
 }
 
-function SysCard({ sys, d }: { sys: TvSystem; d: number }) {
+function SysCard({ sys, d, gap }: { sys: TvSystem; d: number; gap: number }) {
   const [broken, setBroken] = useState(false)
   const ad = Math.abs(d)
   return (
     <div
       className="tv-syscard"
       style={{
-        transform: `translate(calc(-50% + ${d * GAP_VW}vw), -50%) scale(${ad === 0 ? 1 : 0.55})`,
+        transform: `translate(calc(-50% + ${d * gap}vw), -50%) scale(${ad === 0 ? 1 : 0.55})`,
         opacity: ad === 0 ? 1 : ad <= 2 ? 0.45 : 0,
         filter: ad === 0 ? 'none' : 'grayscale(.6)',
         zIndex: 10 - ad
@@ -88,6 +88,7 @@ export function TvSystems({
   const sys = systems[index]
   const d = useSystemInfo(sys)
   const [opts, setOpts] = useState(false)
+  const gap = carouselGap(useLook())
   useActions(
     {
       left: () => {
@@ -148,7 +149,7 @@ export function TvSystems({
           if (Math.abs(dd) > 3) return null
           return (
             <div key={s.key} onClick={() => (i === index ? onOpen() : onIndex(i))}>
-              <SysCard sys={s} d={dd} />
+              <SysCard sys={s} d={dd} gap={gap} />
             </div>
           )
         })}

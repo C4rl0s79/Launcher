@@ -12,19 +12,34 @@
   --tv-ok: #3fbf7f;
   --tv-warn: #e6b450;
   --tv-err: #ef5f5f;
+  --tv-bg-grad: #1b2236;
+  /* the look editor (Menu → Wygląd, look.ts) overrides these on the .tv element; defaults = EmuStart's */
   --tv-row: max(28px, 4.6vh);
-  --tv-row-px: max(28px, 4.6vh);
+  --tv-setrow: max(28px, 4.6vh);
   --tv-media-h: 44vh;
   --tv-list-w: 42%;
   --tv-car-h: 34%;
   --tv-car-w: 26vw;
-  --tv-fs: clamp(14px, 1.55vh, 20px);
+  --tv-listlogo-h: 6.5vh;
+  --tv-tlogo-h: 0.92;
+  --tv-tlogo-w: 75%;
+  --tv-desc-lines: 14;
+  --tv-fs: 1;
+  --tv-fs-list: 1;
+  --tv-fs-title: 1;
+  --tv-fs-meta: 1;
+  --tv-fs-desc: 1;
+  --tv-fs-sys: 1;
+  --tv-fs-sysdesc: 1;
+  --tv-fs-menu: 1;
+  --tv-fs-hint: 1;
+  --tv-fs-top: 1;
   position: fixed;
   inset: 0;
-  background: radial-gradient(120% 90% at 50% 0%, #1b2236 0%, var(--tv-bg) 60%) fixed, var(--tv-bg);
+  background: radial-gradient(120% 90% at 50% 0%, var(--tv-bg-grad) 0%, var(--tv-bg) 60%) fixed, var(--tv-bg);
   color: var(--tv-text);
   font-family: 'Segoe UI Variable Display', 'Segoe UI', system-ui, sans-serif;
-  font-size: var(--tv-fs);
+  font-size: calc(clamp(14px, 1.55vh, 20px) * var(--tv-fs));
   user-select: none;
   overflow: hidden;
 }
@@ -42,6 +57,7 @@
   justify-content: space-between;
   padding: 0 3vw;
   z-index: 5;
+  font-size: calc(1em * var(--tv-fs-top));
 }
 .tv-brand {
   font-size: 1.5em;
@@ -129,7 +145,7 @@
   filter: drop-shadow(0 8px 30px rgba(0, 0, 0, 0.6));
 }
 .tv-syscard .txt {
-  font-size: 3.4vw;
+  font-size: calc(3.4vw * var(--tv-fs-sys));
   font-weight: 700;
   text-align: center;
   letter-spacing: 0.02em;
@@ -142,14 +158,14 @@
   text-align: center;
 }
 .tv-sysinfo h1 {
-  font-size: 2.6em;
+  font-size: calc(2.6em * var(--tv-fs-sys));
   margin: 0 0 0.2em;
   font-weight: 600;
 }
 .tv-sysinfo p {
   color: var(--tv-dim);
   margin: 0;
-  font-size: 1.15em;
+  font-size: calc(1.15em * var(--tv-fs-sysdesc));
 }
 .tv-sysabout {
   margin: 1.4em auto 0;
@@ -184,11 +200,11 @@
   display: flex;
   align-items: center;
   gap: 1.2vw;
-  height: calc(6.5vh + 2.5vh);
+  height: calc(var(--tv-listlogo-h) + 2.5vh);
   flex: 0 0 auto;
 }
 .tv-listhead img {
-  height: 6.5vh;
+  height: var(--tv-listlogo-h);
   max-width: 22vw;
   object-fit: contain;
   object-position: left center;
@@ -214,6 +230,7 @@
 }
 .tv-row {
   height: var(--tv-row);
+  font-size: calc(1em * var(--tv-fs-list));
   display: flex;
   align-items: center;
   gap: 0.6em;
@@ -321,11 +338,12 @@
 }
 .tv-meta h1 {
   margin: -0.15em 0 0;
-  font-size: 1.45em;
+  font-size: calc(1.45em * var(--tv-fs-title));
   line-height: 1.15;
   font-weight: 600;
 }
 .tv-meta .tags {
+  font-size: calc(1em * var(--tv-fs-meta));
   color: var(--tv-dim);
   margin: 0.3em 0 1em;
 }
@@ -334,7 +352,7 @@
   grid-template-columns: auto minmax(0, 1fr);
   gap: 0.45em 1.2em;
   margin: 0;
-  font-size: 0.92em;
+  font-size: calc(0.92em * var(--tv-fs-meta));
 }
 .tv-dlrow {
   display: contents;
@@ -362,11 +380,13 @@
 }
 .tv-desc {
   grid-column: 1 / -1;
+  align-self: start;
   color: var(--tv-dim);
-  font-size: 0.95em;
+  font-size: calc(0.95em * var(--tv-fs-desc));
   line-height: 1.45;
   overflow: hidden;
   min-height: 0;
+  max-height: calc(var(--tv-desc-lines) * 1.45em);
 }
 .tv-desc p {
   margin: 0 0 0.6em;
@@ -384,6 +404,7 @@
   gap: 2em;
   padding: 0 3vw;
   color: var(--tv-dim);
+  font-size: calc(1em * var(--tv-fs-hint));
 }
 .tv-hint {
   display: inline-flex;
@@ -439,6 +460,7 @@
   border-radius: 16px;
   padding: 2.5vh 2vw;
   box-shadow: 0 30px 90px rgba(0, 0, 0, 0.6);
+  font-size: calc(1em * var(--tv-fs-menu));
 }
 .tv-panel h2 {
   margin: 0 0 1.2vh;
@@ -450,7 +472,10 @@
   padding: 0;
 }
 .tv-menulist li {
-  padding: 0.7em 1em;
+  min-height: var(--tv-setrow);
+  display: flex;
+  align-items: center;
+  padding: 0.2em 1em;
   border-radius: 8px;
   cursor: pointer;
 }
@@ -463,6 +488,7 @@
 .tv-settings {
   overflow: auto;
   padding: 0 6vw;
+  font-size: calc(1em * var(--tv-fs-menu));
 }
 
 
@@ -493,11 +519,115 @@
   background: none;
 }
 .tv-row .tv-logo .tv-logo__img {
-  height: calc(var(--tv-row) * 0.8);
-  max-width: 70%;
+  height: calc(var(--tv-row) * var(--tv-tlogo-h));
+  max-width: var(--tv-tlogo-w);
 }
 .tv-meta .tv-logo .tv-logo__img {
   height: 12vh;
   margin-bottom: 0.4em;
   filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.8));
+}
+
+/* look editor (Menu → Wygląd): a side panel over the live layout — every change shows at once */
+.tv-look {
+  position: absolute;
+  top: 7vh;
+  bottom: 7vh;
+  right: 1.5vw;
+  width: min(44vw, 780px);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  background: var(--tv-panel);
+  border: 1px solid var(--tv-line);
+  border-radius: 16px;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.6);
+  font-size: calc(1em * var(--tv-fs-menu));
+}
+.tv-look.left {
+  right: auto;
+  left: 1.5vw;
+}
+.tv-look h2 {
+  margin: 0;
+  padding: 2vh 1.5vw 1vh;
+  font-weight: 600;
+}
+.tv-look__list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 1vw 1.5vh;
+}
+.tv-lkrow {
+  min-height: var(--tv-setrow);
+  display: flex;
+  align-items: center;
+  gap: 1em;
+  padding: 0.2em 0.8em;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.tv-lkrow.head {
+  min-height: 0;
+  padding: 1.2em 0.8em 0.3em;
+  color: var(--tv-dim);
+  font-size: 0.8em;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  cursor: default;
+}
+.tv-lkrow.sel {
+  background: linear-gradient(90deg, var(--tv-accent), var(--tv-accent-soft));
+  color: #fff;
+}
+.tv-lkrow .lk {
+  flex: 1;
+  min-width: 0;
+}
+.tv-lkrow.chg .lk::after {
+  content: ' •';
+  color: var(--tv-accent2);
+}
+.tv-lkrow.sel.chg .lk::after {
+  color: #fff;
+}
+.tv-lkrow .lv {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  flex-shrink: 0;
+}
+.tv-lkrow .lv b {
+  min-width: 6.5em;
+  text-align: right;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.tv-lkrow .ch {
+  width: 1.6em;
+  text-align: center;
+  opacity: 0.7;
+}
+.tv-lkrow .track {
+  position: relative;
+  width: 5em;
+  height: 0.35em;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.15);
+  overflow: hidden;
+}
+.tv-lkrow .track i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--tv-accent2);
+}
+.tv-lkrow.sel .track i {
+  background: #fff;
+}
+.tv-lkrow .sw {
+  width: 1.1em;
+  height: 1.1em;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.7);
 }

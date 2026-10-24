@@ -409,7 +409,23 @@ Od Lumen 0.6.0 (plan: `docs/PLAN-TV-REACT.md`, etap 1) — **jeden interfejs, dw
   „Wyślij klucze źródeł grafik na serwer” (`art_keys_push`); Biblioteka EmuStart → Tryb TV → „Tytuły gier
   jako logo”; układ TV: **X na systemie = Opcje systemu** (`components/SystemOptions.tsx`: emulator
   systemu, pobierz emulator, ukryj system; administrator: logo z serwera, poświata, nazwa). Bez zmian
-  (decyzja 20.10): edytor wyglądu EmuStart i lokalne foldery z grami.
+  (decyzja 20.10): lokalne foldery z grami (edytor wyglądu — niżej, od 24.10).
+- **Edytor wyglądu trybu TV** (24.10.2026, `tv/look.ts`, `tv/TvLook.tsx`; wzór: `engine/web/look.js`):
+  Menu (Start) → „Wygląd”. Panel z boku nad żywym układem — każda zmiana widoczna od razu; A przełącza
+  podgląd systemy ↔ gry, Y przesuwa panel na drugą stronę. Te same ustawienia, zakresy i wartości
+  domyślne co w EmuStart (test `tests/look.test.ts` porównuje je z `look.js`): logo tytułu (wysokość,
+  szerokość), logo systemu w karuzeli i odstęp, logo nad listą, wysokość wiersza listy, szerokość listy,
+  wysokość okładki i zrzutu, wysokość wiersza menu, liczba linii opisu, 10 wielkości czcionek, kolor
+  akcentu, tło; do tego „Tytuły gier jako logo” i „Wygląd zapisywany” (dla profilu / dla tego komputera —
+  `look_scope` przez `save_settings`). Sterowanie: ↑↓ pozycja, ←→ zmiana, LB/RB ×5, X domyślna, Start
+  dwa razy — wszystko domyślne, B zapisz (klawiatura: strzałki, Q/E, F, S, O, Esc; mysz: −/+, ◀/▶, kółko).
+  Wartości trafiają do zmiennych CSS ramki `.tv` (`--tv-list-w`, `--tv-row`, `--tv-media-h`,
+  `--tv-car-h/-w`, `--tv-fs*`, `--tv-accent`, `--tv-bg`…; `tv.css`), odstęp karuzeli — do `TvSystems`.
+  **Zapis tam, gdzie EmuStart:** `look_save` silnika (dopisany do białej listy `ACCOUNT` w
+  `emustart/ipc.ts`) → `config.json` → `look`, a przy `look_scope = profile` także ustawienia profilu
+  (`emustart.json`), więc wygląd idzie z profilem jak w EmuStart. Odczyt: `get_state().look` przy starcie
+  silnika i po zmianie profilu. Bez zmian w repo EmuStart. Bez działającego silnika zmiany działają do
+  zamknięcia okna, zapis się nie udaje (komunikat).
 - **Kolejność padów** (`components/PadsOrder.tsx`, menu TV i Ustawienia → EmuStart): jak w Windows /
   bezprzewodowe przed przewodowymi / ręcznie (każdy gracz naciska A na swoim padzie, B kończy) —
   kolejność stosuje silnik przy starcie gry (`pads_state` / `pads_set`).

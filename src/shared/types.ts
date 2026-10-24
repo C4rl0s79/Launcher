@@ -506,6 +506,7 @@ export type EmuAccountMethod =
   | 'system_options'
   | 'system_set'
   | 'system_logo_choose'
+  | 'look_save'
 
 /** Options of one platform (EmuStart's system options: hold A on the logo; TV: X) */
 export interface EmuSystemOptions {
@@ -729,6 +730,8 @@ export type EmuOptionsPatch = Partial<{
   profileSettings: boolean
   machineProfile: number
   gamesLogo: boolean
+  /** where EmuStart keeps the TV look: with the profile (every computer) or only on this computer */
+  lookScope: 'profile' | 'machine'
 }>
 
 export interface EmuEmulatorOption {
