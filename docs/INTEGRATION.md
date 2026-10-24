@@ -376,6 +376,17 @@ Od Lumen 0.6.0 (plan: `docs/PLAN-TV-REACT.md`, etap 1) — **jeden interfejs, dw
   `tv/filters.ts`: szukaj w tytule, gatunek, dekada, gracze, region z nazwy, producent, co pokazać,
   sortowanie; zapamiętane dla każdego systemu w `localStorage`; Steam — tylko szukaj, co pokazać i
   sortowanie bez roku), Y — opcje gry (Steam: szczegóły), L3 / Z — szukaj, R3 / U — ulubiona.
+- **Lumen 1.0.5:**
+  - filtry z układu TV także w grupach trybu pulpitu (X / F, zapamiętane dla każdej grupy; ulubiona — R3 / U);
+  - gry EmuStart bez numeru LaunchBox z serwera (Mega Drive, Game Boy, Atari…) są szukane po tytule na
+    platformie systemu w lokalnej bazie LaunchBox (`platformForEs`): szczegóły uzupełniane z LaunchBox,
+    grafiki LaunchBox (logo, okładka, tło) jak dla gier z numerem;
+  - „Tytuły gier jako logo” jak w EmuStart: logo zamiast tytułu na liście gier TV i w nagłówku podglądu
+    (tytuł widać, dopóki logo się nie wczyta);
+  - opcje gry: „Wersja regionalna” dla gier z kilkoma wersjami (także w układzie TV);
+  - okno grafik: LB/RB — rodzaj grafiki, LT/RT — wielkość miniatur; grafika wybrana na serwerze
+    (np. z libretro) od razu staje się wyświetlaną na tym urządzeniu (zamiast automatycznej ze SteamGridDB);
+  - lista gier TV ma stałą szerokość niezależnie od podglądu.
 - **Ustawienia w dwóch panelach** (oba układy, `screens/Settings.tsx`): po lewej lista działów
   (Interfejs, Steam, EmuStart, Biblioteka EmuStart, Systemy, Grupy, Grafiki i opisy, Zachowanie, Dane,
   Aktualizacja, Sterowanie), po prawej wybrany dział, przewijany osobno. Ruch po liście pokazuje dział;

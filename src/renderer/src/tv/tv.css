@@ -170,7 +170,8 @@
 /* game list */
 .tv-games {
   display: grid;
-  grid-template-columns: minmax(300px, var(--tv-list-w)) 1fr;
+  /* the list keeps its width whatever the preview holds (a wide screenshot, a long title) */
+  grid-template-columns: max(300px, var(--tv-list-w)) minmax(0, 1fr);
   gap: 2.5vw;
   padding: 0 3vw;
 }
@@ -464,15 +465,6 @@
   padding: 0 6vw;
 }
 
-.tv-meta .tv-gamelogo {
-  height: 12vh;
-  width: auto;
-  max-width: 100%;
-  object-fit: contain;
-  object-position: left center;
-  margin-bottom: 0.4em;
-  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.8));
-}
 
 .tv-filters-on {
   color: var(--tv-accent2);
@@ -481,4 +473,31 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* "Tytuły gier jako logo": the logo replaces the title once loaded (rows and the preview header) */
+.tv-logo {
+  display: flex;
+  min-width: 0;
+}
+.tv-logo.is-wait {
+  position: absolute;
+  visibility: hidden;
+  pointer-events: none;
+}
+.tv-logo .tv-logo__img {
+  width: auto;
+  max-width: 100%;
+  object-fit: contain;
+  object-position: left center;
+  background: none;
+}
+.tv-row .tv-logo .tv-logo__img {
+  height: calc(var(--tv-row) * 0.8);
+  max-width: 70%;
+}
+.tv-meta .tv-logo .tv-logo__img {
+  height: 12vh;
+  margin-bottom: 0.4em;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.8));
 }

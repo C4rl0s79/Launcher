@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { DetailsResult, Game } from '@shared/types'
 import { api, askText, attempt, useStore } from '../store'
 import { useActions } from '../nav/input'
@@ -66,6 +66,7 @@ export function TvGames({ system, onBack, onMenu, active }: { system: TvSystem; 
   const sel = games[Math.min(idx, games.length - 1)]
   const { primary, busy } = usePrimaryAction(sel)
   const d = useDetails(sel)
+  const asLogo = useGamesLogo()
 
   // rows: only the visible window is rendered (systems can have thousands of games)
   const rowsRef = useRef<HTMLDivElement>(null)
@@ -192,12 +193,19 @@ export function TvGames({ system, onBack, onMenu, active }: { system: TvSystem; 
         </div>
         <div className="tv-rows" ref={rowsRef}>
           {games.slice(top, top + visible + 1).map((g, i) => (
-            <TvRow key={g.id} game={g} sel={top + i === idx} fav={!!favorites?.includes(g.id)} onClick={() => (top + i === idx ? play() : setIdx(top + i))} />
+            <TvRow
+              key={g.id}
+              game={g}
+              sel={top + i === idx}
+              fav={!!favorites?.includes(g.id)}
+              asLogo={asLogo}
+              onClick={() => (top + i === idx ? play() : setIdx(top + i))}
+            />
           ))}
           {!games.length && <p className="tv-dim">Brak gier{activeFilters.length ? ' dla tych filtrów (X — zmień albo wyczyść)' : ''}.</p>}
         </div>
       </div>
-      {sel && <TvPreview game={sel} details={d} note={primary?.note} />}
+      {sel && <TvPreview game={sel} details={d} note={primary?.note} asLogo={asLogo} />}
       {options && sel && <GameOptions game={sel} onClose={() => setOptions(false)} />}
       {filters && (
         <TvFilters system={system.display} games={system.games} steam={steam} filter={filter} onChange={setFilter} onClose={() => setFilters(false)} />
@@ -206,11 +214,11 @@ export function TvGames({ system, onBack, onMenu, active }: { system: TvSystem; 
   )
 }
 
-function TvRow({ game, sel, fav, onClick }: { game: Game; sel: boolean; fav: boolean; onClick: () => void }) {
+function TvRow({ game, sel, fav, asLogo, onClick }: { game: Game; sel: boolean; fav: boolean; asLogo: boolean; onClick: () => void }) {
   const e = game.emu
   return (
     <div className={`tv-row ${sel ? 'sel' : ''}`} onClick={onClick}>
-      <span className="t">{game.name}</span>
+      {asLogo && e ? <LogoTitle key={game.id} game={game} text={<span className="t">{game.name}</span>} /> : <span className="t">{game.name}</span>}
       {e?.tags && <span className="g">{e.tags}</span>}
       <span className="ic">
         {fav && <span className="tv-tag f">★</span>}
@@ -225,19 +233,11 @@ function TvRow({ game, sel, fav, onClick }: { game: Game; sel: boolean; fav: boo
   )
 }
 
-function TvPreview({ game, details: dr, note }: { game: Game; details: DetailsResult | null; note?: string }) {
-  const [boxOk, setBoxOk] = useState(true)
-  const [snapOk, setSnapOk] = useState(true)
-  const [logoOk, setLogoOk] = useState(true)
+/** EmuStart's "Tytuły gier jako logo" (Ustawienia → Biblioteka EmuStart → Tryb TV) */
+function useGamesLogo(): boolean {
   const [asLogo, setAsLogo] = useState(false)
   // re-read after a settings change (the library snapshot changes with it)
   const emuSnap = useStore((s) => s.snapshot?.emustart)
-  useEffect(() => {
-    setBoxOk(true)
-    setSnapOk(true)
-    setLogoOk(true)
-  }, [game.id])
-  // EmuStart's "Tytuły gier jako logo" (Ustawienia → Biblioteka EmuStart → Tryb TV)
   useEffect(() => {
     if (emuSnap?.engine !== 'ready') return
     void api()
@@ -245,6 +245,29 @@ function TvPreview({ game, details: dr, note }: { game: Game; details: DetailsRe
       .then((o) => setAsLogo(o.gamesLogo))
       .catch(() => undefined)
   }, [emuSnap])
+  return asLogo
+}
+
+/** The game's logo instead of its title; the title stays until the logo has loaded (and when there is none). */
+function LogoTitle({ game, text }: { game: Game; text: ReactNode }) {
+  const [ok, setOk] = useState(false)
+  return (
+    <>
+      {!ok && text}
+      <span className={`tv-logo ${ok ? '' : 'is-wait'}`}>
+        <Art gameId={game.id} name={game.name} kind="logo" className="tv-logo__img" fallback="none" eager onState={setOk} />
+      </span>
+    </>
+  )
+}
+
+function TvPreview({ game, details: dr, note, asLogo }: { game: Game; details: DetailsResult | null; note?: string; asLogo: boolean }) {
+  const [boxOk, setBoxOk] = useState(true)
+  const [snapOk, setSnapOk] = useState(true)
+  useEffect(() => {
+    setBoxOk(true)
+    setSnapOk(true)
+  }, [game.id])
   const d = dr?.ok ? dr.details : undefined
   const e = game.emu
   const status = e
@@ -280,11 +303,7 @@ function TvPreview({ game, details: dr, note }: { game: Game; details: DetailsRe
         )}
       </div>
       <div className="tv-meta">
-        {asLogo && game.emu && logoOk ? (
-          <Art key={`l-${game.id}`} gameId={game.id} name={game.name} kind="logo" className="tv-gamelogo" fallback="none" eager onState={setLogoOk} />
-        ) : (
-          <h1>{game.name}</h1>
-        )}
+        {asLogo && game.emu ? <LogoTitle key={game.id} game={game} text={<h1>{game.name}</h1>} /> : <h1>{game.name}</h1>}
         {e?.tags && <p className="tags">{e.tags}</p>}
         <dl>
           {rows

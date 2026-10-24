@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { EmuGameOptions, EmuMetaField, EmuSettingsChange, Game } from '@shared/types'
 import { api, attempt, useStore } from '../store'
 import { focusFirst } from '../nav/engine'
-import { formatBytes, formatLastPlayed, plural } from '../lib/format'
+import { formatBytes, formatLastPlayed, plural, versionCountLabel } from '../lib/format'
 import { usePrimaryAction } from '../lib/primary'
 import { Modal } from './Modal'
 import { EmuSaves } from './EmuSaves'
@@ -13,7 +13,7 @@ import { ArtPicker } from '../modals/ArtPicker'
 // desktop: the details' "Opcje gry"), with EmuStart's pages: version (translation), emulator,
 // emulator settings (and their history), saves, metadata, art, keep / remove on this PC.
 
-type Page = 'main' | 'variants' | 'emus' | 'emuset' | 'meta'
+type Page = 'main' | 'versions' | 'variants' | 'emus' | 'emuset' | 'meta'
 
 const META: [EmuMetaField, string][] = [
   ['title', 'Tytuł'],
@@ -27,6 +27,7 @@ const META: [EmuMetaField, string][] = [
 
 const TITLES: Record<Page, string> = {
   main: 'Opcje gry',
+  versions: 'Wersja regionalna',
   variants: 'Wersja gry',
   emus: 'Emulator dla tej gry',
   emuset: 'Ustawienia emulatora',
@@ -58,6 +59,8 @@ export function GameOptions({ game, onClose }: { game: Game; onClose: () => void
   const [edit, setEdit] = useState<EmuMetaField | null>(null)
   const [readDesc, setReadDesc] = useState(false)
   const isFav = useStore((s) => !!s.prefs?.favorites.includes(game.id))
+  // regional versions of one entry (emugrp:…): the one the player chose, else automatic
+  const chosenVersion = useStore((s) => s.prefs?.versions?.[game.id])
   const { primary } = usePrimaryAction(game)
   const listRef = useRef<HTMLDivElement>(null)
   const toast = useStore((s) => s.toast)
@@ -103,6 +106,15 @@ export function GameOptions({ game, onClose }: { game: Game; onClose: () => void
       return [
         { label: primary?.label ?? 'Graj', value: primary?.disabled ? primary.note : undefined, act: () => void play(), disabled: !primary?.run || primary.disabled },
         { label: 'Graj od początku', value: 'bez wczytania stanu', act: () => void play('__od_poczatku__'), disabled: !primary?.run || primary.disabled },
+        ...(e?.versions
+          ? [
+              {
+                label: 'Wersja regionalna',
+                value: `${e.versions.find((v) => v.id === e.shownVersion)?.tags || 'bez oznaczeń'} · ${chosenVersion ? 'wybrana' : 'automatycznie'} · ${versionCountLabel(e.versions.length)}`,
+                act: () => setPage('versions')
+              }
+            ]
+          : []),
         ...(o.variants.length
           ? [{ label: 'Wersja', value: o.variant ? o.variantLabel : `oryginał · ${o.variants.length} ${plural(o.variants.length, 'inna wersja', 'inne wersje', 'innych wersji')}`, act: () => setPage('variants') }]
           : []),
@@ -131,6 +143,18 @@ export function GameOptions({ game, onClose }: { game: Game; onClose: () => void
             ]
           : [])
       ]
+    if (page === 'versions' && e?.versions) {
+      const choose = (id: string | null): void =>
+        void attempt(api().emustart.chooseVersion(game.id, id)).then(() => (setTimeout(load, 300), setPage('main')))
+      return [
+        ...e.versions.map((v) => ({
+          label: v.tags || 'bez oznaczeń',
+          value: `${v.copying ? 'pobieranie…' : v.cached ? 'na dysku' : 'na serwerze'}${v.discs > 1 ? ` · 💿${v.discs}` : ''}${v.lastPlayed ? ' · grana' : ''}${v.id === e.shownVersion ? '  ✓' : ''}`,
+          act: () => choose(v.id)
+        })),
+        { label: 'Automatycznie', value: `ostatnio grana, pobrana albo wg regionu${chosenVersion ? '' : '  ✓'}`, act: () => choose(null) }
+      ]
+    }
     if (page === 'variants') {
       const pick = (id: number): void => void attempt(api().emustart.setVariant(game.id, id)).then((r) => report(r) && (load(), setPage('main')))
       return [

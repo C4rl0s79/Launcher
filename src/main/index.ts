@@ -4,7 +4,7 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { ART_SCHEME, IPC } from '@shared/api'
 import { isModeCombo } from '@shared/pad'
-import type { ActionResult, ArtKind, ArtOption, FsEntry, FsListOptions, Game, JobsSnapshot, LibrarySnapshot, Prefs, SecretName, SettingsPatch, SgdbGame, UiMode } from '@shared/types'
+import type { ActionResult, ArtKind, ArtOption, DetailsResult, FsEntry, FsListOptions, Game, JobsSnapshot, LibrarySnapshot, Prefs, SecretName, SettingsPatch, SgdbGame, UiMode } from '@shared/types'
 import { initLogger, log } from './logger'
 import { chooseDataDir, migrateDataDir } from './dataDir'
 import { listDir } from './fsBrowse'
@@ -18,7 +18,7 @@ import { openSteam, openSteamUri, shortcutRunUri } from './steam/actions'
 import { pickBestMatch, pickExactMatch, SgdbAuthError, SgdbClient } from './art/sgdb'
 import { LaunchBoxService } from './launchbox/service'
 import { XInputPoller } from './input/xinput'
-import { platformForTags } from './launchbox/match'
+import { platformForEs, platformForTags } from './launchbox/match'
 import { IMAGE_BASE, LB_TYPES, PICKER_TYPES, regionsOfTags, type LbImage } from './launchbox/images'
 import { ArtworkService } from './art/artwork'
 import { isPlayable } from './steam/manifests'
@@ -311,9 +311,47 @@ function emuTitles(gameId: string): string[] {
   return lbName ? [lbName, ...[...out].filter((n) => n !== lbName)] : [...out]
 }
 
-/** LaunchBox Games DB id of an EmuStart game (from the server's metadata; any version) */
+/**
+ * LaunchBox Games DB id of an EmuStart game: from the server's metadata (any version), else found
+ * by title on the system's platform in the local LaunchBox database (systems the server has no
+ * metadata for: Mega Drive, Game Boy, Atari…). A title match is remembered while the program runs.
+ */
+const emuLbMatch = new Map<string, number>()
 function emuLbId(gameId: string): number | undefined {
-  return emu.row(gameId)?.lb || emu.versionsOf(gameId).map((v) => emu.row(v.id)?.lb).find(Boolean)
+  const own = emu.row(gameId)?.lb || emu.versionsOf(gameId).map((v) => emu.row(v.id)?.lb).find(Boolean)
+  if (own) return own
+  const known = emuLbMatch.get(gameId)
+  if (known !== undefined) return known || undefined
+  const row = emu.row(gameId)
+  const platform = row ? platformForEs(row.es) : undefined
+  if (!row?.title || !platform) return undefined
+  const hit = launchbox.find(row.title, platform)
+  // a miss is remembered only with the database present (it may be downloaded later)
+  if (hit || launchbox.ready) emuLbMatch.set(gameId, hit?.id ?? 0)
+  return hit?.id
+}
+
+/** EmuStart details with what the server lacks filled in from LaunchBox (description, genre, year…) */
+function withLaunchBox(gameId: string, r: DetailsResult): DetailsResult {
+  const lbId = emuLbId(gameId)
+  const lb = lbId ? launchbox.detailsById(lbId) : null
+  if (!lb) return r
+  if (!r.ok) return { ok: true, details: { ...lb, name: emu.row(gameId)?.title ?? lb.name }, stale: false }
+  const d = r.details
+  return {
+    ...r,
+    details: {
+      ...d,
+      descriptionText: d.descriptionText || lb.descriptionText,
+      genres: d.genres?.length ? d.genres : lb.genres,
+      releaseDate: d.releaseDate || lb.releaseDate,
+      developers: d.developers?.length ? d.developers : lb.developers,
+      publishers: d.publishers?.length ? d.publishers : lb.publishers,
+      players: d.players || lb.players,
+      rating: d.rating ?? lb.rating,
+      launchboxId: d.launchboxId ?? lb.launchboxId
+    }
+  }
 }
 
 /** LaunchBox images of an EmuStart game, best first: the shown version's region, then preference */
@@ -518,8 +556,9 @@ function registerIpc(): void {
   handle(IPC.gameDetails, async (gameId: string, force?: boolean) => {
     const game = findGame(gameId)
     if (game?.emu) {
-      if (engine.state !== 'ready') return { ok: false, error: engine.message ?? 'Silnik EmuStart nie działa — opis jest niedostępny.' }
-      return emuDetails(await engine.call<Record<string, unknown>>('game_detail', [game.emu.id], 30_000))
+      if (engine.state !== 'ready')
+        return withLaunchBox(gameId, { ok: false, error: engine.message ?? 'Silnik EmuStart nie działa — opis jest niedostępny.' })
+      return withLaunchBox(gameId, emuDetails(await engine.call<Record<string, unknown>>('game_detail', [game.emu.id], 30_000)))
     }
     if (game?.shortcut) {
       const st = await launchbox.status()

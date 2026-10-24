@@ -11,6 +11,12 @@ const KINDS: [ArtKind, string][] = [
   ['icon', 'Ikona']
 ]
 
+const ZOOM_MIN = 0.6
+const ZOOM_MAX = 2.4
+const ZOOM_STEP = 0.2
+let lastZoom = 1
+const isEmuGame = (g: Game): boolean => g.source === 'emustart'
+
 const CHOICE_LABEL: Record<string, string> = {
   sgdb: 'wybrana ze SteamGridDB',
   launchbox: 'wybrana z LaunchBox',
@@ -24,6 +30,17 @@ export function ArtPicker({ game, onClose, admin }: { game: Game; onClose: () =>
   const prefs = useStore((s) => s.prefs)!
   const hasKey = useStore((s) => s.settings?.hasSgdbKey)
   const [kind, setKind] = useState<ArtKind>('grid')
+  // thumbnail size (LT smaller / RT larger), kept while the program runs
+  const [zoom, setZoomState] = useState(lastZoom)
+  const setZoom = (z: number): void => {
+    lastZoom = Math.round(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z)) * 100) / 100
+    setZoomState(lastZoom)
+  }
+  const kinds = KINDS.filter(([k]) => !(isEmuGame(game) && k === 'icon'))
+  const nextKind = (step: number): void => {
+    const i = kinds.findIndex(([k]) => k === kind)
+    setKind(kinds[(i + step + kinds.length) % kinds.length][0])
+  }
   const [result, setResult] = useState<ArtOptionsResult | null>(null)
   const [searching, setSearching] = useState(false)
   const gp = prefs.art[game.id]
@@ -51,9 +68,27 @@ export function ArtPicker({ game, onClose, admin }: { game: Game; onClose: () =>
   if (searching) return <MatchSearch game={game} onClose={() => setSearching(false)} />
 
   return (
-    <Modal title={`Grafiki — ${game.name}`} onClose={onClose} wide>
+    <Modal
+      title={`Grafiki — ${game.name}`}
+      onClose={onClose}
+      wide
+      className="art-picker"
+      handlers={{
+        lb: () => (nextKind(-1), true),
+        rb: () => (nextKind(1), true),
+        lt: () => (setZoom(zoom - ZOOM_STEP), true),
+        rt: () => (setZoom(zoom + ZOOM_STEP), true)
+      }}
+      hints={[
+        { action: 'confirm', label: 'Wybierz' },
+        { action: 'rb', label: 'Rodzaj grafiki' },
+        { action: 'rt', label: 'Większe / mniejsze' },
+        { action: 'back', label: 'Zamknij' }
+      ]}
+    >
+      <style>{`.art-picker .thumbs { --thumb-zoom: ${zoom}; }`}</style>
       <div className="segmented" role="tablist">
-        {KINDS.map(([k, label]) => (
+        {kinds.map(([k, label]) => (
           <button key={k} className={`seg ${kind === k ? 'is-on' : ''}`} data-nav data-autofocus={k === kind || undefined} onClick={() => setKind(k)}>
             {label}
           </button>
@@ -80,11 +115,20 @@ export function ArtPicker({ game, onClose, admin }: { game: Game; onClose: () =>
           </button>
         )}
         {isEmu && kind !== 'icon' && (
-          <button className="btn" data-nav onClick={() => void attempt(api().art.useSteam(game.id, kind)).then(done('Użyto grafiki z serwera EmuStart'))}>
+          <button
+            className="btn"
+            data-nav
+            onClick={() => void attempt(api().art.useSteam(game.id, kind)).then(done('Użyto grafiki z serwera EmuStart'))}
+          >
             Grafika z serwera EmuStart
           </button>
         )}
-        <button className="btn" data-nav disabled={!current} onClick={() => void attempt(api().art.reset(game.id, kind)).then(done('Przywrócono automatyczny wybór'))}>
+        <button
+          className="btn"
+          data-nav
+          disabled={!current}
+          onClick={() => void attempt(api().art.reset(game.id, kind)).then(done('Przywrócono automatyczny wybór'))}
+        >
           Przywróć automatyczne
         </button>
         {hasKey && (
@@ -171,7 +215,12 @@ function ServerArt({ game, kind }: { game: Game; kind: ArtKind }) {
               className="thumb thumb--fit"
               data-nav
               title={o.source}
-              onClick={() => void attempt(api().emustart.serverArtChoose(game.id, sk, o.url)).then(done('Zapisano na serwerze'))}
+              onClick={async () => {
+                const r = await attempt(api().emustart.serverArtChoose(game.id, sk, o.url))
+                done('Zapisano na serwerze')(r)
+                // shown here at once: the server's art beats an automatic SteamGridDB / LaunchBox pick
+                if (r?.ok) await attempt(api().art.useSteam(game.id, kind))
+              }}
             >
               {o.thumb ? <img src={o.thumb} alt="" loading="lazy" decoding="async" /> : <span className="thumb__tag">{o.source ?? 'grafika'}</span>}
               {o.source && <span className="thumb__tag">{o.source}</span>}
@@ -247,7 +296,15 @@ function MatchSearch({ game, onClose }: { game: Game; onClose: () => void }) {
   const choose = async (g: SgdbGame | null): Promise<void> => {
     const p = await attempt(api().art.setMatch(game.id, g))
     if (p) {
-      useStore.getState().toast(g ? `Dopasowano do „${g.name}”` : game.source === 'steam' ? 'Przywrócono dopasowanie po identyfikatorze Steam' : 'Przywrócono automatyczne dopasowanie po tytule')
+      useStore
+        .getState()
+        .toast(
+          g
+            ? `Dopasowano do „${g.name}”`
+            : game.source === 'steam'
+              ? 'Przywrócono dopasowanie po identyfikatorze Steam'
+              : 'Przywrócono automatyczne dopasowanie po tytule'
+        )
       onClose()
     }
   }
@@ -270,7 +327,13 @@ function MatchSearch({ game, onClose }: { game: Game; onClose: () => void }) {
       {results?.length === 0 && <p className="details__muted">Brak wyników.</p>}
       <div className="list">
         {results?.map((g, i) => (
-          <button key={g.id} className={`list__item ${manual === g.id ? 'is-on' : ''}`} data-nav data-autofocus={i === 0 || undefined} onClick={() => void choose(g)}>
+          <button
+            key={g.id}
+            className={`list__item ${manual === g.id ? 'is-on' : ''}`}
+            data-nav
+            data-autofocus={i === 0 || undefined}
+            onClick={() => void choose(g)}
+          >
             {g.name}
             <span className="list__meta">
               {g.releaseDate ? new Date(g.releaseDate * 1000).getFullYear() : ''}

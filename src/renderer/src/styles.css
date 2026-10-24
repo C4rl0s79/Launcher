@@ -1108,14 +1108,15 @@ button {
 .thumbs {
   display: grid;
   gap: 12px;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  /* --thumb-zoom: LT / RT in the art picker */
+  grid-template-columns: repeat(auto-fill, minmax(calc(120px * var(--thumb-zoom, 1)), 1fr));
 }
 .thumbs--hero {
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, calc(320px * var(--thumb-zoom, 1))), 1fr));
 }
 .thumbs--logo,
 .thumbs--icon {
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, calc(180px * var(--thumb-zoom, 1))), 1fr));
 }
 .thumb {
   position: relative;
@@ -1529,6 +1530,11 @@ p.card__desc[data-nav]:focus {
 }
 .group__count {
   color: var(--text-3);
+}
+.group__filters {
+  margin: -4px 0 10px;
+  color: var(--accent);
+  font-size: 0.9em;
 }
 
 /* home sections */

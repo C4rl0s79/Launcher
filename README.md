@@ -187,7 +187,8 @@ Klucze nigdy nie trafiają do repozytorium ani do logów.
 | Nawigacja | strzałki | D-pad / lewa gałka |
 | Wybierz | Enter / Spacja | A |
 | Wstecz | Esc / Backspace | B |
-| Ulubiona | F | X |
+| Ulubiona | U | R3 (X na ekranie Start) |
+| Filtry grupy (gatunek, dekada, gracze, region, producent…) | F | X |
 | Szukaj | S, `/` lub Ctrl+F | Y |
 | Poprzednia / następna grupa (górny pasek) | Q / E | LB / RB |
 | Filtr: wszystkie / zainstalowane / niezainstalowane | PgUp / PgDn | LT / RT |

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { Readable } from 'node:stream'
 import { DatabaseSync } from 'node:sqlite'
-import { normTitle, numbersMatch, platformForTags, similarity } from '../src/main/launchbox/match'
+import { normTitle, numbersMatch, platformForEs, platformForTags, similarity } from '../src/main/launchbox/match'
 import { buildDatabase, parseMetadataXml, type LbGameRow } from '../src/main/launchbox/builder'
 import { findGame, toDetails } from '../src/main/launchbox/lookup'
 import { LB_TYPES, regionsOfTags, sortImages } from '../src/main/launchbox/images'
@@ -97,6 +97,9 @@ describe('title matching helpers (EmuStart rules)', () => {
   it('maps Steam ROM Manager tags to LaunchBox platforms', () => {
     expect(platformForTags(['Non-Steam', 'PS2'])).toBe('Sony Playstation 2')
     expect(platformForTags(['GCN'])).toBe('Nintendo GameCube')
+    // EmuStart systems the server has no metadata for: found by title on their LaunchBox platform
+    expect([platformForEs('megadrive'), platformForEs('atari2600'), platformForEs('wswanc'), platformForEs('zxspectrum')]).toEqual(['Sega Genesis', 'Atari 2600', 'WonderSwan Color', 'Sinclair ZX Spectrum'])
+    expect(platformForEs('nosuch')).toBeUndefined()
     expect(platformForTags(['DC'])).toBe('Sega Dreamcast')
     expect(platformForTags(['PS1'])).toBe('Sony Playstation')
     expect(platformForTags(['Favourites'])).toBeUndefined()

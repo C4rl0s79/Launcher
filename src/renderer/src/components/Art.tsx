@@ -1,4 +1,4 @@
-import { memo, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import type { ArtKind } from "@shared/types";
 import { api, useStore } from "../store";
 import { hueOf } from "../lib/format";
@@ -45,6 +45,11 @@ export const Art = memo(function Art({
     setState(shown.has(src) ? "ok" : "loading");
     setFit(shown.get(src) ?? false);
   }
+
+  // an image known from earlier is "loaded" at once — tell the parent (no onLoad wait)
+  useEffect(() => {
+    if (shown.has(src)) onState?.(true);
+  }, [src]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const hue = hueOf(name);
   if (state === "error") {

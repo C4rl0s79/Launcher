@@ -33,6 +33,11 @@ export class LaunchBoxService extends EventEmitter {
     return path.join(this.dir, 'launchbox.db')
   }
 
+  /** the database file is there and opens */
+  get ready(): boolean {
+    return !!this.open()
+  }
+
   private open(): DatabaseSync | null {
     if (this.db) return this.db
     try {
@@ -183,6 +188,18 @@ export class LaunchBoxService extends EventEmitter {
       return (db.prepare('SELECT name FROM games WHERE id = ?').get(id) as { name?: string } | undefined)?.name
     } catch {
       return undefined
+    }
+  }
+
+  /** details of a LaunchBox entry by its id */
+  detailsById(id: number): GameDetails | null {
+    const db = this.open()
+    if (!db) return null
+    try {
+      const g = db.prepare('SELECT * FROM games WHERE id = ?').get(id) as unknown as GameRow | undefined
+      return g ? toDetails(g) : null
+    } catch {
+      return null
     }
   }
 

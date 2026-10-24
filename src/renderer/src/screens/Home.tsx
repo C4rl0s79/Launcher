@@ -44,12 +44,12 @@ export function HomeScreen({ active }: { active: boolean }) {
   const open = useCallback((g: Game) => openDetails(g.id), [openDetails])
 
   useActions(
-    { x: toggleFavoriteOfFocused },
+    { x: toggleFavoriteOfFocused, rs: toggleFavoriteOfFocused },
     {
       enabled: active,
       hints: [
         { action: 'confirm', label: 'Otwórz' },
-        { action: 'x', label: 'Ulubiona' },
+        { action: 'rs', label: 'Ulubiona' },
         { action: 'y', label: 'Szukaj' },
         { action: 'rb', label: 'Grupy' },
         { action: 'menu', label: 'Ustawienia' }

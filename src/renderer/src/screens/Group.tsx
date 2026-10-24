@@ -9,6 +9,8 @@ import { toggleFavoriteOfFocused, VirtualPosterGrid } from '../components/Poster
 import { gameCountLabel } from '../lib/format'
 import { Glyph } from '../components/Hints'
 import { EmuNotice } from '../components/EmuNotice'
+import { TvFilters } from '../tv/TvFilters'
+import { activeParts, apply, loadFilter, saveFilter, type Filter as GameFilter } from '../tv/filters'
 
 // One group (tab in the top bar): every game of the category as a Steam-style poster grid.
 
@@ -55,6 +57,13 @@ export function GroupScreen({ category, active }: { category: Category; active: 
   const [filter, setFilter] = useState<Filter>(initial.filter)
   const [sort, setSort] = useState<Sort>(initial.sort)
   const searchRef = useRef<HTMLInputElement>(null)
+  // the TV layout's filter window (genre, decade, players, region, developer…), kept per group
+  const [more, setMoreState] = useState<GameFilter>(() => loadFilter(`group:${category.id}`))
+  const setMore = (f: GameFilter): void => {
+    setMoreState(f)
+    saveFilter(`group:${category.id}`, f)
+  }
+  const [filtersOpen, setFiltersOpen] = useState(false)
 
   useEffect(() => {
     try {
@@ -74,12 +83,17 @@ export function GroupScreen({ category, active }: { category: Category; active: 
     playtime: all.some((g) => g.playtimeMinutes !== undefined)
   }
 
+  const noMeta = !all.some((g) => g.emu)
+  const moreParts = activeParts(more, noMeta)
   const games = useMemo(() => {
-    let list = all
+    const isFav = (id: string): boolean => prefs.favorites.includes(id)
+    // the window's order wins when set; otherwise the group's own (View)
+    let list = apply(all, more, isFav)
     if (effectiveFilter === 'installed') list = list.filter((g) => g.installed)
     if (effectiveFilter === 'notInstalled') list = list.filter((g) => !g.installed)
     const q = norm(query.trim())
     if (q) list = list.filter((g) => norm(g.name).includes(q))
+    if (more.sort !== 'title') return list
     const byName = (a: Game, b: Game): number => a.sortName.localeCompare(b.sortName, 'pl')
     const sorted = [...list]
     if (sort === 'name') sorted.sort(byName)
@@ -87,7 +101,7 @@ export function GroupScreen({ category, active }: { category: Category; active: 
     if (sort === 'added') sorted.sort((a, b) => (b.addedAt ?? 0) - (a.addedAt ?? 0) || byName(a, b))
     if (sort === 'playtime') sorted.sort((a, b) => (b.playtimeMinutes ?? -1) - (a.playtimeMinutes ?? -1) || byName(a, b))
     return sorted
-  }, [all, effectiveFilter, query, sort])
+  }, [all, effectiveFilter, query, sort, more, prefs.favorites])
 
   const favs = useMemo(() => new Set(prefs.favorites), [prefs.favorites])
 
@@ -115,7 +129,11 @@ export function GroupScreen({ category, active }: { category: Category; active: 
         nextSort()
         return true
       },
-      x: toggleFavoriteOfFocused,
+      x: () => {
+        setFiltersOpen(true)
+        return true
+      },
+      rs: toggleFavoriteOfFocused,
       back: () => {
         if (query) {
           setQuery('')
@@ -126,10 +144,11 @@ export function GroupScreen({ category, active }: { category: Category; active: 
       }
     },
     {
-      enabled: active,
+      enabled: active && !filtersOpen,
       hints: [
         { action: 'confirm', label: 'Otwórz' },
-        { action: 'x', label: 'Ulubiona' },
+        { action: 'x', label: moreParts.length ? `Filtry (${moreParts.length})` : 'Filtry' },
+        { action: 'rs', label: 'Ulubiona' },
         { action: 'y', label: 'Szukaj' },
         ...(hasInstallState ? [{ action: 'rt' as const, label: 'Filtr' }] : []),
         { action: 'view', label: 'Sortuj' },
@@ -190,11 +209,16 @@ export function GroupScreen({ category, active }: { category: Category; active: 
             {mode === 'gamepad' && <Glyph action="rt" />}
           </>
         )}
+        <button className={`btn btn--ghost ${moreParts.length ? 'is-on' : ''}`} tabIndex={-1} onClick={() => setFiltersOpen(true)} title={moreParts.join(' · ')}>
+          {mode === 'gamepad' && <Glyph action="x" />}
+          Filtry{moreParts.length ? <strong> ({moreParts.length})</strong> : ''}
+        </button>
         <button className="btn btn--ghost" tabIndex={-1} onClick={nextSort}>
           {mode === 'gamepad' && <Glyph action="view" />}
           Sortuj: <strong>{SORTS.find(([s]) => s === sort)![1]}</strong>
         </button>
       </div>
+      {moreParts.length > 0 && <p className="group__filters">{moreParts.join(' · ')}</p>}
       {category.smart === 'all' && <LibraryNotice />}
       {category.kind === 'emustart' && <EmuNotice />}
       {games.length ? (
@@ -210,10 +234,13 @@ export function GroupScreen({ category, active }: { category: Category; active: 
                 : category.kind === 'custom'
                   ? 'Przypisz gry w ekranie gry → „Kategorie”.'
                   : category.smart === 'favorites'
-                    ? 'Naciśnij X (lub F) na plakacie, aby dodać grę do ulubionych.'
+                    ? 'Naciśnij R3 (lub U) na plakacie, aby dodać grę do ulubionych.'
                     : 'Brak gier w tej grupie.'}
           </p>
         </div>
+      )}
+      {filtersOpen && (
+        <TvFilters system={category.name} games={all} steam={noMeta} filter={more} onChange={setMore} onClose={() => setFiltersOpen(false)} />
       )}
     </div>
   )

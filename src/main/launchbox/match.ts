@@ -112,7 +112,42 @@ const PLATFORM_TAGS: Record<string, string> = {
   pc: 'Windows',
   dos: 'MS-DOS',
   amiga: 'Commodore Amiga',
-  c64: 'Commodore 64'
+  c64: 'Commodore 64',
+  // EmuStart system names (es) not covered above
+  '3do': '3DO Interactive Multiplayer',
+  amigawhdgames: 'Commodore Amiga',
+  atari2600: 'Atari 2600',
+  atari5200: 'Atari 5200',
+  atari7800: 'Atari 7800',
+  atarijaguar: 'Atari Jaguar',
+  lynx: 'Atari Lynx',
+  atarist: 'Atari ST',
+  fds: 'Nintendo Famicom Disk System',
+  intellivision: 'Mattel Intellivision',
+  msx: 'Microsoft MSX',
+  msx2: 'Microsoft MSX2',
+  n64dd: 'Nintendo 64DD',
+  ngp: 'SNK Neo Geo Pocket',
+  ngpc: 'SNK Neo Geo Pocket Color',
+  odyssey2: 'Magnavox Odyssey 2',
+  pc88: 'NEC PC-8801',
+  pc98: 'NEC PC-9801',
+  pico: 'Sega Pico',
+  pokemini: 'Nintendo Pokemon Mini',
+  satellaview: 'Nintendo Satellaview',
+  scv: 'Epoch Super Cassette Vision',
+  sega32x: 'Sega 32X',
+  snesmsu1: 'Super Nintendo Entertainment System',
+  vectrex: 'GCE Vectrex',
+  virtualboy: 'Nintendo Virtual Boy',
+  wswan: 'WonderSwan',
+  wswanc: 'WonderSwan Color',
+  zxspectrum: 'Sinclair ZX Spectrum'
+}
+
+/** LaunchBox platform of an EmuStart system (its es name) */
+export function platformForEs(es: string): string | undefined {
+  return PLATFORM_TAGS[es.toLowerCase()]
 }
 
 /** LaunchBox platform for a shortcut, from its Steam tags (first recognised tag wins). */
