@@ -1,4 +1,4 @@
-import type { Game } from '@shared/types'
+import type { Game, GameRatings } from '@shared/types'
 
 // Game list filters of the TV layout — EmuStart's filters (engine/web/options.js: FL) for Lumen's
 // games: search in the title, genre, decade, players, region, developer, what to show and the
@@ -12,12 +12,26 @@ export interface Filter {
   region: string
   dev: string
   show: 'all' | 'local' | 'pinned' | 'fav' | 'played' | 'unplayed'
-  sort: 'title' | 'year' | 'last' | 'time' | 'size'
+  sort: 'title' | 'year' | 'last' | 'time' | 'size' | RatingSort
 }
+
+/** sorting by a rating: LaunchBox community, critics (Metacritic), players (Steam reviews) */
+export type RatingSort = 'launchbox' | 'critic' | 'players'
+export const RATING_SORTS: readonly RatingSort[] = ['launchbox', 'critic', 'players']
+export const isRatingSort = (s: Filter['sort']): s is RatingSort => (RATING_SORTS as readonly string[]).includes(s)
 
 export const FILTER_DEFAULT: Filter = { q: '', genre: '', decade: '', players: 0, region: '', dev: '', show: 'all', sort: 'title' }
 
-export const SORT: Record<Filter['sort'], string> = { title: 'tytuł', year: 'rok premiery', last: 'ostatnio grane', time: 'czas gry', size: 'rozmiar' }
+export const SORT: Record<Filter['sort'], string> = {
+  title: 'tytuł',
+  year: 'rok premiery',
+  last: 'ostatnio grane',
+  time: 'czas gry',
+  size: 'rozmiar',
+  launchbox: 'ocena LaunchBox',
+  critic: 'ocena krytyków (Metacritic)',
+  players: 'ocena graczy (recenzje Steam)'
+}
 export const PLAYERS: Record<number, string> = { 0: 'dowolna', 1: '1 gracz', 2: '2 i więcej', 3: '3 i więcej', 4: '4 i więcej' }
 /** "local": EmuStart — in the game cache, Steam — installed */
 export function showLabels(steam: boolean): Record<Filter['show'], string> {
@@ -67,8 +81,8 @@ export function matches(g: Game, f: Filter, fav: (id: string) => boolean, skip?:
   return true
 }
 
-/** Filtered and sorted games (title order is the list's own). */
-export function apply(all: Game[], f: Filter, fav: (id: string) => boolean): Game[] {
+/** Filtered and sorted games (title order is the list's own). Rating sorts: highest first, games without one last. */
+export function apply(all: Game[], f: Filter, fav: (id: string) => boolean, ratings: Record<string, GameRatings> = {}): Game[] {
   const out = all.filter((g) => matches(g, f, fav))
   const size = (g: Game): number => g.emu?.size ?? g.sizeOnDisk ?? 0
   const by: Partial<Record<Filter['sort'], (a: Game, b: Game) => number>> = {
@@ -76,6 +90,11 @@ export function apply(all: Game[], f: Filter, fav: (id: string) => boolean): Gam
     last: (a, b) => (b.lastPlayed ?? 0) - (a.lastPlayed ?? 0),
     time: (a, b) => (b.playtimeMinutes ?? 0) - (a.playtimeMinutes ?? 0),
     size: (a, b) => size(b) - size(a)
+  }
+  if (isRatingSort(f.sort)) {
+    const key = f.sort
+    const r = (g: Game): number => ratings[g.id]?.[key] ?? -1
+    by[key] = (a, b) => r(b) - r(a) || a.name.localeCompare(b.name)
   }
   const cmp = by[f.sort]
   return cmp ? out.sort(cmp) : out

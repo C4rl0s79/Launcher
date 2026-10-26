@@ -24,6 +24,13 @@ const TITLES: Record<Page, string> = {
 /** Steam games carry no EmuStart metadata — these filters (and sorting by year) are EmuStart's only */
 const META = ['genre', 'decade', 'players', 'region', 'dev']
 
+/** sort options that have data in this list: year and LaunchBox for EmuStart games, critics and players for Steam games */
+function sortFits(v: Filter['sort'], steam: boolean, games: Game[]): boolean {
+  if (v === 'year' || v === 'launchbox') return !steam
+  if (v === 'critic' || v === 'players') return games.some((g) => !g.emu)
+  return true
+}
+
 export function TvFilters({
   system,
   games,
@@ -159,7 +166,7 @@ export function TvFilters({
               }))
           : page === 'sort'
             ? (Object.keys(SORT) as Filter['sort'][])
-                .filter((v) => !(steam && v === 'year'))
+                .filter((v) => sortFits(v, steam, games))
                 .map((v) => ({
                   label: SORT[v],
                   value: f.sort === v ? '✓' : '',

@@ -1,6 +1,7 @@
 import type { EmuSystemLogo, EmuAccountMethod, EmuServerArt, EmuMetaField, EmuSettingsChange, EmuGameOptions, EmuSystemInfo, LbArtOptionsResult, EmuSaves,
   ActionResult,
   ArtKind, ArtLayout,
+  GameRatings,
   ArtOption,
   ArtOptionsResult,
   CacheStats,
@@ -40,6 +41,11 @@ export interface LumenApi {
     get(): Promise<LibrarySnapshot>
     refresh(includeAccount: boolean): Promise<LibrarySnapshot>
     onSnapshot(cb: (s: LibrarySnapshot) => void): () => void
+    /**
+     * ratings of these games (for sorting): what is known now; `missing` Steam games are looked up
+     * in the store in the background (ask again later)
+     */
+    ratings(gameIds: string[]): Promise<{ ratings: Record<string, GameRatings>; missing: number }>
   }
   game: {
     play(gameId: string): Promise<ActionResult>
@@ -194,6 +200,7 @@ export interface LumenApi {
 
 export const IPC = {
   libraryGet: 'library:get',
+  libraryRatings: 'library:ratings',
   libraryRefresh: 'library:refresh',
   librarySnapshot: 'library:snapshot',
   gamePlay: 'game:play',

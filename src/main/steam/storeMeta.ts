@@ -11,6 +11,10 @@ import { log } from '../logger'
 // for 14 days and serve stale data when offline.
 
 const TTL_MS = 14 * 24 * 3600 * 1000
+/** GameDetails.version of what parseAppDetails builds; older cached entries are fetched again */
+const DATA_VERSION = 3
+/** Steam store categories meaning co-op: Co-op, Online Co-op, Shared/Split Screen Co-op, LAN Co-op */
+const COOP_CATEGORIES = new Set([9, 38, 39, 48])
 
 export function parseAppDetails(appId: number, json: unknown): GameDetails | null {
   const entry = (json as Record<string, { success?: boolean; data?: Record<string, unknown> }>)?.[String(appId)]
@@ -24,6 +28,9 @@ export function parseAppDetails(appId: number, json: unknown): GameDetails | nul
     developers?: string[]
     publishers?: string[]
     website?: string | null
+    metacritic?: { score?: number }
+    categories?: { id?: number }[]
+    ratings?: Record<string, { rating?: string }>
   }
   const nonEmpty = (a?: string[]): string[] | undefined => {
     const v = (a ?? []).map((x) => x?.trim()).filter(Boolean)
@@ -41,8 +48,36 @@ export function parseAppDetails(appId: number, json: unknown): GameDetails | nul
     comingSoon: d.release_date?.coming_soon,
     developers: nonEmpty(d.developers),
     publishers: nonEmpty(d.publishers),
-    website: d.website || undefined
+    website: d.website || undefined,
+    criticScore: d.metacritic?.score || undefined,
+    coop: d.categories ? d.categories.some((c) => COOP_CATEGORIES.has(Number(c.id))) : undefined,
+    esrb: ageRating(d.ratings),
+    version: DATA_VERSION
   }
+}
+
+/** PEGI when the store lists it (Europe), else ESRB */
+function ageRating(r?: Record<string, { rating?: string }>): string | undefined {
+  const pegi = r?.pegi?.rating?.trim()
+  if (pegi && /^\d+$/.test(pegi)) return `PEGI ${pegi}`
+  const esrb = r?.esrb?.rating?.trim()
+  return esrb ? `ESRB ${esrb.toUpperCase()}` : undefined
+}
+
+/** Steam user reviews counted by SteamSpy (positive / negative) */
+export function parseSteamSpy(json: unknown): { playerScore?: number; playerReviews?: number } {
+  const j = json as { positive?: number; negative?: number }
+  const pos = Number(j?.positive) || 0
+  const total = pos + (Number(j?.negative) || 0)
+  return total ? { playerScore: Math.round((100 * pos) / total), playerReviews: total } : {}
+}
+
+/** Steam user reviews: share of positive (0–100) and how many — appreviews summary */
+export function parseReviewSummary(json: unknown): { playerScore?: number; playerReviews?: number } {
+  const q = (json as { success?: number; query_summary?: { total_positive?: number; total_reviews?: number } })?.query_summary
+  const total = Number(q?.total_reviews) || 0
+  if (!total) return {}
+  return { playerScore: Math.round((100 * (Number(q?.total_positive) || 0)) / total), playerReviews: total }
 }
 
 function decodeEntities(s: string): string {
@@ -63,6 +98,34 @@ export class StoreMetadataProvider {
     private readonly language: () => string
   ) {}
 
+  /** ratings from the cache only (no network): undefined = not fetched in the current format yet */
+  async cachedRatings(appId: number): Promise<{ critic?: number; players?: number } | undefined> {
+    try {
+      const d = JSON.parse(await fs.readFile(this.file(appId), 'utf8')) as GameDetails
+      if ((d.version ?? 1) < DATA_VERSION) return undefined
+      return { critic: d.criticScore, players: d.playerScore }
+    } catch {
+      return undefined
+    }
+  }
+
+  /** fetch these apps' store data one by one in the background (sorting by rating) */
+  private queue: number[] = []
+  private filling = false
+  prefetch(appIds: number[]): void {
+    const known = new Set(this.queue)
+    for (const id of appIds) if (!known.has(id)) this.queue.push(id)
+    if (this.filling) return
+    this.filling = true
+    void (async () => {
+      while (this.queue.length) {
+        const id = this.queue.shift()!
+        await this.get(id).catch(() => undefined)
+      }
+      this.filling = false
+    })()
+  }
+
   private file(appId: number): string {
     return path.join(this.dir, `${appId}.json`)
   }
@@ -82,13 +145,34 @@ export class StoreMetadataProvider {
     } catch {
       /* not cached */
     }
-    if (cached && !force && Date.now() - cached.fetchedAt < TTL_MS) return { ok: true, details: cached, stale: false }
+    if (cached && !force && (cached.version ?? 1) >= DATA_VERSION && Date.now() - cached.fetchedAt < TTL_MS) return { ok: true, details: cached, stale: false }
 
     try {
       const details = await this.limiter.run(async () => {
         const url = `https://store.steampowered.com/api/appdetails?appids=${appId}&l=${encodeURIComponent(this.language())}`
         const res = await fetchWithTimeout(url, { headers: { 'Accept-Language': 'pl,en;q=0.8' } }, 12000)
-        return parseAppDetails(appId, await res.json())
+        const parsed = parseAppDetails(appId, await res.json())
+        if (!parsed) return null
+        // player reviews: Steam's public summary, else SteamSpy's counts; the details stay useful without them
+        try {
+          const rv = await fetchWithTimeout(
+            `https://store.steampowered.com/appreviews/${appId}?json=1&language=all&purchase_type=all&num_per_page=0`,
+            { redirect: 'error' },
+            12000
+          )
+          Object.assign(parsed, parseReviewSummary(await rv.json()))
+        } catch {
+          /* the store sends some regions to its front page — SteamSpy below */
+        }
+        if (parsed.playerScore === undefined) {
+          try {
+            const sp = await fetchWithTimeout(`https://steamspy.com/api.php?request=appdetails&appid=${appId}`, {}, 12000)
+            Object.assign(parsed, parseSteamSpy(await sp.json()))
+          } catch {
+            /* no player reviews */
+          }
+        }
+        return parsed
       })
       if (!details) {
         return cached

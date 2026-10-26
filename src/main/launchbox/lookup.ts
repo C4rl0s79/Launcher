@@ -15,6 +15,11 @@ export interface GameRow {
   genres: string
   players: string
   rating: string
+  // schema 3 (absent in an older database until it is rebuilt)
+  rating_count?: string
+  esrb?: string
+  coop?: string
+  release_type?: string
 }
 
 export function findGame(db: DatabaseSync, name: string, platform: string | undefined): GameRow | null {
@@ -75,6 +80,10 @@ export function toDetails(g: GameRow): GameDetails {
     players: g.players || undefined,
     rating: g.rating ? Math.round(Number(g.rating) * 10) / 10 || undefined : undefined,
     platform: g.platform || undefined,
-    launchboxId: g.id
+    launchboxId: g.id,
+    ratingCount: Number(g.rating_count) || undefined,
+    esrb: g.esrb && !/^not rated$/i.test(g.esrb) ? g.esrb : undefined,
+    coop: g.coop === 'true' ? true : g.coop === 'false' ? false : undefined,
+    releaseType: g.release_type || undefined
   }
 }

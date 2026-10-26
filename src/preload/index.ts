@@ -15,6 +15,7 @@ const api: LumenApi = {
   library: {
     get: () => invoke(IPC.libraryGet),
     refresh: (includeAccount) => invoke(IPC.libraryRefresh, includeAccount),
+    ratings: (ids) => invoke(IPC.libraryRatings, ids),
     onSnapshot: (cb) => subscribe(IPC.librarySnapshot, cb)
   },
   game: {

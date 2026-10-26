@@ -191,6 +191,23 @@ export class LaunchBoxService extends EventEmitter {
     }
   }
 
+  /** community ratings (0–5) of these LaunchBox entries — the ones that have one */
+  ratingsById(ids: number[]): Map<number, number> {
+    const out = new Map<number, number>()
+    const db = this.open()
+    if (!db || !ids.length) return out
+    try {
+      for (let i = 0; i < ids.length; i += 500) {
+        const part = ids.slice(i, i + 500)
+        const rows = db.prepare(`SELECT id, rating FROM games WHERE id IN (${part.map(() => '?').join(',')})`).all(...part) as { id: number; rating: string }[]
+        for (const r of rows) if (Number(r.rating) > 0) out.set(r.id, Number(r.rating))
+      }
+    } catch {
+      /* database being rebuilt */
+    }
+    return out
+  }
+
   /** details of a LaunchBox entry by its id */
   detailsById(id: number): GameDetails | null {
     const db = this.open()

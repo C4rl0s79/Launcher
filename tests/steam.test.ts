@@ -16,7 +16,7 @@ import {
 } from '../src/main/steam/local'
 import { parseRegQuery } from '../src/main/steam/registry'
 import { parseOwnedGames } from '../src/main/steam/webApi'
-import { parseAppDetails } from '../src/main/steam/storeMeta'
+import { parseAppDetails, parseReviewSummary, parseSteamSpy } from '../src/main/steam/storeMeta'
 import { mergeLibrary, sortKey } from '../src/main/library/merge'
 
 const FIX = path.join(__dirname, 'fixtures')
@@ -215,6 +215,21 @@ describe('Steam store metadata', () => {
     expect(d.genres).toEqual(['Akcja'])
     expect(d.developers).toEqual(['Valve'])
     expect(d.publishers).toBeUndefined()
+    expect(d.criticScore).toBeUndefined()
+  })
+
+  it('reads Metacritic, co-op, the age rating and the Steam reviews summary', () => {
+    const d = parseAppDetails(620, {
+      '620': {
+        success: true,
+        data: { name: 'Portal 2', metacritic: { score: 95 }, categories: [{ id: 2 }, { id: 9 }], ratings: { pegi: { rating: '12' }, esrb: { rating: 'e10' } } }
+      }
+    })!
+    expect(d).toMatchObject({ criticScore: 95, coop: true, esrb: 'PEGI 12', version: 3 })
+    expect(parseReviewSummary({ success: 1, query_summary: { total_positive: 980, total_reviews: 1000 } })).toEqual({ playerScore: 98, playerReviews: 1000 })
+    expect(parseReviewSummary({ success: 1, query_summary: { total_reviews: 0 } })).toEqual({})
+    expect(parseSteamSpy({ positive: 427835, negative: 5675 })).toEqual({ playerScore: 99, playerReviews: 433510 })
+    expect(parseSteamSpy({})).toEqual({})
   })
 
   it('returns null for failed lookups', () => {

@@ -127,7 +127,8 @@ export function emuDetails(d: Record<string, unknown> | null | undefined): Detai
     developers: m.developer ? [m.developer] : undefined,
     publishers: m.publisher ? [m.publisher] : undefined,
     players: m.players || undefined,
-    platform: (d.system as string) || undefined
+    platform: (d.system as string) || undefined,
+    plays: Number(d.plays) || undefined
   }
   return { ok: true, details, stale: !d.meta_online }
 }

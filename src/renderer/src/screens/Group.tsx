@@ -10,6 +10,7 @@ import { gameCountLabel } from '../lib/format'
 import { Glyph } from '../components/Hints'
 import { EmuNotice } from '../components/EmuNotice'
 import { TvFilters } from '../tv/TvFilters'
+import { useRatings } from '../tv/ratings'
 import { activeParts, apply, loadFilter, saveFilter, type Filter as GameFilter } from '../tv/filters'
 
 // One group (tab in the top bar): every game of the category as a Steam-style poster grid.
@@ -85,10 +86,11 @@ export function GroupScreen({ category, active }: { category: Category; active: 
 
   const noMeta = !all.some((g) => g.emu)
   const moreParts = activeParts(more, noMeta)
+  const ratings = useRatings(all, more.sort)
   const games = useMemo(() => {
     const isFav = (id: string): boolean => prefs.favorites.includes(id)
     // the window's order wins when set; otherwise the group's own (View)
-    let list = apply(all, more, isFav)
+    let list = apply(all, more, isFav, ratings)
     if (effectiveFilter === 'installed') list = list.filter((g) => g.installed)
     if (effectiveFilter === 'notInstalled') list = list.filter((g) => !g.installed)
     const q = norm(query.trim())
@@ -101,7 +103,7 @@ export function GroupScreen({ category, active }: { category: Category; active: 
     if (sort === 'added') sorted.sort((a, b) => (b.addedAt ?? 0) - (a.addedAt ?? 0) || byName(a, b))
     if (sort === 'playtime') sorted.sort((a, b) => (b.playtimeMinutes ?? -1) - (a.playtimeMinutes ?? -1) || byName(a, b))
     return sorted
-  }, [all, effectiveFilter, query, sort, more, prefs.favorites])
+  }, [all, effectiveFilter, query, sort, more, prefs.favorites, ratings])
 
   const favs = useMemo(() => new Set(prefs.favorites), [prefs.favorites])
 

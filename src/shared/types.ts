@@ -220,8 +220,25 @@ export interface GameDetails {
   players?: string
   /** community rating 0–5 (LaunchBox) */
   rating?: number
+  /** how many ratings make `rating` (LaunchBox) */
+  ratingCount?: number
+  /** age rating (LaunchBox: "E - Everyone", "T - Teen"…) */
+  esrb?: string
+  /** can be played cooperatively (LaunchBox) */
+  coop?: boolean
+  /** LaunchBox release type: Released, Homebrew, Unlicensed… */
+  releaseType?: string
+  /** critics: Metacritic score 0–100 (Steam store) */
+  criticScore?: number
+  /** players: share of positive Steam reviews 0–100 and how many reviews */
+  playerScore?: number
+  playerReviews?: number
   platform?: string
   launchboxId?: number
+  /** how many times the game was started (EmuStart) */
+  plays?: number
+  /** Steam store data format (3: with Metacritic, reviews, co-op, age rating) — older cache is refreshed */
+  version?: number
 }
 
 export interface LaunchBoxStatus {
@@ -294,6 +311,13 @@ export interface Prefs {
   artTv: Record<string, GameArtPrefs>
   /** game with several versions (emugrp:…) → the version the player chose (emu:<sid>) */
   versions: Record<string, string>
+}
+
+/** ratings of a game for sorting lists: LaunchBox community (0–5), critics (Metacritic 0–100), players (Steam reviews % positive) */
+export interface GameRatings {
+  launchbox?: number
+  critic?: number
+  players?: number
 }
 
 /** which layout an art choice belongs to (the TV layout keeps its own) */

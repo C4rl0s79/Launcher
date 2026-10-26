@@ -50,6 +50,12 @@ describe('TV layout: game list filters (EmuStart rules)', () => {
     expect(apply(games, { ...f, show: 'unplayed' }, fav).map((g) => g.id)).toEqual(['b', 'c'])
   })
 
+  it('sorts by a rating, highest first, games without one last', () => {
+    const ratings = { a: { launchbox: 3.9 }, c: { launchbox: 4.6 } }
+    expect(apply(games, { ...FILTER_DEFAULT, sort: 'launchbox' }, fav, ratings).map((g) => g.id)).toEqual(['c', 'a', 'b'])
+    expect(apply(games, { ...FILTER_DEFAULT, sort: 'critic' }, fav, { b: { critic: 80 } })[0].id).toBe('b')
+  })
+
   it('sorts and counts like EmuStart', () => {
     expect(apply(games, { ...FILTER_DEFAULT, sort: 'year' }, fav).map((g) => g.id)).toEqual(['c', 'b', 'a'])
     expect(apply(games, { ...FILTER_DEFAULT, sort: 'size' }, fav)[0].id).toBe('c')

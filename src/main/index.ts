@@ -4,7 +4,7 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { ART_SCHEME, IPC } from '@shared/api'
 import { isModeCombo } from '@shared/pad'
-import type { ActionResult, ArtKind, ArtLayout, ArtOption, DetailsResult, FsEntry, FsListOptions, Game, JobsSnapshot, LibrarySnapshot, Prefs, SecretName, SettingsPatch, SgdbGame, UiMode } from '@shared/types'
+import type { ActionResult, ArtKind, ArtLayout, ArtOption, DetailsResult, GameRatings, FsEntry, FsListOptions, Game, JobsSnapshot, LibrarySnapshot, Prefs, SecretName, SettingsPatch, SgdbGame, UiMode } from '@shared/types'
 import { initLogger, log } from './logger'
 import { chooseDataDir, migrateDataDir } from './dataDir'
 import { listDir } from './fsBrowse'
@@ -353,6 +353,10 @@ function withLaunchBox(gameId: string, r: DetailsResult): DetailsResult {
       publishers: d.publishers?.length ? d.publishers : lb.publishers,
       players: d.players || lb.players,
       rating: d.rating ?? lb.rating,
+      ratingCount: d.ratingCount ?? lb.ratingCount,
+      esrb: d.esrb || lb.esrb,
+      coop: d.coop ?? lb.coop,
+      releaseType: d.releaseType || lb.releaseType,
       launchboxId: d.launchboxId ?? lb.launchboxId
     }
   }
@@ -588,6 +592,26 @@ async function updatePrefs(fn: (p: Prefs) => Prefs): Promise<Prefs> {
 
 function registerIpc(): void {
   handle(IPC.libraryGet, () => unified.current)
+  handle(IPC.libraryRatings, async (ids: string[]) => {
+    const ratings: Record<string, GameRatings> = {}
+    const missing: number[] = []
+    const lbIds = new Map<number, string[]>()
+    for (const id of Array.isArray(ids) ? ids.slice(0, 20000) : []) {
+      if (isEmuGameId(id)) {
+        const lb = emuLbId(id)
+        if (lb) lbIds.set(lb, [...(lbIds.get(lb) ?? []), id])
+        continue
+      }
+      const appId = steamAppIdOf(id)
+      if (!appId) continue
+      const r = await meta.cachedRatings(appId)
+      if (r) ratings[id] = { critic: r.critic, players: r.players }
+      else missing.push(appId)
+    }
+    for (const [lb, r] of launchbox.ratingsById([...lbIds.keys()])) for (const id of lbIds.get(lb) ?? []) ratings[id] = { ...ratings[id], launchbox: r }
+    if (missing.length) meta.prefetch(missing)
+    return { ratings, missing: missing.length }
+  })
   handle(IPC.libraryRefresh, async (includeAccount: boolean) => {
     if (includeAccount) await library.refreshAccount(true)
     await Promise.all([library.scan(), engine.state === 'ready' ? emu.refresh() : undefined])

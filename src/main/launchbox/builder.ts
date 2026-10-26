@@ -10,7 +10,7 @@ import { STORED_TYPES } from './images'
 // Lumen does not use; images only of the types Lumen shows. Runs inside a worker thread (worker.ts).
 
 /** bump when the schema changes — an older database is rebuilt (service.ts) */
-export const SCHEMA_VERSION = 2
+export const SCHEMA_VERSION = 3 // 3: ESRB, co-op, release type, number of ratings
 
 export interface LbGameRow {
   id: number
@@ -23,6 +23,13 @@ export interface LbGameRow {
   genres: string
   players: string
   rating: string
+  /** community ratings counted in `rating` */
+  ratingCount: string
+  esrb: string
+  /** "true" / "false" */
+  coop: string
+  /** Released, Homebrew, Unlicensed, Early Access… */
+  releaseType: string
 }
 
 export interface LbImageRow {
@@ -82,7 +89,11 @@ export function parseMetadataXml(
               publisher: (cur.Publisher ?? '').trim(),
               genres: (cur.Genres ?? '').trim(),
               players: (cur.MaxPlayers ?? '').trim(),
-              rating: (cur.CommunityRating ?? '').trim()
+              rating: (cur.CommunityRating ?? '').trim(),
+              ratingCount: (cur.CommunityRatingCount ?? '').trim(),
+              esrb: (cur.ESRB ?? '').trim(),
+              coop: (cur.Cooperative ?? '').trim(),
+              releaseType: (cur.ReleaseType ?? '').trim()
             })
           }
         } else if (record === 'GameImage') {
@@ -106,7 +117,7 @@ export function parseMetadataXml(
 export const SCHEMA = `
 CREATE TABLE IF NOT EXISTS games(id INTEGER PRIMARY KEY, name TEXT, platform TEXT,
     year TEXT, overview TEXT, developer TEXT, publisher TEXT, genres TEXT,
-    players TEXT, rating TEXT);
+    players TEXT, rating TEXT, rating_count TEXT, esrb TEXT, coop TEXT, release_type TEXT);
 CREATE TABLE IF NOT EXISTS names(norm TEXT, gid INTEGER, platform TEXT);
 CREATE TABLE IF NOT EXISTS images(gid INTEGER, type TEXT, region TEXT, fn TEXT);
 CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT);
@@ -122,7 +133,7 @@ export async function buildDatabase(
   try {
     db.exec('PRAGMA journal_mode=OFF; PRAGMA synchronous=OFF;')
     db.exec(SCHEMA)
-    const insGame = db.prepare('INSERT OR REPLACE INTO games VALUES(?,?,?,?,?,?,?,?,?,?)')
+    const insGame = db.prepare('INSERT OR REPLACE INTO games VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
     const insName = db.prepare('INSERT INTO names VALUES(?,?,?)')
     const insImage = db.prepare('INSERT INTO images VALUES(?,?,?,?)')
     const platformOf = new Map<number, string>()
@@ -133,7 +144,22 @@ export async function buildDatabase(
     await parseMetadataXml(
       xml,
       (g) => {
-        insGame.run(g.id, g.name, g.platform, g.year, g.overview, g.developer, g.publisher, g.genres, g.players, g.rating)
+        insGame.run(
+          g.id,
+          g.name,
+          g.platform,
+          g.year,
+          g.overview,
+          g.developer,
+          g.publisher,
+          g.genres,
+          g.players,
+          g.rating,
+          g.ratingCount,
+          g.esrb,
+          g.coop,
+          g.releaseType
+        )
         insName.run(normTitle(g.name), g.id, g.platform)
         platformOf.set(g.id, g.platform)
         if (++games % 5000 === 0) progress(games)

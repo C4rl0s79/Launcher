@@ -376,6 +376,17 @@ Od Lumen 0.6.0 (plan: `docs/PLAN-TV-REACT.md`, etap 1) — **jeden interfejs, dw
   `tv/filters.ts`: szukaj w tytule, gatunek, dekada, gracze, region z nazwy, producent, co pokazać,
   sortowanie; zapamiętane dla każdego systemu w `localStorage`; Steam — tylko szukaj, co pokazać i
   sortowanie bez roku), Y — opcje gry (Steam: szczegóły), L3 / Z — szukaj, R3 / U — ulubiona.
+- **Szczegóły i oceny** (lista TV — pasek na dole: logo z lewej, szczegóły obok):
+  - LaunchBox (baza w schemacie 3, przebudowuje się sama): ocena społeczności i liczba głosów, ESRB,
+    kooperacja, typ wydania, maks. liczba graczy;
+  - Steam: Metacritic, kooperacja (kategorie sklepu), PEGI / ESRB z `appdetails`; recenzje graczy
+    (% pozytywnych) z `appreviews`, a gdy sklep przekierowuje (niektóre regiony) — z SteamSpy;
+    format danych `GameDetails.version` = 3 (starszy cache pobierany ponownie);
+  - EmuStart: system, liczba uruchomień, emulator, zapisy (stany + synchronizacja), ile gry na dysku
+    (`gameOptions` po zatrzymaniu się na grze).
+  - Sortowanie (filtry TV i pulpitu): ocena LaunchBox, krytyków (Metacritic), graczy (recenzje Steam);
+    gry bez oceny na końcu. Oceny całej listy: `library.ratings` (LaunchBox z lokalnej bazy; Steam z cache,
+    brakujące pobierane w tle — lista pyta ponownie co 20 s).
 - **Grafiki trybu TV osobno od trybu pulpitu** (Lumen 1.0.9): tryb TV pokazuje okładkę w całości, okienko
   zrzutu i logo — inaczej niż plakat 2:3 i szerokie tło pulpitu, więc ma własne wybory (`prefs.artTv`,
   `ops.setArt(…, 'tv')`) i własny adres obrazka (`lumen-art://…?tv=1`, `tvArt` w `main/index.ts`).

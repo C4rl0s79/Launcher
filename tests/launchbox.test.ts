@@ -23,6 +23,10 @@ Second paragraph.</Overview>
     <Publisher>Namco</Publisher>
     <Genres>Flight Simulator; Shooter</Genres>
     <CommunityRating>4.2874</CommunityRating>
+    <CommunityRatingCount>52</CommunityRatingCount>
+    <ESRB>T - Teen</ESRB>
+    <Cooperative>true</Cooperative>
+    <ReleaseType>Released</ReleaseType>
   </Game>
   <Game>
     <Name>Ace Combat 5: The Unsung War</Name>
@@ -141,8 +145,14 @@ describe('LaunchBox database', () => {
         releaseDate: '2004',
         players: '2',
         rating: 4.3,
+        ratingCount: 52,
+        esrb: 'T - Teen',
+        coop: true,
+        releaseType: 'Released',
         platform: 'Sony Playstation 2'
       })
+      // ratings for sorting a list, by LaunchBox id
+      expect(findGame(db, 'Final Fantasy X', 'Sony Playstation 2')?.esrb).toBe('')
       expect(d.descriptionText).toContain('Second paragraph.')
     } finally {
       db.close()
@@ -184,7 +194,7 @@ describe('LaunchBox images', () => {
     try {
       const got = db.prepare('SELECT type, region, fn FROM images WHERE gid = ?').all(3912) as { type: string; region: string; fn: string }[]
       expect(sortImages(got, LB_TYPES.box, 'usa').map((i) => i.region)).toEqual(['North America', 'Europe'])
-      expect((db.prepare("SELECT v FROM meta WHERE k = 'schema'").get() as { v: string }).v).toBe('2')
+      expect((db.prepare("SELECT v FROM meta WHERE k = 'schema'").get() as { v: string }).v).toBe('3')
     } finally {
       db.close()
     }

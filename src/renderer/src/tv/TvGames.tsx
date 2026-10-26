@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import type { DetailsResult, Game } from '@shared/types'
+import type { DetailsResult, EmuGameOptions, Game } from '@shared/types'
 import { api, askText, attempt, useStore } from '../store'
 import { useActions } from '../nav/input'
 import { Art } from '../components/Art'
@@ -8,6 +8,7 @@ import { usePrimaryAction } from '../lib/primary'
 import { formatBytes, formatLastPlayed, plural, formatPlaytime, htmlToParagraphs, stateLabel, versionCountLabel } from '../lib/format'
 import { STEAM, type TvSystem } from './data'
 import { TvFilters } from './TvFilters'
+import { useRatings } from './ratings'
 import { activeParts, apply, loadFilter, saveFilter, type Filter } from './filters'
 import { useLook } from './look'
 
@@ -61,7 +62,8 @@ export function TvGames({ system, onBack, onMenu, active }: { system: TvSystem; 
   const [filters, setFilters] = useState(false)
   const [options, setOptions] = useState(false)
   const isFav = (id: string): boolean => !!favorites?.includes(id)
-  const games = useMemo(() => apply(system.games, filter, isFav), [system.games, filter, favorites]) // eslint-disable-line react-hooks/exhaustive-deps
+  const ratings = useRatings(system.games, filter.sort)
+  const games = useMemo(() => apply(system.games, filter, isFav, ratings), [system.games, filter, favorites, ratings]) // eslint-disable-line react-hooks/exhaustive-deps
   const activeFilters = activeParts(filter, steam)
   const [idx, setIdx] = useState(() => Math.max(0, system.games.findIndex((g) => g.id === opened)))
   const sel = games[Math.min(idx, games.length - 1)]
@@ -210,7 +212,15 @@ export function TvGames({ system, onBack, onMenu, active }: { system: TvSystem; 
       </div>
       {sel && <TvPreview game={sel} details={d} />}
       {sel && <TvInfo game={sel} details={d} note={primary?.note} />}
-      {options && sel && <GameOptions game={sel} onClose={() => setOptions(false)} />}
+      {options && sel && (
+        <GameOptions
+          game={sel}
+          onClose={() => {
+            delete emuOptions[sel.id] // emulator, saves or download may have changed there
+            setOptions(false)
+          }}
+        />
+      )}
       {filters && (
         <TvFilters system={system.display} games={system.games} steam={steam} filter={filter} onChange={setFilter} onClose={() => setFilters(false)} />
       )}
@@ -340,6 +350,38 @@ function TvPreview({ game, details: dr }: { game: Game; details: DetailsResult |
   )
 }
 
+/** EmuStart's own data of the shown game (emulator, saves, bytes on this PC) — after a short pause on it */
+const emuOptions: Record<string, EmuGameOptions> = {}
+function useEmuOptions(game: Game): EmuGameOptions | null {
+  const [o, setO] = useState<EmuGameOptions | null>(null)
+  useEffect(() => {
+    if (!game.emu) return setO(null)
+    if (emuOptions[game.id]) return setO(emuOptions[game.id])
+    setO(null)
+    let alive = true
+    const t = setTimeout(() => {
+      void api()
+        .emustart.gameOptions(game.id)
+        .then((r) => {
+          emuOptions[game.id] = r
+          if (alive) setO(r)
+        })
+        .catch(() => undefined)
+    }, 300)
+    return () => {
+      alive = false
+      clearTimeout(t)
+    }
+  }, [game])
+  return o
+}
+
+function saveLine(o: EmuGameOptions): string {
+  const s = o.sync
+  const st = s.state === 'synced' ? 'zsynchronizowane' : s.state === 'pending' ? 'czekają na wysłanie' : 'jeszcze nie synchronizowane'
+  return `${o.states ? `${o.states} ${plural(o.states, 'stan', 'stany', 'stanów')} · ` : ''}${st}`
+}
+
 /**
  * The bar at the bottom of the screen, across its whole width: the game's logo on the left (always —
  * its title when there is none), the details next to it in a few lines.
@@ -356,17 +398,31 @@ function TvInfo({ game, details: dr, note }: { game: Game; details: DetailsResul
           ? 'pobrana'
           : 'na serwerze'
     : stateLabel(game)
+  const o = useEmuOptions(game)
+  const size = e ? e.size : game.sizeOnDisk
+  const local = o?.local ?? 0
   const rows: [string, string | undefined][] = [
     ['Status', status],
     ['Oznaczenia', e?.tags],
-    ['Rozmiar', e ? formatBytes(e.size) : formatBytes(game.sizeOnDisk)],
+    ['System', o?.system || (e ? e.system : undefined) || d?.platform],
+    ['Rozmiar', formatBytes(size)],
+    ['Pobrano', e && local > 0 && size && local < size ? `${formatBytes(local)} z ${formatBytes(size)}` : undefined],
     ['Ostatnio', formatLastPlayed(game.lastPlayed) ?? 'nigdy'],
     ['Czas gry', formatPlaytime(game.playtimeMinutes) ?? '–'],
+    ['Uruchomienia', d?.plays ? String(d.plays) : undefined],
     ['Gatunek', d?.genres?.join(', ') || e?.genre],
     ['Rok', d?.releaseDate || e?.year],
     ['Producent', d?.developers?.join(', ')],
     ['Wydawca', d?.publishers?.join(', ')],
     ['Gracze', d?.players],
+    ['Kooperacja', d?.coop === undefined ? undefined : d.coop ? 'tak' : 'nie'],
+    ['Wiek', d?.esrb],
+    ['Ocena LaunchBox', d?.rating ? `★ ${d.rating.toFixed(1).replace('.', ',')}/5${d.ratingCount ? ` · ${d.ratingCount} ${plural(d.ratingCount, 'głos', 'głosy', 'głosów')}` : ''}` : undefined],
+    ['Krytycy', d?.criticScore ? `Metacritic ${d.criticScore}` : undefined],
+    ['Recenzje Steam', d?.playerScore !== undefined && d.playerReviews ? `${d.playerScore}% pozytywnych · ${d.playerReviews.toLocaleString('pl-PL')}` : undefined],
+    ['Wydanie', d?.releaseType && !/^released$/i.test(d.releaseType) ? d.releaseType : undefined],
+    ['Emulator', o ? o.emulator.label || 'brak emulatora' : undefined],
+    ['Zapisy', o ? saveLine(o) : undefined],
     ['Płyty', e && e.discs > 1 ? String(e.discs) : undefined],
     ['Wersje', e?.versions ? `${e.versions.length} — wybór w opcjach gry` : undefined]
   ]
