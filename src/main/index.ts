@@ -606,10 +606,10 @@ function registerIpc(): void {
       if (!appId) continue
       const r = await meta.cachedRatings(appId)
       if (r) ratings[id] = { critic: r.critic, players: r.players }
-      else missing.push(appId)
+      else if (!meta.wasTried(appId)) missing.push(appId) // tried this run without data: no rating
     }
     for (const [lb, r] of launchbox.ratingsById([...lbIds.keys()])) for (const id of lbIds.get(lb) ?? []) ratings[id] = { ...ratings[id], launchbox: r }
-    if (missing.length) meta.prefetch(missing)
+    if (missing.length) void meta.prefetch(missing)
     return { ratings, missing: missing.length }
   })
   handle(IPC.libraryRefresh, async (includeAccount: boolean) => {
@@ -892,12 +892,14 @@ async function emustartDefaults(): Promise<void> {
 
 app.on('second-instance', () => restoreWindow())
 
+let started = false // set once the app is ready: a second instance quitting at once has nothing to stop
 app.whenReady().then(async () => {
   log.info('app', `Lumen ${app.getVersion()} starting (electron ${process.versions.electron}, packaged=${app.isPackaged})`)
   log.info('app', `data folder: ${userData}`)
   if (dataChoice.warning) log.warn('app', dataChoice.warning)
   if (migrated.length) log.info('app', `copied from ${legacyDataDir} (left unchanged): ${migrated.join(', ')}`)
   await Promise.all([settings.init(), prefs.init(), emu.init()])
+  started = true
   registerArtProtocol()
   registerIpc()
 
@@ -964,20 +966,24 @@ app.whenReady().then(async () => {
   if (settings.get().emustartEnabled) engine.start().catch((e) => log.error('engine', 'start failed', e))
 })
 
-app.on('window-all-closed', () => {
-  library.stop()
-  emu.stop()
-  void artwork.flush()
-  app.quit()
+app.on('window-all-closed', () => app.quit())
+
+// Every way out (window closed, "Wyjdź z Lumen", the engine's quit event) passes here — app.quit()
+// does not emit window-all-closed. Stop polling, save the art cache index, and let the engine finish
+// (save uploads after the last game) before Lumen exits.
+let shutDown = false
+app.on('before-quit', (e) => {
+  if (shutDown || !started) return
+  e.preventDefault()
+  shutDown = true
+  void shutdown().finally(() => app.quit())
 })
 
-// let the engine finish (save uploads after the last game) before Lumen exits
-let engineStopped = false
-app.on('before-quit', (e) => {
-  if (engineStopped || engine.state === 'disabled' || engine.state === 'missing') return
-  e.preventDefault()
-  engineStopped = true
-  void engine.stop().finally(() => app.quit())
-})
+async function shutdown(): Promise<void> {
+  library.stop()
+  emu.stop()
+  await artwork.flush()
+  if (engine.state !== 'disabled' && engine.state !== 'missing') await engine.stop()
+}
 
 process.on('unhandledRejection', (e) => log.error('app', 'unhandled rejection', e))

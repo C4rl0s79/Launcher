@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { mkdirSync, mkdtempSync, writeFileSync, existsSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import type { ArtKind, ArtOption, GameArtPrefs, SgdbGame } from '@shared/types'
@@ -211,6 +211,13 @@ describe('ArtworkService', () => {
     release()
     await Promise.all([first, ...rest])
     expect(order).toEqual([3, 2, 1])
+  })
+
+  it('quitting before the index was read never overwrites it with an empty one', async () => {
+    const cacheDir = tmp()
+    writeFileSync(path.join(cacheDir, 'index.json'), JSON.stringify({ version: 1, entries: { 'steam:1|grid': { file: 'x' } } }))
+    await service({ cacheDir }).svc.flush() // e.g. a second Lumen quitting at once
+    expect(JSON.parse(readFileSync(path.join(cacheDir, 'index.json'), 'utf8')).entries).toHaveProperty(['steam:1|grid'])
   })
 
   it('clears the cache directory and reports stats', async () => {

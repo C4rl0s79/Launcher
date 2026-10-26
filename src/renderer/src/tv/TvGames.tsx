@@ -61,6 +61,7 @@ export function TvGames({ system, onBack, onMenu, active }: { system: TvSystem; 
   }
   const [filters, setFilters] = useState(false)
   const [options, setOptions] = useState(false)
+  const [infoRev, setInfoRev] = useState(0) // the details bar reads EmuStart's data again after "Opcje gry"
   const isFav = (id: string): boolean => !!favorites?.includes(id)
   const ratings = useRatings(system.games, filter.sort)
   const games = useMemo(() => apply(system.games, filter, isFav, ratings), [system.games, filter, favorites, ratings]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -211,12 +212,14 @@ export function TvGames({ system, onBack, onMenu, active }: { system: TvSystem; 
         </div>
       </div>
       {sel && <TvPreview game={sel} details={d} />}
-      {sel && <TvInfo game={sel} details={d} note={primary?.note} />}
+      {sel && <TvInfo game={sel} details={d} note={primary?.note} rev={infoRev} />}
       {options && sel && (
         <GameOptions
           game={sel}
           onClose={() => {
-            delete emuOptions[sel.id] // emulator, saves or download may have changed there
+            // emulator, saves or download may have changed there
+            for (const k of Object.keys(emuOptions)) if (k.startsWith(`${sel.id}|`)) delete emuOptions[k]
+            setInfoRev((r) => r + 1)
             setOptions(false)
           }}
         />
@@ -352,18 +355,21 @@ function TvPreview({ game, details: dr }: { game: Game; details: DetailsResult |
 
 /** EmuStart's own data of the shown game (emulator, saves, bytes on this PC) — after a short pause on it */
 const emuOptions: Record<string, EmuGameOptions> = {}
-function useEmuOptions(game: Game): EmuGameOptions | null {
+function useEmuOptions(game: Game, rev: number): EmuGameOptions | null {
   const [o, setO] = useState<EmuGameOptions | null>(null)
+  // remembered per download state: after a download ends (or the copy is removed) it is read again
+  const e = game.emu
+  const key = e ? `${game.id}|${e.cached}|${e.copying}|${e.pinned}` : ''
   useEffect(() => {
-    if (!game.emu) return setO(null)
-    if (emuOptions[game.id]) return setO(emuOptions[game.id])
+    if (!key) return setO(null)
+    if (emuOptions[key]) return setO(emuOptions[key])
     setO(null)
     let alive = true
     const t = setTimeout(() => {
       void api()
         .emustart.gameOptions(game.id)
         .then((r) => {
-          emuOptions[game.id] = r
+          emuOptions[key] = r
           if (alive) setO(r)
         })
         .catch(() => undefined)
@@ -372,7 +378,7 @@ function useEmuOptions(game: Game): EmuGameOptions | null {
       alive = false
       clearTimeout(t)
     }
-  }, [game])
+  }, [key, rev]) // eslint-disable-line react-hooks/exhaustive-deps
   return o
 }
 
@@ -386,7 +392,7 @@ function saveLine(o: EmuGameOptions): string {
  * The bar at the bottom of the screen, across its whole width: the game's logo on the left (always —
  * its title when there is none), the details next to it in a few lines.
  */
-function TvInfo({ game, details: dr, note }: { game: Game; details: DetailsResult | null; note?: string }) {
+function TvInfo({ game, details: dr, note, rev }: { game: Game; details: DetailsResult | null; note?: string; rev: number }) {
   const d = dr?.ok ? dr.details : undefined
   const e = game.emu
   const status = e
@@ -398,7 +404,7 @@ function TvInfo({ game, details: dr, note }: { game: Game; details: DetailsResul
           ? 'pobrana'
           : 'na serwerze'
     : stateLabel(game)
-  const o = useEmuOptions(game)
+  const o = useEmuOptions(game, rev)
   const size = e ? e.size : game.sizeOnDisk
   const local = o?.local ?? 0
   const rows: [string, string | undefined][] = [

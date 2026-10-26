@@ -105,6 +105,8 @@ export class ArtworkService {
 
   async flush(): Promise<void> {
     clearTimeout(this.saveTimer)
+    // never read (nothing resolved yet, or a second Lumen quitting at once): the file on disk is newer
+    if (!this.loaded) return
     try {
       await fs.mkdir(this.deps.cacheDir, { recursive: true })
       const tmp = this.indexFile + '.tmp'

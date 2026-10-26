@@ -109,21 +109,32 @@ export class StoreMetadataProvider {
     }
   }
 
-  /** fetch these apps' store data one by one in the background (sorting by rating) */
+  /**
+   * Fetch these apps' store data one by one in the background (sorting by rating). An app is tried
+   * once per run: one the store has no data for (delisted, a tool) or that failed (no network) is not
+   * queued again — the list stops asking for it (wasTried).
+   */
   private queue: number[] = []
-  private filling = false
-  prefetch(appIds: number[]): void {
+  private filling: Promise<void> | null = null
+  private tried = new Set<number>()
+  prefetch(appIds: number[]): Promise<void> {
     const known = new Set(this.queue)
-    for (const id of appIds) if (!known.has(id)) this.queue.push(id)
-    if (this.filling) return
-    this.filling = true
-    void (async () => {
-      while (this.queue.length) {
-        const id = this.queue.shift()!
-        await this.get(id).catch(() => undefined)
-      }
-      this.filling = false
-    })()
+    for (const id of appIds) if (!known.has(id) && !this.tried.has(id)) this.queue.push(id)
+    if (!this.filling) {
+      this.filling = (async () => {
+        while (this.queue.length) {
+          const id = this.queue.shift()!
+          await this.get(id).catch(() => undefined)
+          this.tried.add(id)
+        }
+      })().finally(() => (this.filling = null))
+    }
+    return this.filling
+  }
+
+  /** fetched in the background this run (whether the store had data or not) */
+  wasTried(appId: number): boolean {
+    return this.tried.has(appId)
   }
 
   private file(appId: number): string {

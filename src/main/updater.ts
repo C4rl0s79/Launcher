@@ -248,6 +248,8 @@ export interface UpdaterOptions {
   portableFile?: string
   /** development/tests only: a local release feed instead of GitHub (LUMEN_UPDATE_FEED) */
   feed?: string
+  /** tests only: how long the version check waits for GitHub (default 20 s) */
+  checkTimeoutMs?: number
   quit: () => void
 }
 
@@ -289,7 +291,13 @@ export class Updater extends EventEmitter {
     const readyVersion = this.s.phase === 'ready' ? this.s.info?.version : undefined
     this.set({ phase: 'checking', error: undefined })
     try {
-      const res = await fetch(this.o.feed ?? API_URL, { headers: { 'User-Agent': `Lumen/${this.o.current}`, Accept: 'application/vnd.github+json' } })
+      // a stalled connection must not leave "checking" on screen for good
+      const res = await fetch(this.o.feed ?? API_URL, {
+        headers: { 'User-Agent': `Lumen/${this.o.current}`, Accept: 'application/vnd.github+json' },
+        signal: AbortSignal.timeout(this.o.checkTimeoutMs ?? 20_000)
+      }).catch((e: Error) => {
+        throw e.name === 'TimeoutError' ? new Error('GitHub nie odpowiada') : e
+      })
       if (!res.ok) throw new Error(`GitHub: HTTP ${res.status}`)
       const info = readRelease(await res.json(), this.o.flavor, this.o.current)
       const phase = !info.newer ? 'none' : !info.file ? 'none' : readyVersion === info.version ? 'ready' : 'available'

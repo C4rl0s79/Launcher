@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeAll } from 'vitest'
+import { describe, expect, it, beforeAll, vi } from 'vitest'
 import { mkdtempSync, readFileSync, writeFileSync, cpSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -16,7 +16,7 @@ import {
 } from '../src/main/steam/local'
 import { parseRegQuery } from '../src/main/steam/registry'
 import { parseOwnedGames } from '../src/main/steam/webApi'
-import { parseAppDetails, parseReviewSummary, parseSteamSpy } from '../src/main/steam/storeMeta'
+import { parseAppDetails, parseReviewSummary, parseSteamSpy, StoreMetadataProvider } from '../src/main/steam/storeMeta'
 import { mergeLibrary, sortKey } from '../src/main/library/merge'
 
 const FIX = path.join(__dirname, 'fixtures')
@@ -281,5 +281,21 @@ describe('library merge', () => {
     expect(sortKey('The Witness')).toBe('witness')
     const games = mergeLibrary({ manifests, localStats: new Map(), showTools: false })
     expect(games.map((g) => g.name)).toEqual(['Portal 2', 'The Witness'])
+  })
+})
+
+describe('ratings for sorting', () => {
+  it('asks the store once per run for an app it has no data for (no endless lookups)', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'lumen-meta-'))
+    // a delisted app: the store answers success: false
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(JSON.stringify({ '42': { success: false } })))
+    const meta = new StoreMetadataProvider(dir, () => 'polish')
+    await meta.prefetch([42])
+    expect(meta.wasTried(42)).toBe(true)
+    expect(await meta.cachedRatings(42)).toBeUndefined()
+    const calls = fetchMock.mock.calls.length
+    await meta.prefetch([42]) // the list asks again 20 s later
+    expect(fetchMock.mock.calls.length).toBe(calls)
+    fetchMock.mockRestore()
   })
 })

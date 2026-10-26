@@ -133,4 +133,16 @@ describe('updater', () => {
     expect((await u.check()).phase).toBe('ready')
     fetchMock.mockRestore()
   })
+
+  it('a version check that gets no answer ends with an error instead of checking forever', async () => {
+    // the request only ends when its signal aborts (a stalled connection)
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(
+      (_url, init) => new Promise((_resolve, reject) => init?.signal?.addEventListener('abort', () => reject(init.signal!.reason)))
+    )
+    const u = new Updater({ current: '0.4.0', flavor: 'zip', dataDir: tmpdir(), exe: 'X:\Lumen.exe', quit: () => undefined, checkTimeoutMs: 50 })
+    const s = await u.check()
+    expect(s.phase).toBe('error')
+    expect(s.error).toContain('GitHub nie odpowiada')
+    fetchMock.mockRestore()
+  })
 })
