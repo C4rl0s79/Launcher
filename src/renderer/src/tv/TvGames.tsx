@@ -208,7 +208,8 @@ export function TvGames({ system, onBack, onMenu, active }: { system: TvSystem; 
           {!games.length && <p className="tv-dim">Brak gier{activeFilters.length ? ' dla tych filtrów (X — zmień albo wyczyść)' : ''}.</p>}
         </div>
       </div>
-      {sel && <TvPreview game={sel} details={d} note={primary?.note} />}
+      {sel && <TvPreview game={sel} details={d} />}
+      {sel && <TvInfo game={sel} details={d} note={primary?.note} />}
       {options && sel && <GameOptions game={sel} onClose={() => setOptions(false)} />}
       {filters && (
         <TvFilters system={system.display} games={system.games} steam={steam} filter={filter} onChange={setFilter} onClose={() => setFilters(false)} />
@@ -290,7 +291,7 @@ function useMediaFit(boxRatio: number, snapRatio: number): { ref: (el: HTMLDivEl
   return { ref: setEl, h: Math.max(0, Math.floor(h)) }
 }
 
-function TvPreview({ game, details: dr, note }: { game: Game; details: DetailsResult | null; note?: string }) {
+function TvPreview({ game, details: dr }: { game: Game; details: DetailsResult | null }) {
   const [boxOk, setBoxOk] = useState(true)
   const [snapOk, setSnapOk] = useState(true)
   // the cover and the screenshot share one height (their own shapes); when both do not fit side by
@@ -303,29 +304,6 @@ function TvPreview({ game, details: dr, note }: { game: Game; details: DetailsRe
     setSnapOk(true)
   }, [game.id])
   const d = dr?.ok ? dr.details : undefined
-  const e = game.emu
-  const status = e
-    ? e.copying
-      ? 'pobieranie…'
-      : e.pinned
-        ? 'zachowana na dysku'
-        : e.cached
-          ? 'pobrana'
-          : 'na serwerze'
-    : stateLabel(game)
-  const rows: [string, string | undefined][] = [
-    ['Status', status],
-    ['Rozmiar', e ? formatBytes(e.size) : formatBytes(game.sizeOnDisk)],
-    ['Ostatnio', formatLastPlayed(game.lastPlayed) ?? 'nigdy'],
-    ['Czas gry', formatPlaytime(game.playtimeMinutes) ?? '–'],
-    ['Gatunek', d?.genres?.join(', ') || e?.genre],
-    ['Rok', d?.releaseDate || e?.year],
-    ['Producent', d?.developers?.join(', ')],
-    ['Wydawca', d?.publishers?.join(', ')],
-    ['Gracze', d?.players],
-    ['Płyty', e && e.discs > 1 ? String(e.discs) : undefined],
-    ['Wersje', e?.versions ? `${e.versions.length} — wybór w opcjach gry` : undefined]
-  ]
   const desc = d?.descriptionText ? d.descriptionText.split(/\n+/) : d?.descriptionHtml ? htmlToParagraphs(d.descriptionHtml, 20) : d?.shortDescription ? [d.shortDescription] : []
   return (
     <div className="tv-preview" ref={fitH.ref} style={fitH.h ? { ['--tv-media-fit' as string]: `${fitH.h}px` } : undefined}>
@@ -358,12 +336,46 @@ function TvPreview({ game, details: dr, note }: { game: Game; details: DetailsRe
         ))}
         {game.source !== 'emustart' && !desc.length && <p>Gra z biblioteki Steam.</p>}
       </div>
-      <div className="tv-meta">
-        {/* at the bottom, full width: the game's logo (its title when there is none), then the details in a few lines */}
-        <div className="tv-head">
-          <LogoTitle key={game.id} game={game} text={<h1>{game.name}</h1>} />
-          {e?.tags && <p className="tags">{e.tags}</p>}
-        </div>
+    </div>
+  )
+}
+
+/**
+ * The bar at the bottom of the screen, across its whole width: the game's logo on the left (always —
+ * its title when there is none), the details next to it in a few lines.
+ */
+function TvInfo({ game, details: dr, note }: { game: Game; details: DetailsResult | null; note?: string }) {
+  const d = dr?.ok ? dr.details : undefined
+  const e = game.emu
+  const status = e
+    ? e.copying
+      ? 'pobieranie…'
+      : e.pinned
+        ? 'zachowana na dysku'
+        : e.cached
+          ? 'pobrana'
+          : 'na serwerze'
+    : stateLabel(game)
+  const rows: [string, string | undefined][] = [
+    ['Status', status],
+    ['Oznaczenia', e?.tags],
+    ['Rozmiar', e ? formatBytes(e.size) : formatBytes(game.sizeOnDisk)],
+    ['Ostatnio', formatLastPlayed(game.lastPlayed) ?? 'nigdy'],
+    ['Czas gry', formatPlaytime(game.playtimeMinutes) ?? '–'],
+    ['Gatunek', d?.genres?.join(', ') || e?.genre],
+    ['Rok', d?.releaseDate || e?.year],
+    ['Producent', d?.developers?.join(', ')],
+    ['Wydawca', d?.publishers?.join(', ')],
+    ['Gracze', d?.players],
+    ['Płyty', e && e.discs > 1 ? String(e.discs) : undefined],
+    ['Wersje', e?.versions ? `${e.versions.length} — wybór w opcjach gry` : undefined]
+  ]
+  return (
+    <div className="tv-info">
+      <div className="tv-info__logo">
+        <LogoTitle key={game.id} game={game} text={<h1>{game.name}</h1>} />
+      </div>
+      <div className="tv-info__body">
         <dl>
           {rows
             .filter((r): r is [string, string] => !!r[1])

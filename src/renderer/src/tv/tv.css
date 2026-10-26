@@ -188,6 +188,9 @@
   display: grid;
   /* the list keeps its width whatever the preview holds (a wide screenshot, a long title) */
   grid-template-columns: max(300px, var(--tv-list-w)) minmax(0, 1fr);
+  /* list | preview; below both, the logo and details bar */
+  grid-template-rows: minmax(0, 1fr) auto;
+  row-gap: 1.5vh;
   gap: 2.5vw;
   padding: 0 3vw;
 }
@@ -290,9 +293,9 @@
 .tv-preview {
   display: grid;
   /* cover | screenshot at one height (--tv-media-fit from TvPreview lowers both when they do not fit
-     side by side); the description below them; at the bottom, full width: logo, details in a few lines */
+     side by side); the description below them (the logo and details: the bar under list and preview) */
   grid-template-columns: auto minmax(0, 1fr);
-  grid-template-rows: var(--tv-media-fit, var(--tv-media-h)) minmax(0, 1fr) auto;
+  grid-template-rows: var(--tv-media-fit, var(--tv-media-h)) minmax(0, 1fr);
   gap: 2.5vh 1.6vw;
   padding-top: 1.25vh;
   overflow: hidden;
@@ -340,35 +343,41 @@
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
   background: #000;
 }
-.tv-meta {
-  grid-column: 1 / -1;
-  min-width: 0;
-  padding-bottom: 1vh;
-}
 .tv-snap {
   justify-self: end;
 }
-.tv-head {
+/* the bar at the bottom of the screen, across the whole width (list and preview): the game's logo on
+   the left, the details next to it in a few lines */
+.tv-info {
+  grid-column: 1 / -1;
   display: flex;
-  align-items: flex-end;
-  gap: 1em;
+  align-items: center;
+  gap: 2vw;
   min-width: 0;
-  margin-bottom: 0.6em;
+  padding: 1.2vh 1.6vw;
+  background: var(--tv-panel);
+  border: 1px solid var(--tv-line);
+  border-radius: 14px;
 }
-.tv-meta h1 {
+.tv-info__logo {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  max-width: 28vw;
+  min-width: 0;
+}
+.tv-info__body {
+  flex: 1;
+  min-width: 0;
+}
+.tv-info h1 {
   margin: -0.15em 0 0;
   font-size: calc(1.45em * var(--tv-fs-title));
   line-height: 1.15;
   font-weight: 600;
 }
-.tv-meta .tags {
-  font-size: calc(1em * var(--tv-fs-meta));
-  color: var(--tv-dim);
-  margin: 0 0 0.2em;
-  white-space: nowrap;
-}
-/* the details as one flowing block of "label value" pairs (2-3 lines on the full width) */
-.tv-meta dl {
+/* the details as one flowing block of "label value" pairs (2-3 lines) */
+.tv-info dl {
   display: flex;
   flex-wrap: wrap;
   gap: 0.35em 1.8em;
@@ -381,23 +390,23 @@
   min-width: 0;
   max-width: 100%;
 }
-.tv-meta dt {
+.tv-info dt {
   color: var(--tv-dim);
 }
-.tv-meta dd {
+.tv-info dd {
   margin: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.tv-meta .st-c {
+.tv-info .st-c {
   color: var(--tv-ok);
 }
-.tv-meta .st-n {
+.tv-info .st-n {
   color: var(--tv-accent2);
 }
 .tv-note {
-  margin: 1em 0 0;
+  margin: 0.4em 0 0;
   color: var(--tv-dim);
   font-size: 0.85em;
   line-height: 1.4;
@@ -546,9 +555,9 @@
   height: calc(var(--tv-row) * var(--tv-tlogo-h));
   max-width: var(--tv-tlogo-w);
 }
-.tv-meta .tv-logo .tv-logo__img {
-  height: 9vh;
-  max-width: 40vw;
+.tv-info .tv-logo .tv-logo__img {
+  height: 8vh;
+  max-width: 28vw;
   filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.8));
 }
 
