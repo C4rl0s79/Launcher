@@ -199,7 +199,7 @@ Lumen **nie dodaje** własnej synchronizacji — używa klienta EmuStart 0.46.0 
 
 ### 6.0. Zapisy jak Steam Cloud — EmuStart 0.47 / 0.48 (Lumen 0.5.0)
 
-Wszystko poniżej robi kod EmuStart (silnik Lumena = EmuStart 0.48.0); Lumen niczego tu nie dokłada poza
+Wszystko poniżej robi kod EmuStart (silnik Lumena = EmuStart 0.48.3); Lumen niczego tu nie dokłada poza
 oknem „Zapisy” i „Przejmij profil” w trybie pulpitu. **Wymaga EmuStart Server 0.48.0.**
 - **jeden zestaw zapisów na konto i grę**: zapisy w grze wspólne dla zgodnych rdzeni (SNES: Snes9x,
   bsnes, Mesen-S; NES: FCEUmm, Nestopia, Mesen, QuickNES), stany per rdzeń — „Wczytaj zapis” i okno
@@ -214,6 +214,12 @@ oknem „Zapisy” i „Przejmij profil” w trybie pulpitu. **Wymaga EmuStart S
   starcie** pobranie nowszych wersji znanych paczek;
 - **rejestracje per program**: serwer zastępuje tylko rejestrację tego samego programu na sprzęcie;
   Lumen wysyła `app: "Lumen"` (`lumen.install_device_identity`) i dalej własny skrót sprzętu.
+- **EmuStart 0.48.2 / 0.48.3** (silnik Lumena od 26.10.2026, bez zmian w Lumenie — metody silnika te same):
+  stany PS2 jedną paczką `pcsx2/states` wspólną dla PCSX2 (PC) i ArmSX2 (telefon), stany z dwóch
+  urządzeń się sumują; „Wczytaj zapis” w RetroArchu nie nadpisuje następnego stanu (stan jako
+  autozapis przy starcie); ustawienia zmienione w samym emulatorze (np. przypisania pada) przejmowane
+  do profilu, który grał ostatnio — w historii ustawień emulatora („Opcje gry → Ustawienia emulatora”)
+  jako „zmiany w emulatorze poza EmuStart”; DuckStation / PCSX2 po grze przywracają tylko numer pada.
 
 ### 6.1. Rozjazd zapisów między Lumenem, EmuStart i telefonem — diagnoza (20.10.2026)
 
