@@ -277,3 +277,30 @@ def test_clean_look_keeps_only_simple_values():
     assert clean_look(None) == {}
 
 
+
+
+def test_retroarch_chosen_state_loads_as_auto_without_entryslot(tmp_path):
+    """„Wczytaj zapis” stanu 4: bez --entryslot (ustawiał slot 4 — następny zapis nadpisywał 5);
+    stan wczytywany jako autozapis, następny zapis — kolejny numer (savestate_auto_index)."""
+    _write(tmp_path / "retroarch.cfg", b"")
+    st = tmp_path / "states"
+    _write(st / "Gra.state4", b"S4")
+    _write(st / "Gra.state4.png", b"P4")
+    _write(st / "Gra.state.auto", b"OLD-AUTO")
+    ra = ingame.RetroArch(str(tmp_path / "retroarch.exe"))
+    args = ra.start_state_args(tmp_path / "run", st / "Gra.state4")
+    assert not any("entryslot" in a for a in args)
+    assert (st / "Gra.state.auto").read_bytes() == b"S4" and (st / "Gra.state.auto.png").read_bytes() == b"P4"
+    assert (st / "Gra.state.auto.emustart-bak").read_bytes() == b"OLD-AUTO"
+    assert 'savestate_auto_load = "true"' in (tmp_path / "run" / "emustart_ra.cfg").read_text(encoding="utf-8")
+
+
+def test_pad_remap_restore_keeps_bindings_changed_in_game(tmp_path):
+    """DuckStation / PCSX2: po grze wraca tylko numer pada — przycisk przypisany w trakcie gry zostaje."""
+    ini = tmp_path / "settings.ini"
+    _write(ini, b"[Pad1]\nCross = SDL-0/A\nCircle = SDL-0/B\n")
+    restore = ingame._remap_sdl_ini(ini, "Pad{}", [1])
+    assert ingame.ini_section(ini, "Pad1") == {"Cross": "SDL-1/A", "Circle": "SDL-1/B"}
+    ingame.ini_edit(ini, {("Pad1", "Cross"): "SDL-1/X"})                  # gracz zmienia w trakcie gry
+    restore()
+    assert ingame.ini_section(ini, "Pad1") == {"Cross": "SDL-0/X", "Circle": "SDL-0/B"}

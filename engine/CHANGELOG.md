@@ -33,6 +33,33 @@ Plan najbliższych zmian: [ROADMAP.md](ROADMAP.md).
 - Od EmuStart 0.48.0 zapisy przy logowaniu / starcie / wylogowaniu i blokada profilu są w EmuStart
   (Lumen nie dokłada już własnych — `lumen_saves.py` usunięty).
 
+## [0.48.3] — 2026-10-26
+
+Zakres: ustawienia emulatorów w profilu (`profiles.py`), przypisania pada (`ingame.py`). Zaktualizuj PC.
+
+### Poprawione
+- **Ustawienia zmienione w samym emulatorze (bez EmuStart) zostają** — przy następnej grze
+  EmuStart nadpisywał je ustawieniami z profilu (np. przypisania pada). Teraz wykrywa zmianę od
+  ostatniej gry i przejmuje ją do profilu, który grał ostatnio (wpis w historii zmian „zmiany w
+  emulatorze poza EmuStart”); wartości tego komputera (ścieżki, karta graficzna) się nie liczą.
+- **DuckStation / PCSX2: przypisania pada zmienione w trakcie gry zostają** — po grze wracał
+  cały wpis sprzed gry; teraz wraca tylko numer pada (kolejność kontrolerów).
+
+## [0.48.2] — 2026-10-26
+
+Zakres: stany PS2 paczką wspólną dla PCSX2 i ArmSX2 (`savebundles.py`, `launcher.py`, Android:
+`Saves.kt`, `SaveSync.kt`), „Wczytaj zapis” w RetroArchu (`ingame.py`). Zaktualizuj PC i telefon.
+
+### Poprawione
+- **„Wczytaj zapis” w RetroArchu nie nadpisuje następnego stanu** — po wczytaniu np. stanu 4
+  kolejny zapis szedł do slotu 5 (nadpisując istniejący), a nie do 11. Wybrany stan wczytuje się
+  teraz jako autozapis przy starcie (bez `--entryslot`), więc RetroArch numeruje dalej od
+  najwyższego stanu (jak na telefonie).
+- **Stany PS2 synchronizują się jak stany RetroArcha** — jedna paczka `pcsx2/states` na grę,
+  wspólna dla PCSX2 (PC) i ArmSX2 / AetherSX2 (telefon), nazwy plików jak w emulatorze (numer
+  płyty i CRC). Stany z dwóch urządzeń się sumują (zajęty slot — starszy stan na pierwszy wolny
+  slot 00–09). Wcześniej telefon wysyłał je do osobnego folderu, a PC synchronizował folder stanów
+  — urządzenia nie widziały swoich stanów. Menedżer „Stany PS2” usunięty z telefonu.
 ## [0.48.1] — 2026-10-20
 
 Zakres: synchronizacja stanów (`syncclient.py`, `savebundles.py`, `savesync.py`, `savemigrate.py`,
