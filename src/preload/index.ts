@@ -41,16 +41,16 @@ const api: LumenApi = {
     onChange: (cb) => subscribe(IPC.settingsChanged, cb)
   },
   art: {
-    url: (gameId, kind, rev = 0) => `${ART_SCHEME}://img/${encodeURIComponent(gameId)}/${kind}?r=${rev}`,
+    url: (gameId, kind, rev = 0, layout) => `${ART_SCHEME}://img/${encodeURIComponent(gameId)}/${kind}?r=${rev}${layout === 'tv' ? '&tv=1' : ''}`,
     options: (id, kind) => invoke(IPC.artOptions, id, kind),
     search: (term) => invoke(IPC.artSearch, term),
     setMatch: (id, g) => invoke(IPC.artSetMatch, id, g),
-    choose: (id, kind, option) => invoke(IPC.artChoose, id, kind, option),
+    choose: (id, kind, option, layout) => invoke(IPC.artChoose, id, kind, option, layout),
     launchboxOptions: (id, kind) => invoke(IPC.artLbOptions, id, kind),
-    chooseLaunchbox: (id, kind, url) => invoke(IPC.artChooseLb, id, kind, url),
-    useFile: (id, kind, file) => invoke(IPC.artUseFile, id, kind, file),
-    useSteam: (id, kind) => invoke(IPC.artUseSteam, id, kind),
-    reset: (id, kind) => invoke(IPC.artReset, id, kind),
+    chooseLaunchbox: (id, kind, url, layout) => invoke(IPC.artChooseLb, id, kind, url, layout),
+    useFile: (id, kind, file, layout) => invoke(IPC.artUseFile, id, kind, file, layout),
+    useSteam: (id, kind, layout) => invoke(IPC.artUseSteam, id, kind, layout),
+    reset: (id, kind, layout) => invoke(IPC.artReset, id, kind, layout),
     onChanged: (cb) => subscribe(IPC.artChanged, cb)
   },
   launchbox: {

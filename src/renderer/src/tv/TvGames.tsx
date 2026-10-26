@@ -258,7 +258,7 @@ function LogoTitle({ game, text }: { game: Game; text: ReactNode }) {
     <>
       {!ok && text}
       <span className={`tv-logo ${ok ? '' : 'is-wait'}`}>
-        <Art gameId={game.id} name={game.name} kind="logo" className="tv-logo__img" fallback="none" eager onState={setOk} />
+        <Art gameId={game.id} name={game.name} kind="logo" className="tv-logo__img" fallback="none" eager layout="tv" onState={setOk} />
       </span>
     </>
   )
@@ -300,7 +300,7 @@ function TvPreview({ game, details: dr, note, asLogo }: { game: Game; details: D
     <div className="tv-preview">
       <div className="tv-box">
         {boxOk ? (
-          <Art key={`b-${game.id}`} gameId={game.id} name={game.name} kind="grid" className="tv-boxart" fallback="none" eager onState={setBoxOk} />
+          <Art key={`b-${game.id}`} gameId={game.id} name={game.name} kind="grid" className="tv-boxart" fallback="none" eager layout="tv" onState={setBoxOk} />
         ) : (
           <div className="tv-noart">brak okładki</div>
         )}
@@ -320,7 +320,7 @@ function TvPreview({ game, details: dr, note, asLogo }: { game: Game; details: D
         </dl>
         {note && <p className="tv-note">{note}</p>}
       </div>
-      <div className="tv-snap">{snapOk && <Art key={`s-${game.id}`} gameId={game.id} name={game.name} kind="hero" className="tv-snapart" fallback="none" eager onState={setSnapOk} />}</div>
+      <div className="tv-snap">{snapOk && <Art key={`s-${game.id}`} gameId={game.id} name={game.name} kind="hero" className="tv-snapart" fallback="none" eager layout="tv" onState={setSnapOk} />}</div>
       <div className="tv-desc">
         {desc.slice(0, 20).map((p, i) => (
           <p key={i}>{p}</p>

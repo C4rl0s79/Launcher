@@ -287,9 +287,17 @@ export interface Prefs {
   gameCategories: Record<string, string[]>
   favorites: string[]
   art: Record<string, GameArtPrefs>
+  /**
+   * the TV layout's own art choices (cover / screenshot / logo shown differently than the desktop's
+   * poster / background) — separate from `art`
+   */
+  artTv: Record<string, GameArtPrefs>
   /** game with several versions (emugrp:…) → the version the player chose (emu:<sid>) */
   versions: Record<string, string>
 }
+
+/** which layout an art choice belongs to (the TV layout keeps its own) */
+export type ArtLayout = 'desktop' | 'tv'
 
 export type ArtSourcePriority = 'sgdbFirst' | 'steamFirst'
 export type AfterLaunch = 'minimize' | 'keep'

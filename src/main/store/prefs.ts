@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import type { ArtChoice, ArtKind, Category, EmuSystem, GameArtPrefs, Prefs, SteamCollection } from '@shared/types'
+import type { ArtChoice, ArtKind, ArtLayout, Category, EmuSystem, GameArtPrefs, Prefs, SteamCollection } from '@shared/types'
 import { JsonFile } from './jsonFile'
 
 // User library preferences: categories, favourites, artwork choices.
@@ -18,7 +18,7 @@ const REMOVED_SMART = new Set(['smart:installed', 'smart:notInstalled'])
 export const PREFS_VERSION = 3
 
 export function defaultPrefs(): Prefs {
-  return { version: PREFS_VERSION, categories: SMART_CATEGORIES.map((c) => ({ ...c })), gameCategories: {}, favorites: [], art: {}, versions: {} }
+  return { version: PREFS_VERSION, categories: SMART_CATEGORIES.map((c) => ({ ...c })), gameCategories: {}, favorites: [], art: {}, artTv: {}, versions: {} }
 }
 
 export function migratePrefs(raw: unknown): Prefs {
@@ -46,6 +46,7 @@ export function migratePrefs(raw: unknown): Prefs {
     gameCategories: isRecord(r.gameCategories) ? sanitizeGameCategories(r.gameCategories) : {},
     favorites: Array.isArray(r.favorites) ? r.favorites.filter((x) => typeof x === 'string') : [],
     art: isRecord(r.art) ? (r.art as Record<string, GameArtPrefs>) : {},
+    artTv: isRecord(r.artTv) ? (r.artTv as Record<string, GameArtPrefs>) : {},
     versions: isRecord(r.versions)
       ? Object.fromEntries(Object.entries(r.versions).filter((e): e is [string, string] => typeof e[1] === 'string'))
       : {}
@@ -234,11 +235,12 @@ export const ops = {
     return { ...p, favorites }
   },
 
-  setArt(p: Prefs, gameId: string, kind: ArtKind, choice: ArtChoice | undefined): Prefs {
-    const current = { ...(p.art[gameId] ?? {}) }
+  setArt(p: Prefs, gameId: string, kind: ArtKind, choice: ArtChoice | undefined, layout: ArtLayout = 'desktop'): Prefs {
+    const key = layout === 'tv' ? 'artTv' : 'art'
+    const current = { ...(p[key][gameId] ?? {}) }
     if (choice) current[kind] = choice
     else delete current[kind]
-    return { ...p, art: { ...p.art, [gameId]: current } }
+    return { ...p, [key]: { ...p[key], [gameId]: current } }
   },
 
   setSgdbMatch(p: Prefs, gameId: string, sgdbGameId: number | undefined, name?: string): Prefs {

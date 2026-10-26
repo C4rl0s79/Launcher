@@ -4,7 +4,7 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { ART_SCHEME, IPC } from '@shared/api'
 import { isModeCombo } from '@shared/pad'
-import type { ActionResult, ArtKind, ArtOption, DetailsResult, FsEntry, FsListOptions, Game, JobsSnapshot, LibrarySnapshot, Prefs, SecretName, SettingsPatch, SgdbGame, UiMode } from '@shared/types'
+import type { ActionResult, ArtKind, ArtLayout, ArtOption, DetailsResult, FsEntry, FsListOptions, Game, JobsSnapshot, LibrarySnapshot, Prefs, SecretName, SettingsPatch, SgdbGame, UiMode } from '@shared/types'
 import { initLogger, log } from './logger'
 import { chooseDataDir, migrateDataDir } from './dataDir'
 import { listDir } from './fsBrowse'
@@ -255,6 +255,10 @@ function registerArtProtocol(): void {
         if (!logo || !engine.baseUrl) return new Response('not found', { status: 404 })
         return (await engineMedia(logo)) ?? new Response('not found', { status: 404 })
       }
+      if (u.searchParams.get('tv') === '1') {
+        const own = await tvArt(gameId, kind as ArtKind)
+        if (own) return own
+      }
       if (isEmuGameId(gameId)) return await emuArt(gameId, kind)
       const game = findGame(gameId)
       const shortcutId = /^shortcut:(\d+)$/.exec(gameId)
@@ -422,6 +426,42 @@ async function emuArt(gameId: string, kind: string): Promise<Response> {
     if (f) return fileResponse(f)
   }
   return new Response('not found', { status: 404 })
+}
+
+const layoutOf = (layout: unknown): ArtLayout => (layout === 'tv' ? 'tv' : 'desktop')
+
+/**
+ * The TV layout's own art (a cover shown whole, a screenshot slot, a logo — not the desktop's 2:3
+ * poster and wide background): the TV choice, else for EmuStart games LaunchBox first (box front,
+ * background / screenshot, Clear Logo), then the server's art. null: nothing of its own — as on the
+ * desktop (Steam games, EmuStart games with neither).
+ */
+async function tvArt(gameId: string, k: ArtKind): Promise<Response | null> {
+  const choice = prefs.get().artTv[gameId]?.[k]
+  if (choice?.type === 'none') return new Response('none', { status: 404 })
+  if (choice?.type === 'file' && (await fs.stat(choice.file).catch(() => null))) return fileResponse(choice.file)
+  if (choice?.type === 'sgdb' || choice?.type === 'launchbox') {
+    const f = await artwork.fromUrl(gameId, k, choice.url)
+    if (f) return fileResponse(f)
+  }
+  if (!isEmuGameId(gameId)) return null
+  const server = (): Promise<Response | null> => engineArt(gameId, k)
+  const lb = (types: readonly string[]) => (): Promise<Response | null> => emuLbArt(gameId, k, types)
+  const steps =
+    choice?.type === 'steam'
+      ? [server]
+      : k === 'grid'
+        ? [lb(LB_TYPES.box), server]
+        : k === 'hero'
+          ? [lb(LB_TYPES.fanart), lb(LB_TYPES.screenshot), server]
+          : k === 'logo'
+            ? [lb(LB_TYPES.logo), server]
+            : []
+  for (const step of steps) {
+    const r = await step()
+    if (r) return r
+  }
+  return null
 }
 
 /**
@@ -673,10 +713,10 @@ function registerIpc(): void {
     if (st.outdated || st.job) return { ok: false, error: 'Baza LaunchBox aktualizuje się (dochodzi lista grafik) — spróbuj za kilka minut.' }
     return { ok: true, options: emuLbImages(gameId, PICKER_TYPES[kind] ?? []).slice(0, 48) }
   })
-  handle(IPC.artChooseLb, async (gameId: string, kind: ArtKind, url: string) => {
+  handle(IPC.artChooseLb, async (gameId: string, kind: ArtKind, url: string, layout?: ArtLayout) => {
     if (!ART_KINDS.includes(kind)) throw new Error('Nieznany rodzaj grafiki.')
     if (!String(url).startsWith(IMAGE_BASE)) throw new Error('Nieoczekiwany adres grafiki.')
-    const p = await updatePrefs((pr) => ops.setArt(pr, gameId, kind, { type: 'launchbox', url: String(url) }))
+    const p = await updatePrefs((pr) => ops.setArt(pr, gameId, kind, { type: 'launchbox', url: String(url) }, layoutOf(layout)))
     bumpArt(gameId, kind)
     return p
   })
@@ -693,13 +733,15 @@ function registerIpc(): void {
     bumpArt(gameId)
     return p
   })
-  handle(IPC.artChoose, async (gameId: string, kind: ArtKind, o: ArtOption) => {
+  handle(IPC.artChoose, async (gameId: string, kind: ArtKind, o: ArtOption, layout?: ArtLayout) => {
     if (!/^https:\/\/cdn2\.steamgriddb\.com\//.test(o.url)) throw new Error('Nieoczekiwany adres grafiki.')
-    const p = await updatePrefs((pr) => ops.setArt(pr, gameId, kind, { type: 'sgdb', imageId: o.id, url: o.url, thumb: o.thumb }))
+    const p = await updatePrefs((pr) => ops.setArt(pr, gameId, kind, { type: 'sgdb', imageId: o.id, url: o.url, thumb: o.thumb }, layoutOf(layout)))
     bumpArt(gameId, kind)
     return p
   })
-  handle(IPC.artUseFile, async (gameId: string, kind: ArtKind, src: string) => {
+  handle(IPC.artUseFile, async (gameId: string, kind: ArtKind, src: string, layout?: ArtLayout) => {
+    const lay = layoutOf(layout)
+    const choices = lay === 'tv' ? prefs.get().artTv : prefs.get().art
     if (!ART_KINDS.includes(kind)) throw new Error('Nieznany rodzaj grafiki.')
     if (!/\.(png|jpe?g|webp)$/i.test(String(src))) throw new Error('Wybierz plik PNG, JPG albo WebP.')
     const stat = await fs.stat(src).catch(() => null)
@@ -707,22 +749,23 @@ function registerIpc(): void {
     if (stat.size > 25 * 1024 * 1024) throw new Error('Plik jest zbyt duży (maks. 25 MB).')
     await fs.mkdir(paths.customArt, { recursive: true })
     const safe = gameId.replace(/[^a-zA-Z0-9_-]/g, '_')
-    const dest = path.join(paths.customArt, `${safe}-${kind}-${Date.now()}${path.extname(src).toLowerCase()}`)
+    const dest = path.join(paths.customArt, `${safe}-${lay === 'tv' ? 'tv-' : ''}${kind}-${Date.now()}${path.extname(src).toLowerCase()}`)
     await fs.copyFile(src, dest)
-    const old = prefs.get().art[gameId]?.[kind]
-    const p = await updatePrefs((pr) => ops.setArt(pr, gameId, kind, { type: 'file', file: dest }))
+    const old = choices[gameId]?.[kind]
+    const p = await updatePrefs((pr) => ops.setArt(pr, gameId, kind, { type: 'file', file: dest }, lay))
     if (old?.type === 'file' && old.file.startsWith(paths.customArt)) await fs.rm(old.file, { force: true })
     bumpArt(gameId, kind)
     return p
   })
-  handle(IPC.artUseSteam, async (gameId: string, kind: ArtKind) => {
-    const p = await updatePrefs((pr) => ops.setArt(pr, gameId, kind, { type: 'steam' }))
+  handle(IPC.artUseSteam, async (gameId: string, kind: ArtKind, layout?: ArtLayout) => {
+    const p = await updatePrefs((pr) => ops.setArt(pr, gameId, kind, { type: 'steam' }, layoutOf(layout)))
     bumpArt(gameId, kind)
     return p
   })
-  handle(IPC.artReset, async (gameId: string, kind: ArtKind) => {
-    const old = prefs.get().art[gameId]?.[kind]
-    const p = await updatePrefs((pr) => ops.setArt(pr, gameId, kind, undefined))
+  handle(IPC.artReset, async (gameId: string, kind: ArtKind, layout?: ArtLayout) => {
+    const lay = layoutOf(layout)
+    const old = (lay === 'tv' ? prefs.get().artTv : prefs.get().art)[gameId]?.[kind]
+    const p = await updatePrefs((pr) => ops.setArt(pr, gameId, kind, undefined, lay))
     if (old?.type === 'file' && old.file.startsWith(paths.customArt)) await fs.rm(old.file, { force: true })
     bumpArt(gameId, kind)
     return p

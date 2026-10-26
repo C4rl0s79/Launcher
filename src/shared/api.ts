@@ -1,6 +1,6 @@
 import type { EmuSystemLogo, EmuAccountMethod, EmuServerArt, EmuMetaField, EmuSettingsChange, EmuGameOptions, EmuSystemInfo, LbArtOptionsResult, EmuSaves,
   ActionResult,
-  ArtKind,
+  ArtKind, ArtLayout,
   ArtOption,
   ArtOptionsResult,
   CacheStats,
@@ -65,18 +65,19 @@ export interface LumenApi {
     onChange(cb: (s: Settings) => void): () => void
   }
   art: {
-    url(gameId: string, kind: ArtKind, rev?: number): string
+    /** layout 'tv': the TV layout's art (its own choices, LaunchBox first for EmuStart games) */
+    url(gameId: string, kind: ArtKind, rev?: number, layout?: ArtLayout): string
     options(gameId: string, kind: ArtKind): Promise<ArtOptionsResult>
     search(term: string): Promise<{ ok: true; games: SgdbGame[] } | { ok: false; error: string }>
     setMatch(gameId: string, sgdbGame: SgdbGame | null): Promise<Prefs>
-    choose(gameId: string, kind: ArtKind, option: ArtOption): Promise<Prefs>
+    choose(gameId: string, kind: ArtKind, option: ArtOption, layout?: ArtLayout): Promise<Prefs>
     /** LaunchBox Games DB images of an EmuStart game (by the LaunchBox id from the server) */
     launchboxOptions(gameId: string, kind: ArtKind): Promise<LbArtOptionsResult>
-    chooseLaunchbox(gameId: string, kind: ArtKind, url: string): Promise<Prefs>
+    chooseLaunchbox(gameId: string, kind: ArtKind, url: string, layout?: ArtLayout): Promise<Prefs>
     /** use an image file chosen in the in-app picker (copied into Lumen's data folder) */
-    useFile(gameId: string, kind: ArtKind, file: string): Promise<Prefs>
-    useSteam(gameId: string, kind: ArtKind): Promise<Prefs>
-    reset(gameId: string, kind: ArtKind): Promise<Prefs>
+    useFile(gameId: string, kind: ArtKind, file: string, layout?: ArtLayout): Promise<Prefs>
+    useSteam(gameId: string, kind: ArtKind, layout?: ArtLayout): Promise<Prefs>
+    reset(gameId: string, kind: ArtKind, layout?: ArtLayout): Promise<Prefs>
     onChanged(cb: (gameId: string, rev: number) => void): () => void
   }
   launchbox: {

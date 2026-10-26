@@ -171,3 +171,19 @@ describe('log redaction', () => {
     expect(redact('Authorization: Bearer abc.def')).toBe('Authorization: Bearer ***')
   })
 })
+
+describe('art choices per layout', () => {
+  it('keeps the TV layout choices apart from the desktop ones (and older prefs without them load)', () => {
+    let p = ops.setArt(defaultPrefs(), 'emu:g1', 'hero', { type: 'launchbox', url: 'https://images.launchbox-app.com/a.jpg' }, 'tv')
+    expect(p.artTv['emu:g1']?.hero?.type).toBe('launchbox')
+    expect(p.art['emu:g1']).toBeUndefined()
+    p = ops.setArt(p, 'emu:g1', 'hero', { type: 'steam' })
+    expect(p.art['emu:g1']?.hero?.type).toBe('steam')
+    expect(p.artTv['emu:g1']?.hero?.type).toBe('launchbox')
+    p = ops.setArt(p, 'emu:g1', 'hero', undefined, 'tv')
+    expect(p.artTv['emu:g1']?.hero).toBeUndefined()
+    expect(p.art['emu:g1']?.hero?.type).toBe('steam')
+    const { artTv: _drop, ...old } = defaultPrefs()
+    expect(migratePrefs(old).artTv).toEqual({})
+  })
+})

@@ -1,5 +1,5 @@
 import { memo, useEffect, useState } from "react";
-import type { ArtKind } from "@shared/types";
+import type { ArtKind, ArtLayout } from "@shared/types";
 import { api, useStore } from "../store";
 import { hueOf } from "../lib/format";
 
@@ -12,6 +12,8 @@ interface Props {
   fallback?: "poster" | "hero" | "title" | "none";
   eager?: boolean;
   onState?: (ok: boolean) => void;
+  /** "tv": the TV layout's own art (its choices; LaunchBox first for EmuStart games) */
+  layout?: ArtLayout;
 }
 
 /**
@@ -29,9 +31,10 @@ export const Art = memo(function Art({
   fallback = "poster",
   eager,
   onState,
+  layout,
 }: Props) {
   const rev = useStore((s) => s.artRev[gameId] ?? 0);
-  const src = api().art.url(gameId, kind, rev);
+  const src = api().art.url(gameId, kind, rev, layout);
   const [state, setState] = useState<"loading" | "ok" | "error">(() =>
     shown.has(src) ? "ok" : "loading",
   );

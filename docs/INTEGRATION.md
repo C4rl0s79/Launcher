@@ -376,6 +376,13 @@ Od Lumen 0.6.0 (plan: `docs/PLAN-TV-REACT.md`, etap 1) — **jeden interfejs, dw
   `tv/filters.ts`: szukaj w tytule, gatunek, dekada, gracze, region z nazwy, producent, co pokazać,
   sortowanie; zapamiętane dla każdego systemu w `localStorage`; Steam — tylko szukaj, co pokazać i
   sortowanie bez roku), Y — opcje gry (Steam: szczegóły), L3 / Z — szukaj, R3 / U — ulubiona.
+- **Grafiki trybu TV osobno od trybu pulpitu** (Lumen 1.0.9): tryb TV pokazuje okładkę w całości, okienko
+  zrzutu i logo — inaczej niż plakat 2:3 i szerokie tło pulpitu, więc ma własne wybory (`prefs.artTv`,
+  `ops.setArt(…, 'tv')`) i własny adres obrazka (`lumen-art://…?tv=1`, `tvArt` w `main/index.ts`).
+  Domyślnie dla gier EmuStart najpierw LaunchBox (Box - Front; Fanart - Background, potem zrzut; Clear Logo),
+  potem grafika serwera; „Grafika z serwera EmuStart” — tylko serwer. Bez własnej grafiki TV (gry Steam,
+  gry EmuStart bez LaunchBox i serwera) — jak na pulpicie. Okno grafik otwarte w trybie TV zmienia
+  tylko grafiki TV („Grafiki trybu TV”: Okładka, Zrzut / tło, Logo).
 - **Lumen 1.0.5:**
   - filtry z układu TV także w grupach trybu pulpitu (X / F, zapamiętane dla każdej grupy; ulubiona — R3 / U);
   - gry EmuStart bez numeru LaunchBox z serwera (Mega Drive, Game Boy, Atari…) są szukane po tytule na
