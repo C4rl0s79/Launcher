@@ -220,6 +220,11 @@ oknem „Zapisy” i „Przejmij profil” w trybie pulpitu. **Wymaga EmuStart S
   autozapis przy starcie); ustawienia zmienione w samym emulatorze (np. przypisania pada) przejmowane
   do profilu, który grał ostatnio — w historii ustawień emulatora („Opcje gry → Ustawienia emulatora”)
   jako „zmiany w emulatorze poza EmuStart”; DuckStation / PCSX2 po grze przywracają tylko numer pada.
+- **EmuStart 0.49.0** (Lumen 1.0.13, 27.10.2026): logowanie kodem logowania ze strony serwera
+  (link / kod QR albo adres + 8 znaków; `server_enroll(tekst, "code", "", "", kod)`) albo „Mam konto i
+  hasło” (`"existing"`). Nowego konta nie zakłada się w aplikacji — zaproszenie (strona serwera) albo
+  panel; usunięte metody silnika `account_request` / `account_requests_poll`, `profile_create` bez
+  hasła (tylko profil lokalny bez serwera). **Wymaga EmuStart Server 0.49.0.**
 
 ### 6.1. Rozjazd zapisów między Lumenem, EmuStart i telefonem — diagnoza (20.10.2026)
 
