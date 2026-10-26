@@ -16,7 +16,7 @@ import { Dialogs } from './components/Dialogs'
 import { Profiles } from './components/Profiles'
 import { InGameMenu } from './components/InGameMenu'
 import { PadsOrder } from './components/PadsOrder'
-import { accountRequestsCheck, enrollCheck, enrollResume } from './lib/account'
+import { enrollCheck, enrollResume } from './lib/account'
 
 /** Start, the pinned groups (in their order), Settings. */
 export function useTabs(): Tab[] {
@@ -85,7 +85,6 @@ export function App() {
     const every = setInterval(() => {
       if (useStore.getState().dialog || useStore.getState().profiles) return
       void enrollCheck()
-      void accountRequestsCheck()
     }, 60_000)
     return () => {
       alive = false

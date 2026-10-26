@@ -508,8 +508,6 @@ export type EmuAccountMethod =
   | 'server_logout'
   | 'enroll_pending'
   | 'enroll_decide'
-  | 'account_request'
-  | 'account_requests_poll'
   | 'profiles_list'
   | 'profile_select'
   | 'profile_setup'

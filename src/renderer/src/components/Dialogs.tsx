@@ -103,7 +103,7 @@ function EnrollWait() {
   }
   return (
     <Modal
-      title={e.mode === 'new' ? `Nowe konto „${e.account}”` : `Konto „${e.account}” — nowe urządzenie`}
+      title={`Konto „${e.account}” — nowe urządzenie`}
       onClose={() => useStore.getState().setEnroll(null)}
       className="gopt"
       handlers={{ x: cancel }}
@@ -114,9 +114,8 @@ function EnrollWait() {
     >
       <div ref={ref}>
         <p className="details__muted">
-          {e.mode === 'new'
-            ? 'Czeka na zatwierdzenie przez administratora serwera (aplikacja EmuStart, Lumen albo panel serwera). Sprawdź, czy kod się zgadza.'
-            : 'Zatwierdź na innym urządzeniu tego konta (albo administrator). Sprawdź, czy kod się zgadza.'}
+          Zatwierdź na innym urządzeniu tego konta (albo administrator). Sprawdź, czy kod się zgadza. Szybciej: kod
+          logowania ze strony serwera — bez czekania.
         </p>
         <p className="enroll__code">{e.code}</p>
         <p className="details__muted">Możesz zamknąć to okno albo program — prośba czeka do 24 godzin.</p>

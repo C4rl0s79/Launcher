@@ -77,7 +77,7 @@ function ProfilesScreen({ mode }: { mode: 'normal' | 'startup' | 'setup' }) {
         if (st.account) {
           const name = (await askText('Nazwa konta innego użytkownika'))?.trim()
           if (name) await joinExisting(name, true)
-        } else await createProfile(st.server)
+        } else await createProfile()
         return reload()
       }
       for (let attempt = 0; attempt < 3; attempt++) {

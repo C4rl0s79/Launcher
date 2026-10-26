@@ -60,22 +60,42 @@ export async function askPin(title: string, twice = false): Promise<string | nul
 
 // ---------- login / logout ----------
 
-/** Log this device in: server address or a login link from the server panel → account → password. */
+/** Log this device in (EmuStart 0.49): a login link from the server's site (or panel) — at once; or
+ *  the server address → the login code from the site, or account + password (waits for approval).
+ *  A new account is not created here — an invitation from the administrator (the server's site). */
 export async function loginFlow(): Promise<void> {
-  const text = (await askText('Adres serwera (albo link logowania z panelu)', { initial: DEFAULT_SERVER }))?.trim()
+  const text = (await askText('Adres serwera (albo link logowania ze strony serwera)', { initial: DEFAULT_SERVER }))?.trim()
   if (!text) return
-  const mode = await askChoice(text.startsWith('emustart://') ? 'Logowanie kodem z panelu serwera' : `Logowanie: ${text}`, ['Mam konto', 'Nowe konto'])
+  type E = R & { status?: string; code?: string; account?: string }
+  const fail = (e: Error): E => ({ ok: false, reason: e.message })
+  if (text.startsWith('emustart://')) return loginCode(await call<E>('server_enroll', text, 'code', '', '', '').catch(fail))
+  const site = `https://${text.replace(/^https?:\/\//, '')}`
+  const mode = await askChoice(`Logowanie: ${text} · nowe konto — zaproszenie od administratora, potem kod ze strony ${site}`, [
+    'Mam kod logowania ze strony serwera',
+    'Mam konto i hasło'
+  ])
   if (mode === null) return
-  const m = mode === 0 ? 'existing' : 'new'
-  const acc = (await askText(m === 'new' ? 'Nazwa nowego konta' : 'Nazwa twojego konta'))?.trim()
+  if (mode === 0) {
+    const code = (await askText(`Kod logowania (strona ${site} → Pokaż kod logowania)`))?.trim()
+    if (!code) return
+    toast('Łączę z serwerem…')
+    return loginCode(await call<E>('server_enroll', text, 'code', '', '', code).catch(fail))
+  }
+  const acc = (await askText('Nazwa twojego konta'))?.trim()
   if (!acc) return
-  const pw = await askPassword(m === 'new' ? `Hasło nowego konta „${acc}”` : `Hasło konta „${acc}”`, m === 'new')
+  const pw = await askPassword(`Hasło konta „${acc}”`)
   if (!pw) return
   toast('Łączę z serwerem…')
-  const r = await call<R & { status?: string; code?: string; account?: string }>('server_enroll', text, m, acc, pw).catch((e: Error) => ({ ok: false, reason: e.message }) as never)
+  const r = await call<E>('server_enroll', text, 'existing', acc, pw).catch(fail)
   if (!r.ok) return toast(String(r.reason ?? 'Nie udało się połączyć z serwerem.'), 'error')
-  if (r.status === 'approved') return loginDone(String(r.account ?? acc)) // code from the panel — no waiting
-  useStore.getState().setEnroll({ code: String(r.code ?? ''), account: String(r.account ?? acc), mode: m })
+  useStore.getState().setEnroll({ code: String(r.code ?? ''), account: String(r.account ?? acc), mode: 'existing' })
+}
+
+/** A login code: the account comes from the code, approved at once. */
+function loginCode(r: R & { status?: string; account?: string }): void {
+  if (!r.ok) return toast(String(r.reason ?? 'Nie udało się połączyć z serwerem.'), 'error')
+  if (r.status === 'approved') return loginDone(String(r.account ?? ''))
+  toast(String(r.reason ?? 'Serwer nie przyjął kodu.'), 'error')
 }
 
 function loginDone(account: string): void {
@@ -117,7 +137,7 @@ export async function enrollResume(): Promise<void> {
 }
 
 const seen = new Set<string>()
-/** Requests this device can approve: new devices / accounts of its account. */
+/** Requests this device can approve: new devices of its account („Mam konto”). */
 export async function enrollCheck(): Promise<void> {
   if (useStore.getState().dialog) return
   type Q = { id: string; mode: string; account: string; name: string; app?: string; class: string; from_account?: string; ip: string; created: number; code: string; replaces?: string[] }
@@ -128,7 +148,7 @@ export async function enrollCheck(): Promise<void> {
   const kind = ({ pc: 'komputer', phone: 'telefon' } as Record<string, string>)[q.class] ?? q.class
   const when = new Date(q.created * 1000).toLocaleString('pl-PL', { dateStyle: 'short', timeStyle: 'short' })
   const title =
-    `${q.mode === 'new' ? 'Nowe konto' : 'Nowe urządzenie konta'} „${q.account}”: ${q.name} (${q.app || 'EmuStart'}, ${kind}` +
+    `Nowe urządzenie konta „${q.account}”: ${q.name} (${q.app || 'EmuStart'}, ${kind}` +
     `${q.from_account ? `, konto ${q.from_account}` : ''}) · ${q.ip} · ${when} · kod ${q.code}` +
     ((q.replaces ?? []).length ? ` · zastąpi wcześniejszą rejestrację tego programu na tym sprzęcie (${q.replaces!.join(', ')})` : '')
   const c = await askChoice(title, ['Zatwierdź — z grami z serwera', 'Zatwierdź — tylko zapisy i profil', 'Odrzuć', 'Później'])
@@ -137,20 +157,6 @@ export async function enrollCheck(): Promise<void> {
   const x = await call('enroll_decide', q.id, allow, c === 0).catch((e: Error) => ({ ok: false, reason: e.message }) as never)
   toast(x.ok ? (allow ? `Zatwierdzono: ${q.name}` : `Odrzucono: ${q.name}`) : String(x.reason ?? 'Nie udało się.'), x.ok ? 'info' : 'error')
   setTimeout(() => void enrollCheck(), 1500)
-}
-
-/** Account requests from this device (another user → a new name): their result. */
-export async function accountRequestsCheck(): Promise<void> {
-  const r = await call<R & { done?: { account: string; status: string }[] }>('account_requests_poll').catch(() => null)
-  for (const d of r?.done ?? [])
-    toast(
-      d.status === 'approved'
-        ? `Zatwierdzono konto „${d.account}” — jest na liście profili.`
-        : d.status === 'denied'
-          ? `Administrator odrzucił konto „${d.account}”.`
-          : `Prośba o konto „${d.account}” wygasła.`,
-      d.status === 'approved' ? 'info' : 'error'
-    )
 }
 
 // ---------- profiles ----------
@@ -192,32 +198,19 @@ export async function joinExisting(name: string, asked = false): Promise<void> {
   toast(`Konto „${r.profile?.name ?? name}” jest teraz na tym urządzeniu.`)
 }
 
-/** No such account: a request for a new account from this device — the administrator approves. */
-async function askNewAccount(name: string): Promise<void> {
-  const c = await askChoice(`Nie ma konta „${name}”`, [`Utwórz konto „${name}” — zatwierdzi administrator`])
-  if (c !== 0) return
-  const pw = await askPassword(`Hasło nowego konta „${name}”`, true)
-  if (!pw) return
-  const r = await call<R & { status?: string; code?: string }>('account_request', name, pw)
-  if (!r.ok) return toast(String(r.reason ?? 'Nie udało się.'), 'error')
-  if (r.status === 'approved') return toast(`Utworzono konto „${name}” — jest na tym urządzeniu.`)
-  toast(`Prośba o konto „${name}” czeka na zatwierdzenie administratora (kod ${r.code ?? ''}). Konto pojawi się samo po zatwierdzeniu.`)
+/** No such account: new accounts come from an invitation (the server's site) or the server panel. */
+function askNewAccount(name: string): void {
+  toast(`Nie ma konta „${name}”. Nowe konto: poproś administratora o zaproszenie, zaloguj się na stronie serwera i ustaw tam hasło konta — potem dodasz je tutaj.`, 'error')
 }
 
-/** New profile: an account with a password on the server (offline — a local profile). */
-export async function createProfile(serverOn: boolean): Promise<void> {
+/** New profile: local (without the server); with the server the engine says how to get an account. */
+export async function createProfile(): Promise<void> {
   const name = (await askText('Nazwa nowego profilu'))?.trim()
   if (!name) return
-  let pw = ''
-  if (serverOn) {
-    const p = await askPassword(`Hasło nowego konta „${name}”`, true)
-    if (!p) return
-    pw = p
-  }
-  const r = await call<R & { exists?: string; profile?: { name: string } }>('profile_create', name, pw)
+  const r = await call<R & { exists?: string; profile?: { name: string } }>('profile_create', name)
   if (r.exists) return joinExisting(String(r.exists))
   if (!r.ok) return toast(String(r.reason ?? 'Nie udało się.'), 'error')
-  toast(`Utworzono profil: ${r.profile?.name ?? name}.` + (pw ? ' Zapamiętaj hasło — będzie potrzebne na innych urządzeniach.' : ''))
+  toast(`Utworzono profil: ${r.profile?.name ?? name}.`)
 }
 
 const RA_FAM: Record<string, string> = { retroarch: 'RetroArch', duckstation: 'DuckStation', pcsx2: 'PCSX2' }

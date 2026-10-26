@@ -194,8 +194,6 @@ export function registerEmustartIpc(handle: Handle, ctx: Ctx): void {
     server_logout: { timeout: 240_000, changes: true }, // sends the saves first (EmuStart 0.48)
     enroll_pending: { timeout: 30_000 },
     enroll_decide: { timeout: 30_000 },
-    account_request: { timeout: 30_000 },
-    account_requests_poll: { timeout: 30_000, changes: true },
     profiles_list: { timeout: 30_000 },
     profile_select: { timeout: 60_000, changes: true },
     profile_setup: { timeout: 60_000, changes: true },
