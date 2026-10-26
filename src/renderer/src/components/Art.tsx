@@ -12,6 +12,8 @@ interface Props {
   fallback?: "poster" | "hero" | "title" | "none";
   eager?: boolean;
   onState?: (ok: boolean) => void;
+  /** the loaded image's width / height */
+  onRatio?: (ratio: number) => void;
   /** "tv": the TV layout's own art (its choices; LaunchBox first for EmuStart games) */
   layout?: ArtLayout;
 }
@@ -31,6 +33,7 @@ export const Art = memo(function Art({
   fallback = "poster",
   eager,
   onState,
+  onRatio,
   layout,
 }: Props) {
   const rev = useStore((s) => s.artRev[gameId] ?? 0);
@@ -91,6 +94,7 @@ export const Art = memo(function Art({
         style={state === "loading" ? { ["--h" as string]: hue } : undefined}
         onLoad={(e) => {
           const { naturalWidth: w, naturalHeight: h } = e.currentTarget;
+          if (w && h) onRatio?.(w / h);
           const f = kind === "grid" && !!w && !!h && Math.abs(w / h - 2 / 3) > 0.06;
           setFit(f);
           shown.set(src, f);

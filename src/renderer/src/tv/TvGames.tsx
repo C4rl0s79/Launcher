@@ -208,7 +208,7 @@ export function TvGames({ system, onBack, onMenu, active }: { system: TvSystem; 
           {!games.length && <p className="tv-dim">Brak gier{activeFilters.length ? ' dla tych filtrów (X — zmień albo wyczyść)' : ''}.</p>}
         </div>
       </div>
-      {sel && <TvPreview game={sel} details={d} note={primary?.note} asLogo={asLogo} />}
+      {sel && <TvPreview game={sel} details={d} note={primary?.note} />}
       {options && sel && <GameOptions game={sel} onClose={() => setOptions(false)} />}
       {filters && (
         <TvFilters system={system.display} games={system.games} steam={steam} filter={filter} onChange={setFilter} onClose={() => setFilters(false)} />
@@ -264,9 +264,40 @@ function LogoTitle({ game, text }: { game: Game; text: ReactNode }) {
   )
 }
 
-function TvPreview({ game, details: dr, note, asLogo }: { game: Game; details: DetailsResult | null; note?: string; asLogo: boolean }) {
+/** Height for the cover and the screenshot so that both, at their shapes, fit the preview's width side by side. */
+function useMediaFit(boxRatio: number, snapRatio: number): { ref: (el: HTMLDivElement | null) => void; h: number } {
+  const [el, setEl] = useState<HTMLDivElement | null>(null)
+  // the width is read at render; the observer only renders again when it changes (window, look editor)
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    if (!el) return
+    const ro = new ResizeObserver(() => setTick((t) => t + 1))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [el])
+  const width = el?.clientWidth ?? 0
+  if (!el || !width) return { ref: setEl, h: 0 }
+  const cs = getComputedStyle(el)
+  const v = cs.getPropertyValue('--tv-media-h').trim()
+  const full = v.endsWith('vh') ? (parseFloat(v) * window.innerHeight) / 100 : parseFloat(v) || 300 // the layout's media height
+  const gap = parseFloat(cs.columnGap) || 0
+  const capBox = 0.3 * window.innerWidth // the cover is at most 30vw wide (wider ones fit inside it)
+  const rSnap = Math.min(snapRatio, 16 / 9)
+  const room = width - gap // cover | screenshot side by side (the details are below)
+  let h = boxRatio + rSnap > 0 ? room / (boxRatio + rSnap) : full
+  if (h * boxRatio > capBox) h = rSnap > 0 ? (room - capBox) / rSnap : full
+  h = Math.min(full, h)
+  return { ref: setEl, h: Math.max(0, Math.floor(h)) }
+}
+
+function TvPreview({ game, details: dr, note }: { game: Game; details: DetailsResult | null; note?: string }) {
   const [boxOk, setBoxOk] = useState(true)
   const [snapOk, setSnapOk] = useState(true)
+  // the cover and the screenshot share one height (their own shapes); when both do not fit side by
+  // side at the layout's height, they get lower together
+  const [snapRatio, setSnapRatio] = useState(4 / 3)
+  const [boxRatio, setBoxRatio] = useState(3 / 4)
+  const fitH = useMediaFit(boxOk ? boxRatio : 0, snapOk ? snapRatio : 0)
   useEffect(() => {
     setBoxOk(true)
     setSnapOk(true)
@@ -297,17 +328,42 @@ function TvPreview({ game, details: dr, note, asLogo }: { game: Game; details: D
   ]
   const desc = d?.descriptionText ? d.descriptionText.split(/\n+/) : d?.descriptionHtml ? htmlToParagraphs(d.descriptionHtml, 20) : d?.shortDescription ? [d.shortDescription] : []
   return (
-    <div className="tv-preview">
+    <div className="tv-preview" ref={fitH.ref} style={fitH.h ? { ['--tv-media-fit' as string]: `${fitH.h}px` } : undefined}>
       <div className="tv-box">
         {boxOk ? (
-          <Art key={`b-${game.id}`} gameId={game.id} name={game.name} kind="grid" className="tv-boxart" fallback="none" eager layout="tv" onState={setBoxOk} />
+          <Art key={`b-${game.id}`} gameId={game.id} name={game.name} kind="grid" className="tv-boxart" fallback="none" eager layout="tv" onState={setBoxOk} onRatio={setBoxRatio} />
         ) : (
           <div className="tv-noart">brak okładki</div>
         )}
       </div>
+      <div className="tv-snap" style={{ ['--ar' as string]: snapRatio }}>
+        {snapOk && (
+          <Art
+            key={`s-${game.id}`}
+            gameId={game.id}
+            name={game.name}
+            kind="hero"
+            className="tv-snapart"
+            fallback="none"
+            eager
+            layout="tv"
+            onState={setSnapOk}
+            onRatio={setSnapRatio}
+          />
+        )}
+      </div>
+      <div className="tv-desc">
+        {desc.slice(0, 20).map((p, i) => (
+          <p key={i}>{p}</p>
+        ))}
+        {game.source !== 'emustart' && !desc.length && <p>Gra z biblioteki Steam.</p>}
+      </div>
       <div className="tv-meta">
-        {asLogo && game.emu ? <LogoTitle key={game.id} game={game} text={<h1>{game.name}</h1>} /> : <h1>{game.name}</h1>}
-        {e?.tags && <p className="tags">{e.tags}</p>}
+        {/* at the bottom, full width: the game's logo (its title when there is none), then the details in a few lines */}
+        <div className="tv-head">
+          <LogoTitle key={game.id} game={game} text={<h1>{game.name}</h1>} />
+          {e?.tags && <p className="tags">{e.tags}</p>}
+        </div>
         <dl>
           {rows
             .filter((r): r is [string, string] => !!r[1])
@@ -319,13 +375,6 @@ function TvPreview({ game, details: dr, note, asLogo }: { game: Game; details: D
             ))}
         </dl>
         {note && <p className="tv-note">{note}</p>}
-      </div>
-      <div className="tv-snap">{snapOk && <Art key={`s-${game.id}`} gameId={game.id} name={game.name} kind="hero" className="tv-snapart" fallback="none" eager layout="tv" onState={setSnapOk} />}</div>
-      <div className="tv-desc">
-        {desc.slice(0, 20).map((p, i) => (
-          <p key={i}>{p}</p>
-        ))}
-        {game.source !== 'emustart' && !desc.length && <p>Gra z biblioteki Steam.</p>}
       </div>
     </div>
   )

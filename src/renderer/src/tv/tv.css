@@ -289,9 +289,10 @@
 /* preview: cover | details | screenshot, description below */
 .tv-preview {
   display: grid;
-  /* the details always keep room; a wide screenshot shrinks (keeping its shape) instead */
-  grid-template-columns: auto minmax(16em, 1fr) minmax(0, auto);
-  grid-template-rows: var(--tv-media-h) minmax(0, 1fr);
+  /* cover | screenshot at one height (--tv-media-fit from TvPreview lowers both when they do not fit
+     side by side); the description below them; at the bottom, full width: logo, details in a few lines */
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: var(--tv-media-fit, var(--tv-media-h)) minmax(0, 1fr) auto;
   gap: 2.5vh 1.6vw;
   padding-top: 1.25vh;
   overflow: hidden;
@@ -299,7 +300,7 @@
 }
 .tv-box,
 .tv-snap {
-  height: var(--tv-media-h);
+  height: var(--tv-media-fit, var(--tv-media-h));
   position: relative;
   align-self: start;
 }
@@ -308,7 +309,7 @@
   display: none;
 }
 .tv-box .tv-boxart {
-  height: var(--tv-media-h);
+  height: var(--tv-media-fit, var(--tv-media-h));
   width: auto;
   max-width: 30vw;
   object-fit: contain;
@@ -327,23 +328,32 @@
   color: var(--tv-dim);
   font-size: 0.85em;
 }
-.tv-snap {
-  min-width: 0;
-}
+/* --ar: the image's own shape (TvPreview); small native screenshots (256x224) are scaled up to the
+   full height like the cover */
 .tv-snap .tv-snapart {
+  width: calc(var(--tv-media-fit, var(--tv-media-h)) * var(--ar, 1.3333));
   height: auto;
-  max-height: var(--tv-media-h);
-  width: auto;
-  max-width: min(100%, calc(var(--tv-media-h) * 16 / 9));
+  aspect-ratio: var(--ar, 1.3333);
+  max-width: calc(var(--tv-media-fit, var(--tv-media-h)) * 16 / 9);
   object-fit: contain;
   border-radius: 12px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
   background: #000;
 }
 .tv-meta {
+  grid-column: 1 / -1;
   min-width: 0;
-  height: var(--tv-media-h);
-  overflow: hidden;
+  padding-bottom: 1vh;
+}
+.tv-snap {
+  justify-self: end;
+}
+.tv-head {
+  display: flex;
+  align-items: flex-end;
+  gap: 1em;
+  min-width: 0;
+  margin-bottom: 0.6em;
 }
 .tv-meta h1 {
   margin: -0.15em 0 0;
@@ -354,17 +364,22 @@
 .tv-meta .tags {
   font-size: calc(1em * var(--tv-fs-meta));
   color: var(--tv-dim);
-  margin: 0.3em 0 1em;
+  margin: 0 0 0.2em;
+  white-space: nowrap;
 }
+/* the details as one flowing block of "label value" pairs (2-3 lines on the full width) */
 .tv-meta dl {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 0.45em 1.2em;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35em 1.8em;
   margin: 0;
   font-size: calc(0.92em * var(--tv-fs-meta));
 }
 .tv-dlrow {
-  display: contents;
+  display: flex;
+  gap: 0.5em;
+  min-width: 0;
+  max-width: 100%;
 }
 .tv-meta dt {
   color: var(--tv-dim);
@@ -532,8 +547,8 @@
   max-width: var(--tv-tlogo-w);
 }
 .tv-meta .tv-logo .tv-logo__img {
-  height: 12vh;
-  margin-bottom: 0.4em;
+  height: 9vh;
+  max-width: 40vw;
   filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.8));
 }
 
