@@ -165,3 +165,46 @@ def test_play_id_follows_the_chosen_variant(monkeypatch):
     monkeypatch.setattr(lumen.LumenApi, "_variant_choice", lambda self, g, variants=None: {"id": 42, "rel": "pl.sfc"})
     assert api.lumen_play_id(7) == 42
     assert api.lumen_play_id(99) == 99                  # nieznana gra — bez zmian
+
+
+def test_game_options_do_not_sync_saves(monkeypatch, tmp_path):
+    """„Opcje gry” w Lumenie (także pasek trybu TV przy przeglądaniu) liczą stany na tym komputerze —
+    bez czekania na wysyłkę po grze i bez synchronizacji paczek z serwerem (stany PS2 to setki MB)."""
+    from emustart import emulators, ingame, launcher, savebundles, syncclient, systems
+    api = _bare_api()
+    g = {"id": 7, "es": "ps2", "title": "God of War II", "name": "God of War II (USA)", "rel": "gow2.chd"}
+    monkeypatch.setattr(lumen.library, "game", lambda gid: g if int(gid) == 7 else None)
+    monkeypatch.setattr(lumen.library, "get_resume", lambda pid, gid: None)
+    monkeypatch.setattr(lumen.LumenApi, "game_detail", lambda self, gid: {"id": 7, "variant": 0})
+    monkeypatch.setattr(lumen.LumenApi, "_effective_emu", lambda self, gg: {"exe": "pcsx2-qt.exe", "args": "", "label": "PCSX2"})
+    monkeypatch.setattr(lumen.LumenApi, "_sync_status", lambda self, gg: {"state": "synced"})
+    monkeypatch.setattr(lumen.LumenApi, "_is_admin", lambda self: False)
+    monkeypatch.setattr(emulators, "options_for", lambda info, root: [])
+    monkeypatch.setattr(systems, "info", lambda es: {"display": "PlayStation 2", "kind": "console"})
+    monkeypatch.setattr(ingame, "adapter_for", lambda exe: type("Ad", (), {"family": "pcsx2"})())
+    monkeypatch.setattr(lumen.profiles, "bind", lambda ad, pid: None)
+    monkeypatch.setattr(launcher, "content_guess", lambda cfg, gg, exe: tmp_path / "gow2.chd")
+    monkeypatch.setattr(launcher, "ps2_info", lambda cfg, gg: gg)
+
+    class States:
+        kind = "states"
+        files = [(tmp_path / "SCUS-97481 (2F123FD8).00.p2s", "SCUS-97481 (2F123FD8).00.p2s"),
+                 (tmp_path / "SCUS-97481 (2F123FD8).01.p2s", "SCUS-97481 (2F123FD8).01.p2s"),
+                 (tmp_path / "shot.png", "shot.png")]
+
+        def collect(self):
+            return self
+
+    monkeypatch.setattr(savebundles, "for_game", lambda *a, **k: [States()])
+    monkeypatch.setattr(savebundles, "core_id", lambda args: "")
+
+    def no_network(*_a, **_k):
+        raise AssertionError("opcje gry nie mogą synchronizować zapisów ani czekać na wysyłkę")
+
+    monkeypatch.setattr(syncclient, "before", no_network)
+    monkeypatch.setattr(launcher, "wait_post", no_network)
+    monkeypatch.setattr(launcher, "resume_from_nas", no_network)
+    out = api.lumen_game_options(7)
+    assert out["ok"] and out["states"] == 2                       # bez miniatury .png
+    assert out["options"]["system"] == "PlayStation 2" and out["options"]["emulator"]["label"] == "PCSX2"
+    assert "states" not in out["options"]

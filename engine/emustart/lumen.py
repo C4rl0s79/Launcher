@@ -247,10 +247,52 @@ class LumenApi(api_mod.Api):
         if not det:
             return {"ok": False, "reason": "Nie ma takiej gry w bibliotece."}
         pid = int(det.get("variant") or det["id"])
-        opts = self.game_options(pid) or {}
-        states = opts.pop("states", []) or []
-        return {"ok": True, "detail": det, "play_id": pid, "options": opts, "states": len(states),
+        opts, states = self._options_here(pid)
+        return {"ok": True, "detail": det, "play_id": pid, "options": opts, "states": states,
                 "admin": self._is_admin() if self._cfg.get("server_key") else False}
+
+    def _options_here(self, game_id: int) -> tuple[dict, int]:
+        """Opcje gry jak `Api.game_options` i liczba stanów na tym komputerze — bez czekania na
+        wysyłkę po grze i bez synchronizacji zapisów z serwerem. `game_options` (lista „Wczytaj zapis”,
+        wywoływana przez Lumen osobno) synchronizuje paczki gry przed pokazaniem listy — od EmuStart
+        0.48.2 także stany PS2 (kilkadziesiąt–kilkaset MB), a Lumen otwiera opcje gry także przy samym
+        przeglądaniu listy (pasek szczegółów trybu TV). Synchronizacja zostaje przy liście zapisów i przy
+        uruchomieniu gry."""
+        from emustart import emulators, ingame, metadata, savebundles, systems
+        from emustart import launcher
+        g = library.game(int(game_id))
+        if not g:
+            return {}, 0
+        emu = self._effective_emu(g)
+        opts = emulators.options_for(systems.info(g["es"]), self._cfg.get("emu_root", ""))
+        states = 0
+        if emu["exe"]:
+            try:
+                ad = ingame.adapter_for(emu["exe"])
+                profiles.bind(ad, self._profile)       # stany w folderze profilu, nie emulatora
+                core = savebundles.core_id(emu.get("args", ""))
+                bundles = savebundles.for_game(ad, core, launcher.content_guess(self._cfg, g, emu["exe"]),
+                                               launcher.ps2_info(self._cfg, g))
+                st = next((b for b in bundles if b.kind == "states"), None)
+                if st is not None:
+                    st.collect()
+                    states = sum(1 for _p, arc in st.files if not arc.endswith(".png"))
+                else:
+                    meta = metadata.ensure_local(self._cfg, g)
+                    learned = [r["prefix"] for r in library.db().execute(
+                        "SELECT prefix FROM states WHERE game_id=? AND family=?", (g["id"], ad.family))]
+                    states = len(ingame.list_states(ad, g, meta, learned))
+                res = library.get_resume(self._profile, g["id"])
+                if res and res["path"] and Path(res["path"]).is_file() and res["family"] == ad.family:
+                    states += 1
+                states = min(states, api_mod.KEEP_LIST)       # jak lista „Wczytaj zapis”
+            except Exception:
+                log.exception("stany gry (opcje gry)")
+        sc = (self._cfg.get("systems") or {}).get(g["es"]) or {}
+        return ({"id": g["id"], "title": g["title"], "emulator": emu, "options": opts, "es": g["es"],
+                 "system": systems.info(g["es"])["display"],
+                 "retroarch": bool(emu["exe"]) and ingame.adapter_for(emu["exe"]).family == "retroarch",
+                 "shader_off": bool(sc.get("shader_off")), "sync": self._sync_status(g)}, states)
 
     def lumen_readiness(self, game_id: int) -> dict:
         """Czego brakuje przed uruchomieniem: emulator (i co z serwera go zainstaluje)."""
