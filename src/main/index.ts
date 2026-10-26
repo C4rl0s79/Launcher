@@ -400,8 +400,13 @@ async function emuArt(gameId: string, kind: string): Promise<Response> {
   if (first === 'late') void titled.then((f) => f && notifyArt(gameId))
   else if (first === null) return new Response('none', { status: 404 })
   else if (first) return fileResponse(first)
+  // the player chose "Grafika z serwera EmuStart" (or picked one on the server): exactly the server's
+  // art first — LaunchBox only when the server has none of this kind
+  const serverChosen = prefs.get().art[gameId]?.[k]?.type === 'steam'
   const steps: (() => Promise<Response | null>)[] =
-    k === 'grid'
+    serverChosen && k === 'hero'
+      ? [() => engineArt(gameId, kind), () => emuLbArt(gameId, k, LB_TYPES.fanart), () => emuLbArt(gameId, k, LB_TYPES.screenshot)]
+      : k === 'grid'
       ? [() => engineArt(gameId, kind), () => emuLbArt(gameId, k, LB_TYPES.box)]
       : k === 'hero'
         ? [() => emuLbArt(gameId, k, LB_TYPES.fanart), () => engineArt(gameId, kind), () => emuLbArt(gameId, k, LB_TYPES.screenshot)]

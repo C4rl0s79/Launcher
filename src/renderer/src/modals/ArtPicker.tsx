@@ -181,9 +181,23 @@ const SERVER_LABEL = { box: 'okładka', snap: 'zrzut ekranu', logo: 'logo gry' }
  * Administrator of the EmuStart server: the game's art on the server (box / screenshot / logo) —
  * every device sees it; EmuStart's own art sources (SteamGridDB, IGDB, TheGamesDB…).
  */
+// the server image picked on this computer (the server's list does not say which one is set)
+const pickedKey = (gameId: string, sk: string): string => `lumen.serverArt.${gameId}|${sk}`
+function readPicked(gameId: string, sk: string): string | null {
+  try {
+    return localStorage.getItem(pickedKey(gameId, sk))
+  } catch {
+    return null
+  }
+}
+
 function ServerArt({ game, kind }: { game: Game; kind: ArtKind }) {
   const sk = SERVER_KIND[kind as 'grid' | 'hero' | 'logo']
   const [list, setList] = useState<EmuServerArt[] | null>(null)
+  // marked only while this device shows the server's art (not after another choice)
+  const showsServer = useStore((s) => s.prefs?.art[game.id]?.[kind]?.type === 'steam')
+  const [picked, setPicked] = useState(() => readPicked(game.id, sk))
+  useEffect(() => setPicked(readPicked(game.id, sk)), [game.id, sk])
   useEffect(() => {
     let alive = true
     setList(null)
@@ -212,14 +226,21 @@ function ServerArt({ game, kind }: { game: Game; kind: ArtKind }) {
           {list.slice(0, 48).map((o) => (
             <button
               key={o.url}
-              className="thumb thumb--fit"
+              className={`thumb thumb--fit ${showsServer && picked === o.url ? 'is-on' : ''}`}
               data-nav
               title={o.source}
               onClick={async () => {
                 const r = await attempt(api().emustart.serverArtChoose(game.id, sk, o.url))
                 done('Zapisano na serwerze')(r)
                 // shown here at once: the server's art beats an automatic SteamGridDB / LaunchBox pick
-                if (r?.ok) await attempt(api().art.useSteam(game.id, kind))
+                if (!r?.ok) return
+                try {
+                  localStorage.setItem(pickedKey(game.id, sk), o.url)
+                } catch {
+                  /* no browser storage — just not marked next time */
+                }
+                setPicked(o.url)
+                await attempt(api().art.useSteam(game.id, kind))
               }}
             >
               {o.thumb ? <img src={o.thumb} alt="" loading="lazy" decoding="async" /> : <span className="thumb__tag">{o.source ?? 'grafika'}</span>}
