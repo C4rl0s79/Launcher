@@ -289,7 +289,8 @@
 /* preview: cover | details | screenshot, description below */
 .tv-preview {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  /* the details always keep room; a wide screenshot shrinks (keeping its shape) instead */
+  grid-template-columns: auto minmax(16em, 1fr) minmax(0, auto);
   grid-template-rows: var(--tv-media-h) minmax(0, 1fr);
   gap: 2.5vh 1.6vw;
   padding-top: 1.25vh;
@@ -301,6 +302,10 @@
   height: var(--tv-media-h);
   position: relative;
   align-self: start;
+}
+/* the cover is shown whole here: no blurred copy around it (that is for the desktop's 2:3 frames) */
+.tv-box .art-fit__bg {
+  display: none;
 }
 .tv-box .tv-boxart {
   height: var(--tv-media-h);
@@ -322,10 +327,14 @@
   color: var(--tv-dim);
   font-size: 0.85em;
 }
+.tv-snap {
+  min-width: 0;
+}
 .tv-snap .tv-snapart {
-  height: var(--tv-media-h);
+  height: auto;
+  max-height: var(--tv-media-h);
   width: auto;
-  max-width: calc(var(--tv-media-h) * 16 / 9);
+  max-width: min(100%, calc(var(--tv-media-h) * 16 / 9));
   object-fit: contain;
   border-radius: 12px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
