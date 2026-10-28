@@ -99,9 +99,20 @@ async function refreshEmu() {
     `<tr><td>${esc(r.label)}</td><td class="muted">${esc(r.systems.join(", ") || "— (nieużywany)")}</td>` +
     `<td>${esc(r.version || "—")}${r.previous ? `<div class="muted">poprzednia: ${esc(r.previous)}</div>` : ""}` +
     `${r.error ? `<div style="color:var(--err)">${esc(r.error)}</div>` : ""}</td>` +
+    `${r.held ? `<div style="color:var(--warn)">nowa wersja ${esc(r.held.version)} wstrzymana — ${esc(r.held.text)}</div>` : ""}</td>` +
     `<td class="n">${r.size ? fmtBytes(r.size) : ""}</td><td class="muted">${r.updated ? ago(r.updated) : ""}</td>` +
-    `<td class="n"><button data-emu="${esc(r.item)}" ${j.running ? "disabled" : ""}>Pobierz ponownie</button></td></tr>`).join("")
+    `<td class="n">${r.held ? `<button class="danger" data-held="${esc(r.item)}" ${j.running ? "disabled" : ""}>` +
+      `${r.held.kind === "diverged" ? "Zaktualizuj mimo to" : "Zaktualizuj"}</button> ` : ""}` +
+    `<button data-emu="${esc(r.item)}" ${j.running ? "disabled" : ""}>Pobierz ponownie</button></td></tr>`).join("")
     : `<tr><td colspan="6" class="muted">Biblioteka nie ma jeszcze systemów — najpierw foldery z grami (Konfiguracja).</td></tr>`;
+  $("emuRows").querySelectorAll("[data-held]").forEach((b) => b.addEventListener("click", async () => {
+    const row = d.items.find((x) => x.item === b.dataset.held);
+    if (!confirm(`Zaktualizować ${row.label} do ${row.held.version}?\n\n${row.held.text}\n\n` +
+                 "Stany zapisane w obecnej wersji mogą przestać się wczytywać. Karty pamięci działają we wszystkich wersjach.")) return;
+    const r = await admin("emu_update", { items: [row.item], allow_held: [row.item] }).catch(() => null);
+    msg(r?.ok ? `Aktualizuję ${row.label}…` : r?.reason || "Serwer nie odpowiada.", r?.ok);
+    refreshEmu();
+  }));
   $("emuRows").querySelectorAll("[data-emu]").forEach((b) => b.addEventListener("click", async () => {
     const r = await admin("emu_update", { items: [b.dataset.emu], force: true }).catch(() => null);
     msg(r?.ok ? "Pobieram ponownie…" : r?.reason || "Serwer nie odpowiada.", r?.ok);
@@ -576,10 +587,11 @@ async function refreshDevices() {
   const enr = r.enroll || [];
   $("enrBox").hidden = !enr.length;
   $("enroll").innerHTML = enr.map((q) =>
-    `<tr><td>${esc(q.name)}<div class="muted">${esc(KIND[q.class] || q.class)} · ${esc(q.ip)} · ${ago(q.created)}</div></td>` +
+    `<tr><td>${esc(q.name)}<div class="muted">${esc(q.app || "EmuStart")} · ${esc(KIND[q.class] || q.class)} · ${esc(q.ip)} · ${ago(q.created)}</div></td>` +
     `<td>${q.mode === "new" ? "nowe konto" : "konto"} <b>${esc(q.account)}</b>` +
     `${q.from_account ? `<div class="muted">prosi zalogowane urządzenie konta ${esc(q.from_account)}</div>` : ""}` +
-    `${(q.replaces || []).length ? `<div class="muted">zastąpi: ${esc(q.replaces.join(", "))}</div>` : ""}</td>` +
+    `${(q.replaces || []).length ? `<div class="muted">zastąpi (ten sam sprzęt i program): ${esc(q.replaces.join(", "))}</div>`
+                                  : `<div class="muted">nie zastąpi żadnej rejestracji</div>`}</td>` +
     `<td><code style="font-size:18px;letter-spacing:.08em">${esc(q.code)}</code></td>` +
     `<td class="n"><button class="primary" data-eg="${esc(q.id)}">Zatwierdź z grami</button> ` +
     `<button data-es="${esc(q.id)}">Bez gier</button> <button class="danger" data-en="${esc(q.id)}">Odrzuć</button></td></tr>`).join("");
@@ -632,11 +644,24 @@ async function refreshAccounts() {
   if (!r) return;
   $("accounts").innerHTML = r.accounts.length ? r.accounts.map((a) =>
     `<tr><td>${esc(a.name)}${a.admin ? ' <span class="muted">· administrator</span>' : ""}</td>` +
-    `<td>${a.password ? `ustawione <span class="muted">${a.set ? ago(a.set) : ""}</span>` : "<b>brak</b>"}</td>` +
+    `<td>${a.password ? `ustawione <span class="muted">${a.set ? ago(a.set) : ""}</span>` : '<span class="muted">brak</span>'}</td>` +
+    `<td>${a.google ? `${esc(a.google)} <button data-gun="${esc(a.name)}">Odłącz</button>` : '<span class="muted">—</span>'}</td>` +
     `<td class="n">${a.devices}</td><td class="n"><button data-pw="${esc(a.name)}">${a.password ? "Nowe hasło" : "Ustaw hasło"}</button> ` +
     `<button data-adm="${esc(a.name)}" data-on="${a.admin ? 1 : 0}">${a.admin ? "Odbierz admina" : "Administrator"}</button> ` +
     `<button data-files="${esc(a.name)}">Pliki i kopie</button></td></tr>`).join("")
-    : `<tr><td colspan="4" class="muted">Brak kont.</td></tr>`;
+    : `<tr><td colspan="5" class="muted">Brak kont.</td></tr>`;
+  lastAccounts = r.accounts.map((a) => a.name);
+  const sel = $("pairAcct"), was = sel.value;
+  sel.innerHTML = lastAccounts.map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join("") +
+    '<option value="">— nowe konto —</option>';
+  sel.value = sel.dataset.touched && (was === "" || lastAccounts.includes(was)) ? was : (lastAccounts[0] ?? "");
+  $("pairNew").hidden = sel.value !== "";
+  $("invAccts").innerHTML = lastAccounts.map((n) => `<option value="${esc(n)}">`).join("");
+  $("accounts").querySelectorAll("[data-gun]").forEach((b) => b.addEventListener("click", async () => {
+    if (!confirm(`Odłączyć konto Google od konta „${b.dataset.gun}”? Nie zaloguje się nim na stronie serwera (urządzenia konta działają dalej).`)) return;
+    await admin("account_google_unlink", { name: b.dataset.gun }).catch(() => null);
+    refreshAccounts();
+  }));
   $("accounts").querySelectorAll("[data-pw]").forEach((b) => b.addEventListener("click", () => askAccountPassword(b.dataset.pw)));
   $("accounts").querySelectorAll("[data-files]").forEach((b) => b.addEventListener("click", () => openAccount(b.dataset.files)));
   $("accounts").querySelectorAll("[data-adm]").forEach((b) => b.addEventListener("click", async () => {
@@ -710,10 +735,18 @@ $("bBakSave").addEventListener("click", async () => {
   msg(r?.ok ? "Ustawienia kopii zapisane." : r?.reason || "Serwer nie odpowiada.", r?.ok);
 });
 
-let pairTimer = null;
+let pairTimer = null, lastAccounts = [];
+$("pairAcct").addEventListener("change", () => {
+  $("pairAcct").dataset.touched = "1";
+  $("pairNew").hidden = $("pairAcct").value !== "";
+});
 $("bPair").addEventListener("click", async () => {
-  const r = await admin("login_code").catch(() => null);
+  const fresh = $("pairAcct").value === "";
+  const account = fresh ? $("pairNew").value.trim() : $("pairAcct").value;
+  if (!account) return msg("Wybierz konto albo wpisz nazwę nowego.");
+  const r = await admin("login_code", { account, create: fresh }).catch(() => null);
   if (!r?.ok) return msg(r?.reason || "Serwer nie odpowiada.");
+  $("pairFor").textContent = `„${r.account}”` + (fresh ? " (nowe — powstanie przy zalogowaniu)" : "");
   $("pairQr").innerHTML = r.svg || "";
   $("pairQr").hidden = !r.svg;
   $("pairCode").textContent = r.pretty;
@@ -738,6 +771,65 @@ $("bPairCopy").addEventListener("click", async () => {
   try { await navigator.clipboard.writeText($("pairLink").value); msg("Link skopiowany — wklej go w EmuStart na komputerze: Ustawienia → Zaloguj.", true); }
   catch (e) { $("pairLink").select(); }
 });
+
+/* ── strona serwera: zaproszenia, Google, programy (emustart/webportal.py, invites.py, clientdist.py) ── */
+const APP_NAMES = { "emustart-windows": "EmuStart (Windows)", "emustart-android": "EmuStart (Android)", "lumen-windows": "Lumen (Windows)" };
+async function refreshInvites() {
+  const r = await admin("invites").catch(() => null);
+  if (!r?.ok) return;
+  const g = r.google;
+  $("gRedirect").textContent = g.redirect_uri || "— (najpierw adres tunelu)";
+  $("gState").textContent = g.ready ? "działa — zaproszeni mogą się logować" :
+    !g.redirect_uri ? "brak adresu tunelu" : !g.client_id ? "nie skonfigurowane" : "brak sekretu klienta";
+  if (document.activeElement !== $("gId")) $("gId").value = g.client_id || "";
+  $("gSecret").placeholder = g.secret ? "Client secret (zapisany — wpisz, żeby zmienić)" : "Client secret";
+  $("invWarn").textContent = g.ready ? "" : "Logowanie Google nie jest jeszcze skonfigurowane (Konfiguracja → Strona serwera) — zaproszeni nie wejdą.";
+  $("invites").innerHTML = r.invites.length ? r.invites.map((i) =>
+    `<tr><td>${esc(i.email)}</td><td>${esc(i.used_account || i.account)}</td>` +
+    `<td class="muted">${i.used ? `wykorzystane ${ago(i.used)}` : i.expired ? "wygasło" : `czeka (wysłane ${ago(i.created)})`}</td>` +
+    `<td class="n"><button class="danger" data-inv="${esc(i.id)}">Usuń</button></td></tr>`).join("")
+    : `<tr><td colspan="4" class="muted">Brak zaproszeń.</td></tr>`;
+  $("invites").querySelectorAll("[data-inv]").forEach((b) => b.addEventListener("click", async () => {
+    await admin("invite_delete", { id: b.dataset.inv }).catch(() => null);
+    refreshInvites();
+  }));
+}
+$("bInvite").addEventListener("click", async () => {
+  const r = await admin("invite_create", { email: $("invEmail").value, account: $("invAcct").value }).catch(() => null);
+  if (!r?.ok) return msg(r?.reason || "Serwer nie odpowiada.");
+  $("invLink").value = r.link;
+  $("invLinkBox").hidden = false;
+  $("invEmail").value = ""; $("invAcct").value = "";
+  msg(`Zaproszenie dla ${r.invite.email} → konto „${r.invite.account}”. Skopiuj link i wyślij go zaproszonemu.`, true);
+  refreshInvites();
+});
+$("bInvCopy").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText($("invLink").value); msg("Link zaproszenia skopiowany.", true); }
+  catch (e) { $("invLink").select(); }
+});
+$("bGoogle").addEventListener("click", async () => {
+  const r = await admin("google_set", { client_id: $("gId").value, client_secret: $("gSecret").value }).catch(() => null);
+  msg(r?.ok ? (r.ready ? "Logowanie Google zapisane — działa." : "Zapisane.") : r?.reason || "Serwer nie odpowiada.", r?.ok);
+  $("gSecret").value = "";
+  refreshInvites();
+});
+async function refreshClients() {
+  const r = await admin("clients_status").catch(() => null);
+  if (!r?.ok) return;
+  $("clientRows").innerHTML = Object.entries(r.apps).map(([id, a]) =>
+    `<tr><td>${esc(APP_NAMES[id] || id)}</td><td>${esc(a.version || "—")}` +
+    `${a.error ? `<div style="color:var(--err)">${esc(a.error)}</div>` : ""}</td>` +
+    `<td class="n">${a.size ? fmtBytes(a.size) : ""}</td><td class="muted">${a.updated ? ago(a.updated) : (a.ready ? "" : "jeszcze nie")}</td></tr>`).join("");
+  $("bClients").disabled = r.job.running;
+  $("clientJob").textContent = r.job.running ? "sprawdzam…" : r.job.log.join(" · ");
+}
+$("bClients").addEventListener("click", async () => {
+  const r = await admin("clients_refresh").catch(() => null);
+  msg(r?.ok ? "Sprawdzam wydania programów…" : r?.reason || "Serwer nie odpowiada.", r?.ok);
+  setTimeout(refreshClients, 1500);
+});
+refreshInvites(); refreshClients();
+setInterval(refreshInvites, 30000); setInterval(refreshClients, 15000);
 
 /* ── dostęp z internetu: port publiczny przez UPnP (emustart/public.py) ── */
 let pubOn = false;
@@ -823,6 +915,64 @@ Każdy plik zostanie skopiowany i sprawdzony; ` +
   migrPoll = setInterval(migrTick, 700);
 });
 
+/* ── zapisy sprzed 0.46 → paczki synchronizacji (emustart/savemigrate.py) ── */
+const SM_RES = { new: "przeniesione", history: "do historii (paczka już była)", merged: "stany dołączone do bieżących",
+                 same: "bez zmian", plan: "do przeniesienia", error: "błąd" };
+const SM_KIND = { saves: "zapisy", states: "stany", memcards: "karta pamięci" };
+let smPoll = null;
+async function smTick() {
+  const st = await admin("savesync_migrate_status").catch(() => null);
+  if (!st) return;
+  const busy = st.phase === "running";
+  $("bSmDry").disabled = $("bSmRun").disabled = busy;
+  if (busy) { $("smText").textContent = st.dry ? "Sprawdzam…" : "Przenoszę zapisy…"; return; }
+  if (smPoll) { clearInterval(smPoll); smPoll = null; }
+  if (st.phase === "error") { $("smText").textContent = "Nie udało się: " + st.error; return; }
+  const r = st.report;
+  if (!r) { $("smText").textContent = "Migracja jeszcze nie była uruchamiana."; return; }
+  const when = new Date(r.time * 1000).toLocaleString("pl-PL");
+  $("smText").textContent = (r.dry ? `Próba (${when}, bez zmian): ` : `Ostatnia migracja (${when}): `) +
+    `kont ${r.accounts}, gier ${r.games}, plików ${r.files}` +
+    (r.dry ? "" : ` — przeniesione ${r.new}, stany dołączone ${r.merged || 0}, do historii ${r.history}, bez zmian ${r.same}, błędy ${r.errors}`) +
+    `; nie dopasowano ${r.unmatched_count}` + (r.folded ? `; wspólne zapisy rdzeni: ${r.folded} gier` : "") + ".";
+  $("smItems").innerHTML = (r.items.length ? `<details><summary>Paczki (${r.items.length})</summary><table>` +
+    r.items.map((it) => `<tr><td>${esc(it.account)}</td><td>${esc(it.game)} <span class="muted">${esc(it.es)}</span></td>` +
+      `<td>${esc(it.emulator)}${it.core ? " · " + esc(it.core) : ""} · ${esc(SM_KIND[it.kind] || it.kind)}</td>` +
+      `<td class="n">${it.files}</td><td>${esc(SM_RES[it.result] || it.result)}${it.error ? ": " + esc(it.error) : ""}</td></tr>`).join("") +
+    "</table></details>" : "") +
+    (r.unmatched.length ? `<details><summary>Nie dopasowano (${r.unmatched_count})</summary><table>` +
+      r.unmatched.map((u) => `<tr><td>${esc(u.file)}</td><td class="muted">${esc(u.reason)}</td></tr>`).join("") +
+      "</table></details>" : "");
+  const accs = [...new Set(r.items.filter((it) => it.result === "history").map((it) => it.account))];
+  let rows = [];
+  for (const a of accs) {
+    const l = await admin("savesync_legacy", { account: a }).catch(() => null);
+    rows = rows.concat(l?.items || []);
+  }
+  $("smLegacy").innerHTML = rows.length ? `<h3>Wersje sprzed 0.46 w historii (paczka z urządzeń była nowsza)</h3><table>` +
+    rows.map((x, i) => `<tr><td>${esc(x.account)}</td><td>${esc(x.game)}</td><td>${esc(x.emulator)}${x.core ? " · " + esc(x.core) : ""} · ` +
+      `${esc(SM_KIND[x.kind] || x.kind)}</td><td class="muted">${esc(x.note)}<br>teraz: wersja ${x.current_revision} z ${esc(x.current_device || "?")}</td>` +
+      `<td class="n"><button data-smr="${i}">Przywróć</button></td></tr>`).join("") + "</table>" : "";
+  $("smLegacy").querySelectorAll("[data-smr]").forEach((b) => b.addEventListener("click", async () => {
+    const x = rows[+b.dataset.smr];
+    if (!confirm(`Przywrócić zapisy sprzed 0.46 dla „${x.game}” (${x.account})?\n\nBieżąca wersja z urządzeń trafi do historii. ` +
+                 `Urządzenia pobiorą przywróconą przy następnej grze (albo zapytają, jeśli mają własne zmiany).`)) return;
+    const res = await admin("savesync_restore", { account: x.account, es: x.es, game_id: x.game_id, emulator: x.emulator,
+                                                 core: x.core, kind: x.kind, bundle_id: x.bundle_id }).catch(() => null);
+    msg(res?.ok ? `Przywrócono (wersja ${res.revision}).` : (res?.reason || "Serwer nie odpowiada."), res?.ok);
+  }));
+}
+async function smStart(confirmRun) {
+  if (confirmRun && !confirm("Przenieść zapisy sprzed 0.46 do synchronizacji zapisów?\n\nIstniejące paczki nie zostaną nadpisane, " +
+                             "stare foldery zostają. Najpierw warto zrobić próbę („Sprawdź”).")) return;
+  const r = await admin("savesync_migrate", confirmRun ? { confirm: true } : {}).catch(() => null);
+  if (!r?.ok) return ($("smText").textContent = r?.reason || "Serwer nie odpowiada.");
+  smPoll = setInterval(smTick, 1000);
+  smTick();
+}
+$("bSmDry").addEventListener("click", () => smStart(false));
+$("bSmRun").addEventListener("click", () => smStart(true));
+
 let startTab = "stan";
 try { startTab = localStorage.getItem("tab") || "stan"; } catch (e) { /* domyślna zakładka */ }
 showTab(document.querySelector(`#tabs button[data-tab="${startTab}"]`) ? startTab : "stan");
@@ -831,5 +981,6 @@ refreshDevices();
 refreshPublic();
 setInterval(refreshPublic, 5000);
 migrTick();
+smTick();
 setInterval(refresh, 2000);
 setInterval(refreshDevices, 4000);          // prośby o dołączenie pojawiają się od razu

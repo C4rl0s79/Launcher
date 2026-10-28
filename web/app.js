@@ -228,8 +228,9 @@ let aHold = null;
 function release(a) {
   if (a === "a" && aHold) {
     clearTimeout(aHold.timer);
-    const fired = aHold.fired;
+    const fired = aHold.fired, gopt = aHold.gopt;
     aHold = null;
+    if (!fired && S.modal === "gopt" && gopt) return gopt.act();      // krótkie A w opcjach gry (edycja: przytrzymane)
     if (!fired && S.screen === "games" && !S.modal) launch();
     if (!fired && S.screen === "systems" && !S.modal) openSystem();
   }
@@ -652,6 +653,7 @@ async function updateLaunch() {
     running: st.mode === "config" ? "Ustawienia emulatora — zamknij emulator, aby zapisać w profilu" : "Gra uruchomiona",
     finished: st.mode === "config" ? "Ustawienia zapisane w profilu" : "Koniec gry",
     error: "Nie udało się uruchomić gry",
+    conflict: "Konflikt zapisów",
     cancelled: "Pobieranie przerwane",
   }[st.phase] || "";
   $("lHead").textContent = head;
@@ -678,6 +680,8 @@ async function updateLaunch() {
   const hints = [];
   if (st.phase === "downloading") {
     hints.push(["b", "Anuluj"]);
+  } else if (st.phase === "conflict") {
+    hints.push(["x", "Zostaw z tego urządzenia"], ["y", "Weź z serwera"], ["b", "Pomiń (bez synchronizacji)"]);
   } else if (["error", "cancelled"].includes(st.phase)) {
     if (st.locked_by) hints.push(["y", "Przejmij profil i graj"]);
     if (st.missing_core) hints.push(["y", "Otwórz RetroArch"]);
@@ -685,7 +689,22 @@ async function updateLaunch() {
   }
   setHints(hints, $("lHints"));
 
+  renderConflict(st);
   if (st.phase === "finished") closeLaunch();
+}
+const KIND_PL = { saves: "zapisy w grze", states: "stany", memcards: "karta pamięci" };
+function renderConflict(st) {
+  const box = $("lConflict");
+  const c = st.phase === "conflict" ? st.conflict || [] : [];
+  box.classList.toggle("hidden", !c.length);
+  if (!c.length) return;
+  const newest = (k) => Math.max(...c.map((x) => x[k] || 0));
+  const kinds = [...new Set(c.map((x) => KIND_PL[x.kind] || x.kind))].join(", ");
+  const devs = [...new Set(c.map((x) => x.server_device).filter(Boolean))].join(", ");
+  box.innerHTML =
+    `<div><b>To urządzenie</b><small>${esc(kinds)}</small><small>zmienione ${esc(fmtDate(newest("local_time")))}</small></div>` +
+    `<div><b>Serwer</b><small>${devs ? "z urządzenia " + esc(devs) : "inne urządzenie"}</small>` +
+    `<small>zmienione ${esc(fmtDate(newest("server_time")))}</small></div>`;
 }
 async function closeLaunch() {
   clearInterval(launchPoll);
@@ -698,6 +717,11 @@ async function closeLaunch() {
 function launchInput(a) {
   const ph = lastLaunch.phase;
   if (ph === "downloading" && a === "b") api().launch_cancel();
+  else if (ph === "conflict") {
+    // druga wersja nie ginie: zostaje w historii na serwerze albo w kopii zapasowej tutaj
+    const choice = { x: "local", y: "remote", b: "skip" }[a];
+    if (choice) api().launch_choice(choice);
+  }
   else if (ph === "error" && a === "y" && lastLaunch.missing_core) {
     // telefon: RetroArch bez rdzenia — otwarcie RetroArcha (Online Updater → Core Downloader)
     const gid = lastLaunch.game_id;
@@ -805,39 +829,48 @@ function menuInput(a) {
   renderMenu();
 }
 
-/* ───────────── logowanie na serwerze: konto + hasło + klucz urządzenia (emustart/enroll.py) ───────────── */
+/* ───────────── logowanie na serwerze: kod logowania (albo konto + hasło) + klucz urządzenia (emustart/enroll.py) ───────────── */
 const DEFAULT_SERVER = "emustart.emucloud.org";
-/** Zaloguj: `text` — link z kodu QR panelu (adresy, odcisk certyfikatu, kod jednorazowy)
- *  albo adres tunelu. Dalej: Mam konto / Nowe konto → nazwa → hasło. */
+/** Zaloguj: `text` — link logowania (kod QR / link ze strony serwera: adresy, odcisk certyfikatu,
+ *  kod jednorazowy i konto) — od razu; albo adres serwera → kod ze strony serwera / konto i hasło.
+ *  Nowe konto zakłada się z zaproszenia (strona serwera), nie w aplikacji. */
 function loginStart(text) {
   text = (text || "").trim();
   if (!text) return;
-  S.menu = [["Mam konto", () => loginAccount(text, "existing")], ["Nowe konto", () => loginAccount(text, "new")],
+  if (text.startsWith("emustart://")) return loginCode(text, "");
+  S.menu = [["Mam kod logowania ze strony serwera", () => setTimeout(() =>
+              oskOpen(`Kod logowania (strona ${text} → Pokaż kod logowania)`, "", (c) => { if (c.trim()) loginCode(text, c.trim()); }), 50)],
+            ["Mam konto i hasło", () => loginAccount(text)],
             ["Anuluj", () => {}]];
   S.menuIdx = 0; S.modal = "menu";
-  $("menu").querySelector("h2").textContent = text.startsWith("emustart://") ? "Logowanie kodem z panelu serwera" : `Logowanie: ${text}`;
+  $("menu").querySelector("h2").textContent = `Logowanie: ${text} · nowe konto — zaproszenie od administratora, potem kod ze strony https://${text.replace(/^https?:\/\//, "")}`;
   $("menu").classList.remove("hidden");
   renderMenu();
 }
+async function loginCode(text, code) {
+  toast("Łączę z serwerem…", 10000);
+  const r = await api().server_enroll(text, "code", "", "", code);
+  if (!r.ok) return toast(r.reason, 7000);
+  if (r.status === "approved") return loginDone(r.account);
+  toast(r.reason || "Serwer nie przyjął kodu.", 7000);
+}
 function loginAddress() {
-  oskOpen("Adres serwera (albo link logowania z panelu)", DEFAULT_SERVER, (v) => loginStart(v));
+  oskOpen("Adres serwera (albo link logowania ze strony serwera)", DEFAULT_SERVER, (v) => loginStart(v));
 }
 async function loginQr() {
   const s = await api().server_scan();
   if (!s.ok) return toast(s.reason, 5000);
   loginStart(s.text);
 }
-function loginAccount(text, mode) {
-  oskOpen(mode === "new" ? "Nazwa nowego konta" : "Nazwa twojego konta", "", (acc) => {
+function loginAccount(text) {
+  oskOpen("Nazwa twojego konta", "", (acc) => {
     if (!acc.trim()) return;
-    // hasło konta: nowe konto je ustawia, „Mam konto” je sprawdza
-    setTimeout(() => askPassword(mode === "new" ? `Hasło nowego konta „${acc.trim()}”` : `Hasło konta „${acc.trim()}”`, async (pw) => {
+    setTimeout(() => askPassword(`Hasło konta „${acc.trim()}”`, async (pw) => {
       toast("Łączę z serwerem…", 10000);
-      const r = await api().server_enroll(text, mode, acc.trim(), pw);
+      const r = await api().server_enroll(text, "existing", acc.trim(), pw);
       if (!r.ok) return toast(r.reason, 7000);
-      if (r.status === "approved") return loginDone(r.account);          // kod z panelu — bez czekania
-      enrollWait(r.code, r.account, mode);
-    }, mode === "new"), 50);
+      enrollWait(r.code, r.account);
+    }), 50);
   });
 }
 async function loginDone(account) {
@@ -845,12 +878,26 @@ async function loginDone(account) {
   toast(`Zalogowano — konto „${account}” na tym urządzeniu.`, 6000);
   openProfiles(true);
 }
+async function doLogout(force) {
+  toast("Wysyłam zapisy na serwer…", 3000);
+  const r = await api().server_logout(!!force);
+  if (r && r.ask) return logoutPendingAsk(r);
+  if (!r?.ok) return toast(r?.reason || "Nie udało się wylogować.", 6000);
+  S.settings = await api().get_settings(); await refreshState();
+  renderSettings(); toast("Wylogowano z serwera. Gry i zapisy na tym urządzeniu zostały.", 6000);
+}
+/** Zapisy nie doszły na serwer (np. brak połączenia) — wylogowanie dopiero po decyzji gracza. */
+function logoutPendingAsk(r) {
+  S.menu = [["Spróbuj jeszcze raz", () => doLogout(false)],
+            ["Wyloguj mimo to — zapisy zostaną tutaj i wyślą się po zalogowaniu na to samo konto", () => doLogout(true)],
+            ["Anuluj", () => {}]];
+  S.menuIdx = 0; S.modal = "menu";
+  $("menu").querySelector("h2").textContent = `${r.reason} ${(r.games || []).join(", ")}`;
+  $("menu").classList.remove("hidden");
+  renderMenu();
+}
 function logoutAsk() {
-  S.menu = [["Wyloguj — to urządzenie straci dostęp do serwera", async () => {
-    await api().server_logout();
-    S.settings = await api().get_settings(); await refreshState();
-    renderSettings(); toast("Wylogowano z serwera. Gry i zapisy na tym urządzeniu zostały.", 6000);
-  }], ["Anuluj", () => {}]];
+  S.menu = [["Wyloguj — to urządzenie straci dostęp do serwera", () => doLogout(false)], ["Anuluj", () => {}]];
   S.menuIdx = 1; S.modal = "menu";
   $("menu").querySelector("h2").textContent = "Wylogować z serwera?";
   $("menu").classList.remove("hidden");
@@ -866,17 +913,17 @@ function serverRows(rows, c) {
   }
   const wait = c.enroll ? `czeka na zatwierdzenie na ${String(c.enroll.url || "").replace(/^https?:\/\//, "")} — kod ${c.enroll.code}` : "";
   if (S.platform === "android")
-    rows.push({ k: "Zaloguj (kod QR)", type: "action", fmt: () => wait || "panel serwera → Dodaj urządzenie → zeskanuj", run: () => loginQr() });
+    rows.push({ k: "Zaloguj (kod QR)", type: "action", fmt: () => wait || "strona serwera → Pokaż kod logowania → zeskanuj", run: () => loginQr() });
   rows.push({ k: S.platform === "android" ? "Zaloguj (adres serwera)" : "Zaloguj", type: "action",
-              fmt: () => wait || (S.platform === "android" ? DEFAULT_SERVER : `${DEFAULT_SERVER} albo link z panelu serwera`),
+              fmt: () => wait || (S.platform === "android" ? `${DEFAULT_SERVER} + kod ze strony` : `${DEFAULT_SERVER} albo link ze strony serwera`),
               run: () => loginAddress() });
 }
 let enrollTimer = null;
-function enrollWait(code, account, mode) {
-  $("join").querySelector("h2").textContent = mode === "new" ? `Nowe konto „${account}”` : `Konto „${account}” — nowe urządzenie`;
-  $("join").querySelector("p").innerHTML = mode === "new"
-    ? "Czeka na zatwierdzenie przez administratora serwera (aplikacja EmuStart albo panel serwera). Sprawdź, czy kod się zgadza."
-    : "Zatwierdź na innym urządzeniu tego konta (albo administrator). Sprawdź, czy kod się zgadza.";
+function enrollWait(code, account) {
+  $("join").querySelector("h2").textContent = `Konto „${account}” — nowe urządzenie`;
+  $("join").querySelector("p").innerHTML =
+    "Zatwierdź na innym urządzeniu tego konta (albo administrator). Sprawdź, czy kod się zgadza. " +
+    "Szybciej: kod logowania ze strony serwera — bez czekania.";
   $("joinCode").textContent = code;
   const srv = String(S.settings?.enroll?.url || "").replace(/^https?:\/\//, "");
   $("joinText").textContent = (srv ? `Serwer: ${srv}. ` : "") + "Możesz zamknąć to okno albo aplikację — prośba czeka do 24 godzin.";
@@ -901,18 +948,9 @@ async function enrollResume() {
   // prośba wysłana wcześniej (aplikacja była zamknięta) — sprawdzenie przy starcie
   const p = await api().server_enroll_poll().catch(() => null);
   if (!p || p.status === "none") return;
-  if (p.status === "pending") return enrollWait(p.code, p.account, "existing");
+  if (p.status === "pending") return enrollWait(p.code, p.account);
   if (p.status === "approved") { await refreshState(); toast(`Zatwierdzono — konto „${p.account}”.`, 6000); }
   else if (p.status === "denied") toast("Prośba o zalogowanie została odrzucona.", 6000);
-}
-/** Prośby o nowe konto z tego urządzenia (Inny użytkownik → nowa nazwa): wynik zatwierdzenia. */
-async function accountRequestsCheck() {
-  const r = await api().account_requests_poll().catch(() => null);
-  for (const d of r?.done || []) {
-    toast(d.status === "approved" ? `Zatwierdzono konto „${d.account}” — jest na liście profili.`
-      : d.status === "denied" ? `Administrator odrzucił konto „${d.account}”.` : `Prośba o konto „${d.account}” wygasła.`, 7000);
-    if (d.status === "approved" && S.screen === "profiles") openProfiles(PR.startup);
-  }
 }
 const enrollSeen = new Set();
 async function enrollCheck() {
@@ -933,9 +971,9 @@ async function enrollCheck() {
             ["Odrzuć", () => decide(false, false)], ["Później", () => {}]];
   S.menuIdx = 0; S.modal = "menu";
   $("menu").querySelector("h2").textContent =
-    `${q.mode === "new" ? "Nowe konto" : "Nowe urządzenie konta"} „${q.account}”: ${q.name} (${kind}` +
+    `Nowe urządzenie konta „${q.account}”: ${q.name} (${q.app || "EmuStart"}, ${kind}` +
     `${q.from_account ? `, konto ${q.from_account}` : ""}) · ${q.ip} · ${when} · kod ${q.code}` +
-    ((q.replaces || []).length ? ` · zastąpi wcześniejszą rejestrację tego sprzętu (${q.replaces.join(", ")})` : "");
+    ((q.replaces || []).length ? ` · zastąpi wcześniejszą rejestrację tego programu na tym sprzęcie (${q.replaces.join(", ")})` : "");
   $("menu").classList.remove("hidden");
   renderMenu();
 }
@@ -1236,8 +1274,10 @@ async function refreshState() {
       : st.server.key_rejected ? "Klucz urządzenia nieważny" : "Serwer niedostępny";
     if (st.server.key_rejected && !S.keyWarned) {
       S.keyWarned = true;
-      toast(st.server.reason || ("Serwer nie przyjmuje tego urządzenia (unieważnione?) — zaloguj się ponownie: " +
-            "Ustawienia → Wyloguj z serwera → Zaloguj."), 9000);
+      const n = st.server.pending_saves || 0;
+      toast((st.server.reason || ("Serwer nie przyjmuje tego urządzenia (unieważnione?) — zaloguj się ponownie: " +
+            "Ustawienia → Wyloguj z serwera → Zaloguj.")) +
+            (n ? ` Zapisy ${n} ${n === 1 ? "gry czekają" : "gier czekają"} na wysłanie — zaloguj się ponownie na to samo konto, wyślą się same.` : ""), 12000);
     }
     net.className = "pill " + (st.server.ok || st.server.checking ? "ok" : "warn");
   } else {
@@ -1327,8 +1367,6 @@ window.addEventListener("pywebviewready", async () => {
   enrollResume();
   setTimeout(enrollCheck, 4000);
   setInterval(() => { if (!S.modal) enrollCheck(); }, 60000);
-  accountRequestsCheck();
-  setInterval(accountRequestsCheck, 30000);
   // profil zablokowany na tym urządzeniu (PIN zmieniony gdzie indziej / wylogowany)
   api().profile_pin_check().then((pc) => {
     if (pc && pc.state && pc.state !== "ok" && S.screen === "systems") {

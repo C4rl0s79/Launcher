@@ -13,7 +13,6 @@ import ssl
 import threading
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
 
 from emustart import paths
 
@@ -142,16 +141,22 @@ class _Handler(BaseHTTPRequestHandler):
         elif not _near(self):
             return
         p = urllib.parse.urlsplit(self.path).path
+        if getattr(self.server, "public", False):
+            from emustart import webportal   # strona serwera (logowanie Google, kod logowania)
+            if webportal.handles(p):
+                return webportal.post(self)
         if p.startswith("/v1/") and not _v1_ok(self):
             return
         if p in ("/v1/enroll/request", "/v1/enroll/poll", "/v1/enroll/pending", "/v1/enroll/decide",
-                 "/v1/auth/challenge", "/v1/auth/token", "/v1/auth/logout",
-                 "/v1/enroll/account", "/v1/enroll/account_poll"):
+                 "/v1/auth/challenge", "/v1/auth/token", "/v1/auth/logout"):
             from emustart import remote      # zalogowanie urządzenia, logowanie podpisem
             return remote.enroll_flow(self, p.rsplit("/", 1)[1])
         if p.startswith("/v1/savesync/"):
             from emustart import remote      # synchronizacja zapisów gier (emustart/savesync.py)
             return remote.savesync_post(self)
+        if p.startswith("/v1/lock/"):
+            from emustart import remote      # jedna gra naraz na profil (emustart/plock.py)
+            return remote.lock_post(self)
         if p.startswith("/v1/"):
             return refuse(self, 404)
         # API tylko dla naszego UI: właściwy Host i własny nagłówek (zwykła strona
@@ -212,6 +217,10 @@ class _Handler(BaseHTTPRequestHandler):
         elif not _near(self):
             return
         raw = urllib.parse.urlsplit(self.path).path
+        if getattr(self.server, "public", False):
+            from emustart import webportal   # strona serwera: start, logowanie Google, programy
+            if webportal.handles(raw):
+                return webportal.get(self)
         if raw.startswith("/v1/"):
             if not _v1_ok(self):
                 return

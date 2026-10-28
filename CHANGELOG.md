@@ -8,6 +8,350 @@ Wszystkie istotne zmiany w EmuStart. Format oparty na
 
 Plan najbliższych zmian: [ROADMAP.md](ROADMAP.md).
 
+## [0.50.3] — 2026-10-28
+
+Zakres: klient (`ingame.py`, `saveslots.py`, `syncclient.py`, `api.py`). Serwer bez zmian (już
+przechowuje usunięte stany paczki — `removed_add` / `removed_drop`). Interfejs `web/` bez zmian.
+
+### Poprawione
+- **Log RetroArcha z sesji naprawdę powstaje.** W ustawieniach sesji (`emustart_ra.cfg`) dochodzą
+  `log_verbosity = "true"` i `frontend_log_level = "1"` (INFO — w RetroArch 1.22.2 `RARCH_LOG`
+  pisze tylko przy włączonym trybie szczegółowym i poziomie ≤ 1). Wcześniej RetroArch nie tworzył
+  `retroarch.log` i po grze w logu EmuStart zawsze było „brak logu sesji”. Teraz widać, czy stan
+  z „Wczytaj zapis” wczytał się przy starcie. Oba klucze są tylko na czas sesji — nie wracają do
+  `retroarch.cfg`.
+
+### Dodane
+- **Usuwanie i przywracanie stanów innych rdzeni (API).** `state_edit(gra, "delete"|"restore", arc,
+  core=<rdzeń>)` i `state_trash(gra, core=<rdzeń>)` — stan innego rdzenia RetroArcha z listy
+  „Wczytaj zapis” do kosza tego rdzenia (aktywny slot) i z powrotem; dotychczasowe wywołania bez
+  zmian. Najpierw aktualna paczka stanów i kosza tego rdzenia z serwera, potem zmiana i od razu
+  nowa wersja na serwer. Usunięty stan jest zapisany na serwerze jako usunięty — urządzenie
+  grające tym rdzeniem go nie przywróci. Wymaga połączenia (bez niego nic się nie zmienia);
+  przerwana wysyłka idzie przy następnym otwarciu listy zapisów tej gry. Pamięć podręczna
+  `_inne_rdzenie` po zmianie = nowa wersja z serwera (lista bez usuniętego stanu). Interfejs —
+  w Lumen.
+
+## [0.50.2] — 2026-10-28
+
+Zakres: klient (`saveslots.py`, `api.py`). Serwer bez zmian.
+
+### Poprawione
+- **Zmiany stanów (zmień numer, kopiuj, przenieś, „Kontynuuj”, usuń, przywróć) czekają na
+  synchronizację tej gry w tle.** Pliki zmieniają się pod tą samą blokadą co pobieranie z serwera
+  (przy starcie / logowaniu, przed grą), wysyłka na serwer — po niej. Wcześniej zmiana mogła trafić
+  w środek pobierania tej samej gry (wynik poprawiała dopiero następna synchronizacja). Dokończenie
+  przerwanej zamiany slotów — też pod blokadą.
+
+## [0.50.1] — 2026-10-28
+
+Zakres: klient (`api.py`). Serwer bez zmian.
+
+### Poprawione
+- **Sloty zapisów: nic nie zmienia plików zapisów pod działającą grą.** W trakcie gry (od
+  przygotowania do zamknięcia emulatora) zmiana slotu i zmiany stanów odmawiają („Najpierw zamknij
+  grę”), a otwarcie listy zapisów nie synchronizuje gry z serwerem (lista z plików na dysku;
+  synchronizacja jak dotąd przed grą i po niej). Inaczej zmiana aktywnego slotu — ręczna albo
+  z innego urządzenia — podmieniłaby pliki pod emulatorem, a jego autozapis przy wyjściu trafiłby
+  do innego slotu. Dotyczy zwłaszcza Lumen, w którym bibliotekę i zapisy da się przeglądać w trakcie
+  gry.
+
+## [0.50.0] — 2026-10-28
+
+Zakres: synchronizacja zapisów — serwer (`savesync.py`, `remote.py`, `srvadmin.py`) i klient
+Windows (`saveslots.py` — nowy, `syncclient.py`, `savebundles.py`, `launcher.py`, `api.py`,
+`ingame.py`, `web/options.js`, `web/app.js`). **Najpierw zaktualizuj serwer**, potem PC. Telefon
+(APK) i Lumen bez zmian — widzą slot 1 (dostosowanie później).
+
+Nie zmienia się: lista gier, sterowanie poza listą „Wczytaj zapis”, menu (Tab), ekran
+uruchamiania, menedżer „Zapisy i stany” (PS2), synchronizacja folderów profilu, okno konfliktu
+zapisów w grze, panel serwera.
+
+### Dodane
+- **Sloty zapisów gry** — 4 osobne „przejścia” każdej gry w profilu gracza. Slot to komplet
+  zapisów gry na platformie: stany, zapisy w grze (`.srm` itd.), karty pamięci. Gra startuje na
+  aktywnym slocie. Opcje gry → **Slot zapisów** (np. „Slot 2 · 3 stany · 27.10 20:31”) → A —
+  ustaw aktywny.
+  - Aktywny slot leży w folderach emulatora (jak dotąd), pozostałe w folderze profilu
+    (`_sloty/<platforma>/<gra>/<slot>/`). Wszystkie sloty i kosze synchronizują się z serwerem;
+    aktywny slot jest wspólny dla urządzeń konta (wygrywa późniejsza zmiana).
+  - Zamiana slotu nic nie kasuje przed sprawdzoną kopią: (1) pliki emulatora → folder starego
+    slotu, kopia porównana z oryginałem; (2) pliki nowego slotu → emulator, wynik porównany;
+    (3) czyszczenie folderu nowego slotu. Krok zapisany w bazie — przerwana zamiana kończy się
+    od właściwego kroku. Niezgodna kopia — zamiana wstrzymana, pliki bez zmian. Bez zamiany
+    w trakcie wysyłki zapisów po grze.
+- **Edycja stanów** — „Wczytaj zapis” → **przytrzymane A** (przytrzymany Enter, prawy przycisk
+  myszy) na stanie: Wczytaj · Zmień numer · Kopiuj jako nowy numer · Kopiuj do slotu… ·
+  Przenieś do slotu… · Ustaw jako „Kontynuuj” (dotychczasowy dostaje nowy numer) · Usuń (do
+  kosza). Krótkie A — jak dotąd, gra od stanu. PCSX2: numery 0–9, bez „Kontynuuj”.
+- **Kosz** na końcu „Wczytaj zapis” (gdy niepusty): 10 najnowszych usuniętych stanów na slot,
+  A — przywróć (także na innym urządzeniu).
+- Serwer: `slots` i `active_slot` w manifeście (stare `emulators` = slot 1), pole `slot` w
+  `upload/init`, `POST …/<gra>/slot`, rodzaj paczki `trash`, cecha `saveslots` w `/v1/info`.
+  Klient nie wysyła slotów 2–4 do serwera bez slotów (stary zapisałby je w slocie 1).
+- Usunięte / przenumerowane / przeniesione stany zapisane przy paczce jako para (nazwa, SHA-256)
+  (`removed`, ostatnie 500) — sumowanie stanów z drugiego urządzenia (`merge_states`) ich nie
+  przywraca; kopia pod innym numerem zostaje.
+
+### Poprawione
+- **RetroArch: zapis po wczytaniu slotu „Auto” nadpisywał istniejące stany** (Chrono Trigger
+  MSU1: wczytany ręcznie autozapis → slot −1, następny zapis → 0, kolejny → 1 = istniejący stan).
+  Po każdej sesji straż numerów: stan o istniejącym numerze z inną treścią dostaje kolejny wolny
+  numer, poprzedni wraca na swój (z kopii sprzed sesji).
+- RetroArch: numer slotu wybrany w menu w trakcie gry (`state_slot`) nie trafia już do
+  `retroarch.cfg`.
+- RetroArch: log sesji do folderu sesji; po grze linie o stanach trafiają do logu EmuStart
+  („RetroArch (stany): …”). Przyczyna nieudanego wczytania stanu przy starcie (Chrono Trigger)
+  nie jest ustalona — log ją pokaże przy następnym wystąpieniu.
+
+### Sprawdzone / niesprawdzone
+- `python -m pytest -q`: 379 zaliczonych (`main`: 361) — m.in. dwa urządzenia i zamiana slotów,
+  przerwanie zamiany w krokach 2 i 3, niezgodna kopia, usunięte i przenumerowane stany nie
+  wracają, kosz, edycja offline, stary serwer bez slotów, straż numerów, `state_slot`.
+- UI w Chromium (kopia programu bez serwera): opcje gry → Slot zapisów → zmiana i powrót;
+  Wczytaj zapis → przytrzymane A → Zmień numer; prawy przycisk → Usuń → Kosz → przywróć; krótkie
+  A uruchamia grę od stanu; lista gier bez zmian.
+- Niesprawdzone: prawdziwy RetroArch z grą MSU1, okno WebView2, pad, prawdziwy serwer.
+
+## [0.49.1] — 2026-10-27
+
+Zakres: strona serwera (`webportal.py`). Zaktualizuj serwer.
+
+### Poprawione
+- **Strona serwera: „Wyloguj” dawało „Error code: 501, Unsupported method ('{}GET')”.** Serwer
+  odpowiadał, zanim przeczytał treść zapytania; połączenie zostaje otwarte, więc nieprzeczytane
+  `{}` doklejało się do następnego zapytania przeglądarki. To samo po odmowie (wygasła sesja).
+  Teraz treść jest czytana zawsze przed odpowiedzią.
+
+## [0.49.0] — 2026-10-27
+
+Zakres: strona serwera (`webportal.py`, `web/portal/`), zaproszenia (`invites.py`), konta
+(`accounts.py`), logowanie urządzeń (`enroll.py`, `remote.py`, `public.py`, `server.py`),
+programy do pobrania (`clientdist.py`, `signing.py`), wstrzymanie PCSX2 (`ps2states.py`,
+`emustore.py`), panel (`srvadmin.py`, `web/server.*`), klienci (`api.py`, `netsrc.py`,
+`web/app.js`, `web/options.js`, Android: `Bridge.kt`, `Prefs.kt`), CI (podpis APK).
+Zaktualizuj serwer, PC i telefon (stare aplikacje nie zalogują nowego urządzenia kodem ze
+strony; zalogowane działają dalej).
+
+### Dodane
+- **Strona serwera pod adresem tunelu** (np. `https://emustart.emucloud.org`): animowane logo
+  z pikseli, niebo synthwave z siatką, ekran CRT i **Zaloguj przez Google**. Po zalogowaniu:
+  - **programy do pobrania** z opisem i zrzutem ekranu — EmuStart (Windows), EmuStart na
+    Androida, Lumen;
+  - **Pokaż kod logowania** — kod QR, link i 8 znaków (jednorazowy, 10 minut) do zalogowania
+    urządzenia tego konta, bez hasła i bez czekania;
+  - **hasło konta** (opcjonalne).
+- **Zaproszenia** (panel → Urządzenia i konta → Zaproszenia): adres Google + konto (nowe albo
+  istniejące) → link do wysłania. Wchodzi tylko konto Google o zaproszonym adresie; serwer
+  zakłada albo łączy konto i potem rozpoznaje je po koncie Google. Ważne 30 dni, jednorazowe.
+- **Logowanie Google** (panel → Konfiguracja → Strona serwera): identyfikator i sekret klienta
+  OAuth z Google Cloud; panel pokazuje adres przekierowania do wklejenia w Google.
+- **Programy do pobrania** (panel → Konfiguracja): serwer co 6 godzin pobiera najnowsze wydania
+  EmuStart i Lumen z GitHuba, sprawdza podpis wydania (Lumen — kluczem Lumen) i trzyma kopie
+  u siebie; plik bez poprawnego podpisu nie trafia na stronę. APK ma teraz podpis wydania (`.sig`).
+- **Aplikacja: logowanie kodem** — Zaloguj → link / kod QR ze strony (od razu) albo adres serwera
+  → **Mam kod logowania ze strony serwera** (8 znaków padem) / **Mam konto i hasło**.
+- **Dodaj urządzenie w panelu wybiera konto** (istniejące albo nowe) — kod jest przypisany do
+  konta.
+- **PCSX2: aktualizacja wstrzymana, gdy stany PS2 są wspólne dla PC i telefonu.** Serwer czyta
+  format stanów z paczek zapisów (ostatni z PC i z telefonu). Nowa wersja PCSX2 nie rozchodzi się
+  sama: panel → Emulatory pokazuje „nowa wersja … wstrzymana” z powodem (formaty rozjechane — PC
+  nowszy niż ArmSX2; zgodne albo telefon nowszy — aktualizacja możliwa, ale stany z obecnej
+  wersji mogą przestać działać) i przycisk **Zaktualizuj mimo to** / **Zaktualizuj**
+  z ostrzeżeniem. „Pobierz ponownie” wstrzymania nie omija.
+
+### Poprawione
+- Programy do pobrania: plik poprzedniej wersji pobierany właśnie ze strony (Windows nie pozwala
+  go usunąć) nie psuje aktualizacji — nowa wersja trafia na stronę, stary plik znika później.
+- Serwer bez folderu profili nie traktuje folderów bieżącego katalogu jako kont.
+
+### Zmienione
+- Kod logowania (strona serwera i panel) jest przypisany do konta — urządzenie nie wybiera
+  konta ani nie podaje hasła.
+- Hasło konta jest opcjonalne; „Mam konto” działa tylko dla konta z hasłem.
+
+### Usunięte (bezpieczeństwo)
+- **Nowe konto z aplikacji** — wszystkie drogi: prośba „Nowe konto” przy logowaniu, „Inny
+  użytkownik → Utwórz konto” (`/v1/enroll/account`, `/v1/enroll/account_poll`), „Nowy profil”
+  z hasłem (`PUT /v1/profiles/create`) i zapis pliku do nieistniejącego folderu konta (urządzenie
+  administratora zakładało tak konto bez hasła). Nowe konto: zaproszenie albo panel. Bez serwera
+  „Nowy profil” tworzy profil lokalny jak dotąd. Prośby o nowe konto zapisane przez starszy
+  serwer znikają przy starcie.
+- „Mam konto” dla konta bez hasła (ustawiało hasło przy zatwierdzeniu) — teraz kod ze strony.
+
+## [0.48.3] — 2026-10-26
+
+Zakres: ustawienia emulatorów w profilu (`profiles.py`), przypisania pada (`ingame.py`). Zaktualizuj PC.
+
+### Poprawione
+- **Ustawienia zmienione w samym emulatorze (bez EmuStart) zostają** — przy następnej grze
+  EmuStart nadpisywał je ustawieniami z profilu (np. przypisania pada). Teraz wykrywa zmianę od
+  ostatniej gry i przejmuje ją do profilu, który grał ostatnio (wpis w historii zmian „zmiany w
+  emulatorze poza EmuStart”); wartości tego komputera (ścieżki, karta graficzna) się nie liczą.
+- **DuckStation / PCSX2: przypisania pada zmienione w trakcie gry zostają** — po grze wracał
+  cały wpis sprzed gry; teraz wraca tylko numer pada (kolejność kontrolerów).
+
+## [0.48.2] — 2026-10-26
+
+Zakres: stany PS2 paczką wspólną dla PCSX2 i ArmSX2 (`savebundles.py`, `launcher.py`, Android:
+`Saves.kt`, `SaveSync.kt`), „Wczytaj zapis” w RetroArchu (`ingame.py`). Zaktualizuj PC i telefon.
+
+### Poprawione
+- **„Wczytaj zapis” w RetroArchu nie nadpisuje następnego stanu** — po wczytaniu np. stanu 4
+  kolejny zapis szedł do slotu 5 (nadpisując istniejący), a nie do 11. Wybrany stan wczytuje się
+  teraz jako autozapis przy starcie (bez `--entryslot`), więc RetroArch numeruje dalej od
+  najwyższego stanu (jak na telefonie).
+- **Stany PS2 synchronizują się jak stany RetroArcha** — jedna paczka `pcsx2/states` na grę,
+  wspólna dla PCSX2 (PC) i ArmSX2 / AetherSX2 (telefon), nazwy plików jak w emulatorze (numer
+  płyty i CRC). Stany z dwóch urządzeń się sumują (zajęty slot — starszy stan na pierwszy wolny
+  slot 00–09). Wcześniej telefon wysyłał je do osobnego folderu, a PC synchronizował folder stanów
+  — urządzenia nie widziały swoich stanów. Menedżer „Stany PS2” usunięty z telefonu.
+## [0.48.1] — 2026-10-20
+
+Zakres: synchronizacja stanów (`syncclient.py`, `savebundles.py`, `savesync.py`, `savemigrate.py`,
+`api.py`, `launcher.py`, `web/options.js`; Android: `SaveSync.kt`, `Saves.kt`, `Bridge.kt`). Po
+aktualizacji serwera: panel → Konfiguracja → „Zapisy sprzed 0.46” → „Przenieś zapisy” (dołącza
+stany przeniesione wcześniej do historii).
+
+### Poprawione
+- **Lista „Wczytaj zapis” to zawsze stan serwera** (PC i telefon): przy otwarciu opcji gry
+  urządzenie najpierw synchronizuje zapisy tej gry z serwerem (nie dopiero przy uruchomieniu
+  gry) i pokazuje dokładnie paczkę stanów — bez lokalnych plików spoza niej (np. kopii pod
+  nazwą ZIP-a zamiast ROM-u). Pliki paczki nazwane od innej nazwy gry dostają nazwę, której
+  użyje emulator.
+- **Stany z dwóch urządzeń się sumują** zamiast konfliktu: brakujące sloty dochodzą, ten sam
+  slot z inną zawartością — nowszy zostaje, starszy dostaje następny wolny numer (z miniaturą);
+  wynik od razu na serwerze i na wszystkich urządzeniach. Zapisy w grze (.srm) — jak dotąd jedna
+  wersja, konflikt do decyzji gracza.
+- **Migracja zapisów sprzed 0.46: stany dołączają się do istniejącej paczki** (bieżące zostają w
+  swoich slotach, stare jako nowe sloty z miniaturami) — wcześniej szły do historii i urządzenia
+  ich nie widziały. Ponowne „Przenieś zapisy” w panelu dołącza też stany przeniesione wcześniej
+  do historii.
+- **Stan z innego rdzenia da się wczytać**: wybór przełącza grę (PC) / system (telefon) na
+  RetroArch z tym rdzeniem (brakujący rdzeń PC pobiera z serwera) i startuje z tego stanu.
+
+## [0.48.0] — 2026-10-20
+
+Zakres: serwer (`plock.py`, `remote.py`), PC (`profiles.py`, `syncclient.py`, `api.py`, `web/app.js`),
+Android (`Saves.kt`, `SaveSync.kt`, `Bridge.kt`, `web/options.js`). Wymaga EmuStart Server 0.48.0
+(blokada profilu) — zaktualizuj serwer i aplikacje.
+
+### Dodane
+- **Jedna gra naraz na profil — blokada na serwerze** (`emustart/plock.py`, `/v1/lock/take|renew|
+  release|status`): atomowa (dwa urządzenia startujące w tej samej chwili — blokadę dostaje
+  jedno), urządzenie rozpoznawane po tokenie sesji, nie po nazwie komputera. Dzierżawa i
+  odnawianie jak dotąd, przejęcie tylko po potwierdzeniu gracza; urządzenie, któremu profil
+  przejęto, przestaje go odnawiać. PC i telefon korzystają z API; plik `<profil>/lock` w folderze
+  profilu nie jest już używany.
+- **Zapisy przy wylogowaniu** (PC i telefon): najpierw czeka na wysyłanie po ostatniej grze i
+  wysyła zaległe zapisy; gdy czegoś nie udało się wysłać — pytanie „spróbuj jeszcze raz /
+  wyloguj mimo to (zapisy zostaną na urządzeniu i wyślą się po zalogowaniu na to samo konto) /
+  anuluj”; w trakcie gry wylogowanie zablokowane.
+- **Zapisy po zalogowaniu i przy starcie** (PC i telefon, także po zmianie profilu): nowsze wersje
+  paczek gier znanych na urządzeniu pobierają się, gdy lokalnie bez zmian; konflikty zostają do
+  decyzji przy uruchomieniu gry; gra, która właśnie działa, jest pomijana.
+
+### Poprawione
+- **Telefon: „Wczytaj zapis” wprost w opcjach gry** — pobiera z serwera zapisy w grze i stany tej
+  gry (z innych rdzeni z oznaczeniem). Od 0.46 telefon miał tylko „Zapisy i stany” (menedżer
+  zapisów), który pokazuje już tylko stany PS2 — wyglądało, jakby telefon nie widział żadnych
+  zapisów. Menedżer nazywa się teraz „Stany PS2”.
+- **Niewysłane zapisy poprzedniego konta nie trafiają na nowe** — paczka pamięta konto (PC: w
+  bazie, telefon: osobny stan na konto); po zalogowaniu innym kontem czekają i wyślą się po
+  powrocie na tamto konto.
+- **Urządzenie unieważnione na serwerze** — komunikat mówi, ile gier ma zapisy czekające na
+  wysłanie (zamiast samego „nieznane urządzenie”).
+
+## [0.47.0] — 2026-10-20
+
+Zakres: zapisy jak Steam Cloud — jeden zestaw na konto i grę. Serwer (`savesync.py`,
+`savemigrate.py`, panel), PC (`syncclient.py`, `savebundles.py`), Android (`SaveSync.kt`,
+`Saves.kt`, `Bridge.kt`), rejestracja urządzeń (`devices.py`, `enroll.py`). Po aktualizacji
+serwera: panel → Konfiguracja → „Zapisy sprzed 0.46” → Sprawdź, potem Przenieś zapisy.
+
+### Dodane
+- **Migracja zapisów sprzed 0.46 do synchronizacji zapisów** (`emustart/savemigrate.py`, panel
+  serwera → Konfiguracja → „Zapisy sprzed 0.46”). Zapisy w grze, stany i karty DuckStation z
+  folderów profili (`save/retroarch/saves|states/<rdzeń>/…`, `states/shared/retroarch/<rdzeń>/…`,
+  `states/android/retroarch/…`, `save/duckstation/memcards/…`) trafiają do paczek (konto +
+  platforma + gra + emulator + rdzeń + rodzaj), dopasowane do gier biblioteki jak na
+  urządzeniach (nazwy umowne, miniatury stanów). Paczki, które już są (np. z urządzenia z 0.46),
+  **nie są nadpisywane** — stara wersja trafia do ich historii z opisem „zapisy sprzed 0.46
+  (urządzenie, data)” i można ją przywrócić w panelu. Ze starych folderów nic nie znika;
+  ponowne uruchomienie niczego nie dubluje (porównanie zawartości). „Sprawdź (bez zmian)” —
+  sam raport; raport w panelu: ile gier i plików, czego nie dopasowano (np. wspólne karty
+  PCSX2, stany bez folderu rdzenia). Próba na kopii danych: `python -m emustart.savemigrate
+  --server <kopia folderu server> [--dry]`. Migracja nie uruchamia się sama.
+- „Wczytaj zapis” (PC i telefon) pokazuje też **stany z innych rdzeni** tej gry (np. bsnes,
+  gdy gra jest na Snes9x) z oznaczeniem „✗ rdzeń … — nie wczyta się” (stany są per rdzeń).
+
+### Zmienione
+- **Zapisy w grze wspólne dla zgodnych rdzeni** (`savebundles.SAVE_GROUPS`, jawna lista):
+  SNES — Snes9x (wszystkie wersje), bsnes (w tym HD beta, Mercury, 2014), Mesen-S; NES —
+  FCEUmm, Nestopia, Mesen, QuickNES (surowy SRAM / bateria, jak „root overrides” Steam Cloud).
+  Stany zostają per rdzeń; rdzenie spoza listy — jak dotąd per rdzeń. Serwer przyjmuje zapisy
+  rdzenia z grupy do wspólnej paczki także od urządzeń z 0.46 (widzą ją pod swoim rdzeniem), a
+  paczki zapisów wysłane wcześniej osobno dla rdzeni łączy przy pierwszym dostępie do gry
+  (nowsza aktualna, pozostałe w historii; nic nie znika).
+
+### Poprawione
+- **Dwa programy na jednym komputerze nie wylogowują się nawzajem** — nowa rejestracja zastępuje
+  tylko wcześniejszą rejestrację tego samego programu na tym sprzęcie (wcześniej EmuStart i
+  Lumen unieważniały się na zmianę: 401). Prośba o zalogowanie (panel, zatwierdzanie na
+  urządzeniu) pokazuje program („EmuStart”, „EmuStart Android”, „Lumen” — pole `app` albo
+  User-Agent) i to, którą rejestrację zastąpi.
+
+## [0.46.2] — 2026-10-20
+
+Zakres: skan biblioteki na serwerze (`emustart/scanner.py`), playlista płyt (`emustart/launcher.py`,
+Android: `Prepare.kt`). Gry dopiero teraz łączone w zestaw dostają nazwę bez „(Disc …)”
+(id bez zmian) — po aktualizacji serwera odśwież bibliotekę.
+
+### Poprawione
+- **Gry wielopłytowe łączą się w jedną pozycję także wtedy, gdy dotąd się rozpadały**
+  (skan biblioteki na serwerze, `emustart/scanner.py`):
+  - płyty oznaczone literami — „Gra (Disc A)”, „Gra (Disc B)” — w kolejności A, B, C…;
+  - podtytuł płyty po numerze — „Gra (Disc 1) (Part One)”, „Gra (Disc 2) - Second Act” —
+    nie rozbija zestawu, tytuł gry to część przed „(Disc …)”; ten sam dopisek na każdej
+    płycie (np. „(USA)”) zostaje w nazwie jak dotąd, a ten sam numer płyty dwa razy (dwie
+    wersje regionalne) — dwie osobne gry;
+  - płyty `.cue` (z `.bin` / `.wav`) — dotąd każda płyta była osobną grą;
+  - Xbox 360: płyty `.iso` „(Disc N)” obok gier-folderów (GOD/XEX) łączą się jak na innych
+    systemach, foldery zostają osobnymi grami.
+  Pozycja zestawu ma id dotychczasowej pierwszej płyty (statystyki i baza klientów bez
+  zmian), pozostałe płyty są jej plikami. Nazwy gier łączonych już wcześniej się nie
+  zmieniają. Bez łączenia: Amiga CD32 i CDTV, „Disk Writer” (tam „Disk N” to osobne
+  programy / dyski danych) i dema Amigi (WHDLoad).
+- Playlista `.m3u` gry wielopłytowej (PC i telefon) — tylko pliki płyt (`.cue`, `.chd`,
+  `.iso`, `.ccd`…), bez ścieżek `.bin` / `.wav` i bez `.img` obok `.ccd`.
+
+## [0.46.1] — 2026-10-20
+
+Zakres: wybór emulatora i rdzenia na koncie gracza (`emustart/emuchoice.py`, `emustart/api.py`;
+Android: `Prefs.kt`, `Bridge.kt`).
+
+### Poprawione
+- **Wybrane emulatory i rdzenie przechodzą z kontem** — po zalogowaniu istniejącym kontem
+  na innym komputerze był domyślny emulator, a inny rdzeń to inne zapisy (Snes9x ≠ bsnes),
+  więc zapisy z serwera „znikały”. Teraz:
+  - **Windows ↔ Windows**: emulator systemu i emulator wybrany dla gry zapisują się na
+    koncie (`settings/windows/emulators.json`, bez ścieżek komputera: „RetroArch + bsnes”,
+    „DuckStation”). Przy wejściu na profil wybory konta wygrywają z ustawieniami komputera;
+    brakujący rdzeń albo emulator EmuStart pobiera z serwera i ustawia sam. Uruchomienie
+    gry zaraz po zalogowaniu czeka na wybory z konta. Wybory zrobione przed tą wersją (tylko
+    w `config.json`) trafiają na konto przy pierwszym uruchomieniu — tylko inne niż
+    domyślne, żeby domyślny emulator nowego komputera nie nadpisał wyboru ze starego.
+  - **Android ↔ Android**: wybory należą do profilu, nie do telefonu (inny gracz na tym
+    samym telefonie ma swoje), pobierane z konta od razu po zmianie profilu i po
+    zalogowaniu (wcześniej obowiązywał wybór poprzedniego gracza).
+
+## [0.46.0] — 2026-10-20
+
+Zakres: synchronizacja zapisów gier z serwerem (serwer, EmuStart na PC, aplikacja na
+Androida), foldery zapisów profilu bez dowiązań, karta pamięci osobna dla gry. Po
+aktualizacji zaktualizuj też **EmuStart Server** i aplikację na telefonie — starszy serwer
+nie ma API zapisów (gra wtedy rusza na zapisach z urządzenia).
+
 ### Dokumentacja
 - Koncepcja 2.0 (`docs/koncepcja-2.0.md`, wersja robocza 3): **stany jak w Steam** — każdy
   zapis stanu to nowy, niezmienny wpis na serwerze, przed grą sloty wypełniane najnowszymi
@@ -18,13 +362,30 @@ Plan najbliższych zmian: [ROADMAP.md](ROADMAP.md).
   dostępu dla pozostałych emulatorów na Androidzie.
 
 ### Dodane
-- **Synchronizacja zapisów gier — serwer** (etap 1, `docs/SAVE_SYNC_DESIGN.md`): paczki
-  zapisów, stanów i kart pamięci per konto, gra, emulator i rdzeń RetroArcha (Snes9x i bsnes
-  osobno), jedna aktualna wersja jak w Steam Cloud — rozbieżne zmiany to konflikt (409) do
-  decyzji gracza, poprzednie wersje w historii na serwerze. Konto i urządzenie serwer ustala
-  z tokenu sesji, pliki przez krótkotrwałe podpisane adresy (bez ścieżek serwera), SHA-256
-  i poprawność ZIP-a sprawdzane przy wysyłce. Stały `game_id` w listach gier (ten sam na PC
-  i telefonie). Klient Windows i Android — następne etapy.
+- **Synchronizacja zapisów gier z serwerem — jak Steam Cloud** (`docs/SAVE_SYNC_DESIGN.md`).
+  Serwer jest jedynym źródłem prawdy: zapisy w grze, stany i karty pamięci każdej gry
+  synchronizują się paczkami per konto, gra, emulator i rdzeń RetroArcha (Snes9x i bsnes
+  osobno — nic nie kopiuje się między rdzeniami). Przed grą pobierają się zmiany z innych
+  urządzeń, po grze zmiany idą na serwer; gra bez połączenia rusza na zapisach z
+  urządzenia, a zmiany wysyłają się, gdy wróci połączenie.
+  - **Konflikt** (zapisy zmienione tu i na innym urządzeniu, np. gra offline): okno
+    uruchamiania pokazuje obie wersje (kiedy, z którego urządzenia) i czeka na decyzję —
+    **X** zostaw z tego urządzenia, **Y** weź z serwera, **B** pomiń. Druga wersja nie ginie:
+    zostaje w historii na serwerze (10 ostatnich) albo w kopii zapasowej na urządzeniu.
+  - Serwer (`emustart/savesync.py`): wersje paczek, odrzucanie nieaktualnych zmian (409),
+    konto i urządzenie z tokenu sesji (cudze konto tylko z jego tokenem), pliki przez
+    krótkotrwałe podpisane adresy bez ścieżek serwera, SHA-256 i poprawność ZIP-a, nazwa
+    urządzenia w manifeście. Stały `game_id` w listach gier.
+  - Windows (`emustart/syncclient.py`, `savebundles.py`): RetroArch (zapisy i stany per
+    rdzeń), DuckStation i PCSX2 (karty pamięci gry). W opcjach gry: „Zapisy na serwerze” —
+    zsynchronizowane / czekają na wysłanie.
+  - Android (`SaveSync.kt`, `Saves.kt`): RetroArch (zapisy i stany per rdzeń), PS1 w
+    RetroArchu (`<gra>.srm` = karta DuckStation `<gra>_1.mcd` z PC), ArmSX2 / AetherSX2
+    (`Mcd001.ps2` = karta tej gry z PC; telefon trzyma karty innych gier w schowku aplikacji
+    i podmienia je przed grą). „Wczytaj zapis” — stany tej gry z paczki (te same na każdym
+    urządzeniu), z miniaturami.
+  - Pliki w paczce mają nazwy umowne — urządzenia nazywające grę inaczej (ZIP z MSU-1,
+    rozpakowany ROM, .m3u) widzą te same zapisy.
 
 ### Zmienione
 - **Zapisy profilu bez dowiązań (junction)** w RetroArchu, DuckStation i PCSX2: emulator
@@ -40,6 +401,15 @@ Plan najbliższych zmian: [ROADMAP.md](ROADMAP.md).
   albo karty „per tytuł” DuckStation), wspólna karta zostaje nietknięta. Przygotowanie do
   synchronizacji zapisów z serwerem — wspólna karta wszystkich gier byłaby konfliktem przy
   każdej zmianie na dwóch urządzeniach.
+- Stany RetroArcha, zapisy w grze i karty pamięci **nie synchronizują się już całymi
+  folderami profilu** (ani przez wspólny folder stanów `states/shared`) — tylko paczkami
+  (jedna prawda). Stany PS2 (.p2s, różne wersje formatu na PC i telefonie) i pozostałe
+  emulatory — jak dotąd; menedżer zapisów kopiuje już tylko stany PS2.
+
+### Usunięte
+- `emustart/rastates.py` (wspólne stany RetroArcha z numeracją nadawaną przez serwer) —
+  zastąpione paczkami stanów; menedżer zapisów bez stanów RetroArcha i podglądu zapisów w
+  grze z folderów profilu (stan zapisów: opcje gry → „Zapisy na serwerze”).
 
 
 ## [0.45.1] — 2026-10-14

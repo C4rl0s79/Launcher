@@ -26,6 +26,7 @@ na dwóch urządzeniach (dzierżawa odnawiana w trakcie gry, patrz lock()).
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -42,7 +43,6 @@ log = logging.getLogger("emustart.profiles")
 
 LOCK_LEASE = 300           # blokada bez odnowienia przez tyle s przestaje blokować
 LOCK_BEAT = 60             # odnawianie w trakcie gry
-LOCK_LEGACY = 900          # blokady bez „lease” (starsze wersje)
 LOCAL = paths.APP / "profiles"
 
 
@@ -86,30 +86,26 @@ class ProfileExists(ValueError):
         self.name = name
 
 
-def create(name: str, color: str = "", cfg: dict | None = None, password: str = "") -> dict:
-    """Nowy profil = konto na serwerze z hasłem (emustart/accounts.py); serwer niedostępny —
-    profil lokalny, konto powstanie z pierwszym zapisem. Nazwa zajęta → ProfileExists."""
+def create(name: str, color: str = "", cfg: dict | None = None) -> dict:
+    """Nowy profil lokalny (bez serwera EmuStart). Z serwerem konto nie powstaje na
+    urządzeniu (0.49): nowe konto — zaproszenie administratora (strona serwera) albo panel;
+    istniejące konto innego użytkownika — jego hasło (account_join). Nazwa zajęta → ProfileExists."""
     from emustart import pinauth
     _ensure_columns()
     name = name.strip()[:32]
     if not name:
         raise ValueError("Pusta nazwa profilu.")
     local = pinauth.find([p["name"] for p in all_profiles()] + [p["nas_name"] for p in all_profiles()], name)
-    online = cfg is not None and nas_online(cfg)
-    nas_name, token = _safe_name(name), ""
-    if online:
-        fs = nasfs.backend(cfg)
-        taken = pinauth.find(_nas_profiles(fs), name)
+    if cfg is not None and cfg.get("server_key"):
+        fs = nasfs.backend(cfg) if nas_online(cfg) else None
+        taken = pinauth.find(_nas_profiles(fs), name) if fs else ""
         if taken or local:
-            raise ProfileExists(taken or local)
-        r = fs.profile_op("create", {"name": name, "password": password})
-        if r.get("exists"):
-            raise ProfileExists(r.get("name") or name)
-        if not r.get("ok"):
-            raise ValueError(r.get("error") or "Serwer nie założył konta.")
-        nas_name, token = r["name"], r["token"]
-    elif local:
+            raise ProfileExists(taken or local)        # istniejące konto — jego hasło
+        raise ValueError("Nowe konto zakłada się z zaproszenia administratora (strona serwera) albo w panelu "
+                         "serwera — potem dodaj je tutaj (Inny użytkownik → nazwa i hasło).")
+    if local:
         raise ProfileExists(local)
+    nas_name, token = _safe_name(name), ""
     with library.db() as c:
         cur = c.execute("INSERT INTO profiles(name, nas_name, color, pin_token, unlocked) VALUES(?,?,?,?,?)",
                         (name, nas_name, color, token, 0))
@@ -897,6 +893,24 @@ def local_families(pid: int) -> dict:
     return out
 
 
+def mark_bundled(family: str, names) -> None:
+    """Foldery zapisów emulatora, które synchronizują się paczkami z serwerem (syncclient) —
+    synchronizacja całych folderów profilu (push_all, sync_up) je pomija: jedna prawda."""
+    cur = bundled()
+    want = sorted(set(cur.get(family, [])) | set(names))
+    if want != cur.get(family):
+        cur[family] = want
+        library.meta_set("bundled_dirs", json.dumps(cur))
+
+
+def bundled() -> dict:
+    try:
+        d = json.loads(library.meta_get("bundled_dirs", "{}"))
+        return d if isinstance(d, dict) else {}
+    except ValueError:
+        return {}
+
+
 def push_all(cfg: dict) -> int:
     """Przy starcie: wszystkie lokalne save'y i ustawienia profili → NAS/serwer (tylko
     zmienione i brakujące). Np. po przejściu na serwer albo po grze bez połączenia."""
@@ -904,9 +918,13 @@ def push_all(cfg: dict) -> int:
         return 0
     resolve_moves(cfg)
     n = 0
+    skip = bundled()
     for prof in all_profiles():
         pid = prof["id"]
         for family, names in local_families(pid).items():
+            names = [x for x in names if x not in skip.get(family, [])]
+            if not names:
+                continue
             try:
                 n += _sync(cfg, pid, "save", family, names, up=True)
             except Exception:
@@ -929,58 +947,44 @@ def push_all(cfg: dict) -> int:
 
 # ── blokada ──
 
-# Dzierżawa: {"host", "time", "lease"} — urządzenie w grze odnawia ją co LOCK_BEAT s
-# (telefon rzadziej, dłuższa dzierżawa). Urządzenie, które padło albo zamknięto
-# aplikację w trakcie gry, przestaje blokować po upływie dzierżawy; wcześniej można
-# profil przejąć (force) — po potwierdzeniu w interfejsie.
-
-def lock_active(cur: dict, me: str = "") -> bool:
-    """Blokada innego urządzenia, która jeszcze obowiązuje."""
-    me = me or socket.gethostname()
-    if not cur.get("host") or cur.get("host") == me:
-        return False
-    return time.time() - float(cur.get("time", 0)) < float(cur.get("lease", LOCK_LEGACY))
-
+# Jedna gra naraz na profil (konto): blokada po stronie serwera (emustart/plock.py) — atomowa,
+# urządzenie rozpoznawane po tokenie sesji. Dzierżawa: urządzenie w grze odnawia ją co
+# LOCK_BEAT s; urządzenie, które padło albo zamknięto aplikację w trakcie gry, przestaje
+# blokować po LOCK_LEASE s; wcześniej można profil przejąć (force) — po potwierdzeniu gracza.
 
 _beats: dict = {}
 _beats_lock = threading.Lock()
 
 
-def _lock_write(cfg: dict, rel: str) -> None:
-    data = {"host": socket.gethostname(), "time": time.time(), "lease": LOCK_LEASE}
-    nasfs.backend(cfg).write(rel, json.dumps(data).encode("utf-8"))
+def _lock_call(cfg: dict, pid: int, op: str, body: dict) -> dict:
+    from emustart import syncclient
+    return syncclient._Client(cfg, pid).json("POST", f"/v1/lock/{op}", body)
 
 
 def lock(cfg: dict, pid: int, force: bool = False) -> str:
-    """'' = zablokowano (i odnawiane co minutę do unlock); inaczej nazwa urządzenia,
-    na którym profil właśnie gra. force — przejęcie profilu po potwierdzeniu."""
-    prof = get(pid)
-    if not prof or not nas_online(cfg):
+    """'' = zablokowano (i odnawiane do unlock) albo serwer nieosiągalny (gra bez blokady);
+    inaczej nazwa urządzenia, na którym profil właśnie gra. force — przejęcie po potwierdzeniu."""
+    from emustart import syncclient
+    if not get(pid):
         return ""
-    fs = nasfs.backend(cfg)
-    rel = f"{prof['nas_name']}/lock"
     try:
-        cur = json.loads(fs.read(rel) or b"{}")
-        if lock_active(cur) and not force:
-            return cur.get("host", "?")
-        if lock_active(cur):
-            log.warning("profil %s przejęty od %s", prof["name"], cur.get("host"))
-    except (OSError, ValueError):
-        pass
-    try:
-        _lock_write(cfg, rel)
-    except OSError as ex:
-        log.warning("blokada profilu: %s", ex)
+        r = _lock_call(cfg, pid, "take", {"lease": LOCK_LEASE, "force": bool(force)})
+    except (syncclient.Offline, syncclient.ConflictError) as ex:
+        log.info("blokada profilu bez serwera: %s", ex)
+        return ""
+    if not r.get("ok"):
+        return r.get("held_by") or "?"
+    if r.get("took_over"):
+        log.warning("profil %s przejęty od innego urządzenia", (get(pid) or {}).get("name"))
     stop = threading.Event()
 
     def beat():
         while not stop.wait(LOCK_BEAT):
             try:
-                cur = json.loads(fs.read(rel) or b"{}")
-                if cur.get("host") != socket.gethostname():
+                if not _lock_call(cfg, pid, "renew", {"lease": LOCK_LEASE}).get("ok"):
+                    log.warning("blokada profilu przejęta przez inne urządzenie")
                     return                     # ktoś przejął profil — nie odbieramy
-                _lock_write(cfg, rel)
-            except (OSError, ValueError) as ex:
+            except (syncclient.Offline, syncclient.ConflictError) as ex:
                 log.info("odnowienie blokady: %s", ex)
     with _beats_lock:
         old = _beats.pop(pid, None)
@@ -992,20 +996,17 @@ def lock(cfg: dict, pid: int, force: bool = False) -> str:
 
 
 def unlock(cfg: dict, pid: int) -> None:
+    from emustart import syncclient
     with _beats_lock:
         stop = _beats.pop(pid, None)
     if stop:
         stop.set()
-    prof = get(pid)
-    if not prof:
+    if not get(pid):
         return
-    fs = nasfs.backend(cfg)
-    rel = f"{prof['nas_name']}/lock"
     try:
-        if json.loads(fs.read(rel) or b"{}").get("host") == socket.gethostname():
-            fs.unlink(rel)
-    except (OSError, ValueError):
-        pass
+        _lock_call(cfg, pid, "release", {})
+    except (syncclient.Offline, syncclient.ConflictError) as ex:
+        log.info("zwolnienie blokady: %s", ex)
 
 
 # ── profile z NAS (czysta instalacja / drugi komputer) ──
@@ -1174,13 +1175,62 @@ def _copy_file(src: Path, dst: Path) -> None:
     os.replace(tmp, dst)
 
 
+def _seen_file(family: str) -> Path:
+    return LOCAL / "_machine" / family / ".emustart-seen.json"
+
+
+def _fingerprint(adapter) -> dict:
+    """{plik: sha1} ustawień gracza w emulatorze (bez wartości tego komputera: ścieżki, karta
+    graficzna, dźwięk; bez sekretów) — do wykrycia zmian zrobionych poza EmuStart."""
+    from emustart import ingame
+    rules_by = {Path(k).as_posix(): v for k, v in _merge_rules(getattr(adapter, "machine_keys", dict)(),
+                                                                getattr(adapter, "secret_keys", dict)()).items()}
+    out = {}
+    for rel, f in _files_under(adapter.settings_base(), adapter.settings_files()):
+        try:
+            data = f.read_bytes()
+            rules = rules_by.get(Path(rel).as_posix())
+            if rules:
+                data = ingame.blank_secrets(data.decode("utf-8-sig", errors="replace"), rules).encode("utf-8")
+            out[Path(rel).as_posix()] = hashlib.sha1(data).hexdigest()
+        except OSError:
+            pass
+    return out
+
+
+def _remember_seen(adapter, pid: int) -> None:
+    try:
+        _write_atomic(_seen_file(adapter.family), json.dumps({"pid": pid, "files": _fingerprint(adapter)}))
+    except OSError as ex:
+        log.info("odcisk ustawień %s: %s", adapter.family, ex)
+
+
+def changed_outside(adapter) -> int | None:
+    """Profil, którego ustawienia ktoś zmienił w samym emulatorze (uruchomionym bez EmuStart)
+    od ostatniej gry przez EmuStart — ten, który grał ostatnio; None — bez zmian albo nie
+    wiadomo (brak zapamiętanego odcisku)."""
+    try:
+        seen = json.loads(_seen_file(adapter.family).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(seen, dict) or not isinstance(seen.get("files"), dict):
+        return None
+    return int(seen["pid"]) if seen["files"] != _fingerprint(adapter) and get(int(seen.get("pid") or 0)) else None
+
+
 def settings_load(cfg: dict, pid: int, adapter) -> int:
     """Przed grą: ustawienia profilu (NAS → lokalnie → emulator). Profil bez
-    zapisanych ustawień gra na bieżących (po grze staną się jego)."""
+    zapisanych ustawień gra na bieżących (po grze staną się jego). Ustawienia zmienione
+    w samym emulatorze (poza EmuStart) najpierw przechodzą do profilu — nie są nadpisywane."""
     from emustart import ingame
     family, base, rels = adapter.family, adapter.settings_base(), adapter.settings_files()
     if not rels:
         return 0
+    owner = changed_outside(adapter)
+    if owner is not None:
+        # w emulatorze są ustawienia profilu, który grał ostatnio — zmiany poza EmuStart są jego
+        n = settings_save(cfg, owner, adapter, "zmiany w emulatorze poza EmuStart")
+        log.info("ustawienia %s zmienione poza EmuStart → profil %s (%d plików)", family, owner, n)
     snap = _settings_local(pid, family)
     prof = get(pid)
     if prof and nas_online(cfg):
@@ -1209,6 +1259,7 @@ def settings_load(cfg: dict, pid: int, adapter) -> int:
                 ingame.ini_set(base / rel, {((s or None), k): v for (s, k), v in diff.items()})
     if n:
         log.info("ustawienia profilu %s → %s: %d plików", pid, family, n)
+    _remember_seen(adapter, pid)
     return n
 
 
@@ -1329,6 +1380,7 @@ def settings_save(cfg: dict, pid: int, adapter, label: str = "") -> int:
         _copy_file(f, dst)
         n += 1
     hist.close()
+    _remember_seen(adapter, pid)               # stan po grze — kolejna różnica = zmiana poza EmuStart
     prof = get(pid)
     if prof and nas_online(cfg):
         _sync(cfg, pid, "settings", family, ["-"], up=True)

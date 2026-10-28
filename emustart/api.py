@@ -24,7 +24,7 @@ import urllib.parse
 from pathlib import Path
 
 from emustart import (__version__, art, bios, cache, catalog, ingame, installer, logos, sysinfo, metadata, pads, profiles, translations, uipad, config, emulators, launcher, library,
-                      nasfs, netsrc, paths, rastates, systems, winutil)
+                      nasfs, netsrc, paths, saveslots, syncclient, systems, winutil)
 
 log = logging.getLogger("emustart.api")
 KEEP_LIST = 60                     # stanów na liście „Wczytaj zapis”
@@ -53,6 +53,15 @@ class Api:
         # lokalne save'y i ustawienia profili → NAS/serwer (zaległe po grze bez połączenia,
         # pierwsze przejście na serwer); gra uruchomiona w tym czasie poczeka (post_busy)
         launcher.start_post(lambda: profiles.push_all(self._cfg), "zapisy profili")
+        # zapisy gier niewysłane na serwer (gra bez połączenia) — paczki, syncclient; potem
+        # nowsze wersje z innych urządzeń (lokalnie bez zmian; konflikty — przy uruchomieniu gry)
+        def saves_at_start():
+            try:
+                syncclient.retry(self._cfg)
+                syncclient.pull_all(self._cfg, self._profile)
+            except Exception:
+                log.exception("zapisy gier przy starcie")
+        launcher.start_post(saves_at_start, "zapisy gier")
         threading.Thread(target=self._profiles_bootstrap, daemon=True, name="profiles").start()
         from emustart import mediastore
         mediastore.migrate_later()                # lokalna kopia grafik: jeden plik na system
@@ -67,6 +76,7 @@ class Api:
         self._menu = {"open": False, "items": [], "message": "", "title": "", "seq": 0}
         self._menu_inputs: collections.deque = collections.deque()
         self._menu_lock = threading.Lock()
+        self._slot_lock = threading.Lock()        # zmiany slotów / stanów jedna po drugiej
 
     def _uipad_active(self) -> bool:
         if not self._window:
@@ -221,6 +231,11 @@ class Api:
 
     def _user_load(self, pid: int) -> None:
         """Ustawienia EmuStart profilu (wygląd itp.); profil bez nich dziedziczy bieżące."""
+        # emulatory i rdzenie wybrane na innych komputerach tego konta (w tle: serwer, pobieranie)
+        from emustart import emuchoice
+        self._choices = threading.Thread(target=emuchoice.apply_and_fetch, args=(self._cfg, pid), daemon=True,
+                                         name="wybory-emulatorow")
+        self._choices.start()
         data = profiles.json_get(self._cfg, pid, "emustart.json")
         if not data:
             return
@@ -327,9 +342,16 @@ class Api:
         if i is None:
             return {"ok": False, "checking": True, "name": "", "account": self._cfg.get("server_account", ""),
                     "key_rejected": False}
-        return {"ok": bool(i.get("ok")), "name": i.get("name", ""), "account": self._cfg.get("server_account", ""),
-                "key_rejected": bool(i.get("key_rejected")) or bool(netsrc.rejected()),
-                "reason": netsrc.rejected() or i.get("reason", "")}
+        rejected = bool(i.get("key_rejected")) or bool(netsrc.rejected())
+        out = {"ok": bool(i.get("ok")), "name": i.get("name", ""), "account": self._cfg.get("server_account", ""),
+               "key_rejected": rejected, "reason": netsrc.rejected() or i.get("reason", "")}
+        if rejected:
+            # urządzenie unieważnione na serwerze — ile gier ma zapisy, które czekają na wysłanie
+            try:
+                out["pending_saves"] = len(syncclient.pending(self._cfg))
+            except Exception:
+                out["pending_saves"] = 0
+        return out
 
     # ── stan ogólny ──
     def get_state(self) -> dict:
@@ -554,6 +576,9 @@ class Api:
                                                      "extracting", "running"):
             return {"ok": False, "reason": "Inna gra jest właśnie uruchamiana."}
         t0 = time.monotonic()
+        ch = getattr(self, "_choices", None)
+        if ch and ch.is_alive():
+            ch.join(15)                       # wybory emulatorów z konta (zaraz po zalogowaniu)
         block = self._pin_block(self._profile)
         if block:
             return {**block, "profile_pin": True}
@@ -634,6 +659,10 @@ class Api:
     def launch_cancel(self) -> None:
         if self._session:
             self._session.abort()
+
+    def launch_choice(self, choice: str) -> bool:
+        """Konflikt zapisów przy uruchamianiu: local | remote | skip."""
+        return bool(self._session and self._session.choose(str(choice)))
 
     def launch_dismiss(self) -> None:
         s = self._session
@@ -829,7 +858,7 @@ class Api:
             return {}
         emu = self._effective_emu(g)
         opts = emulators.options_for(systems.info(g["es"]), self._cfg.get("emu_root", ""))
-        states = []
+        states, slots = [], []
         desc: dict = {}
         if emu["exe"]:
             ad = ingame.adapter_for(emu["exe"])
@@ -838,19 +867,24 @@ class Api:
             except Exception:
                 log.exception("foldery profilu")
             meta = metadata.ensure_local(self._cfg, g)
-            prof = profiles.get(self._profile)
-            core = rastates.core_id(emu.get("args", ""))
-            if ad.family == "retroarch" and prof and core and profiles.nas_online(self._cfg):
-                # stany ze wszystkich urządzeń konta (koncepcja 2.0 §5.5) — tu, z miniaturami,
-                # zanim gracz wybierze; najnowszy czeka jako „Kontynuuj”
-                try:
-                    rastates.present(self._cfg, prof, ad, core, cache.local_path(self._cfg, g), {})
-                    desc = rastates.describe(self._cfg, prof, ad, core)
-                except Exception:
-                    log.exception("stany z serwera do listy")
             learned = [r["prefix"] for r in library.db().execute(
                 "SELECT prefix FROM states WHERE game_id=? AND family=?", (g["id"], ad.family))]
-            states = ingame.list_states(ad, g, meta, learned)
+            bundled = self._bundle_states(g, emu, ad)
+            states = bundled if bundled is not None else ingame.list_states(ad, g, meta, learned)
+            slots = self._slots_brief(g, emu, ad)
+            if ad.family == "retroarch":
+                # stany innych rdzeni tej gry (inne urządzenia) — wczytanie przełącza rdzeń gry
+                from emustart import savebundles
+                core = savebundles.core_id(emu.get("args", ""))
+                try:
+                    for st in syncclient.other_core_states(self._cfg, self._profile, g, core):
+                        m = re.search(r"\.state(\d*)(\.auto)?$", st["path"])
+                        states.append({"path": st["path"], "time": st["time"], "other_core": st["core"],
+                                       "arc": Path(st["path"]).name, "name": Path(st["path"]).name,
+                                       "label": ("Kontynuuj" if m and m.group(2) else f"Stan #{int(m.group(1) or 0) if m else 0}"),
+                                       "detail": f"rdzeń {st['core']} — wczytanie przełączy grę na ten rdzeń"})
+                except Exception:
+                    log.exception("stany innych rdzeni")
             launcher.resume_from_nas(self._cfg, self._profile, g)
             res = library.get_resume(self._profile, g["id"])
             if res and res["path"] and Path(res["path"]).is_file() and res["family"] == ad.family:
@@ -862,12 +896,209 @@ class Api:
             if th:
                 st["thumb"] = "/media/_stany/" + th
             self._state_label(st, desc)
-        states.sort(key=lambda x: (not x.get("resume"), not x.get("continue"), -x["time"]))
+        states.sort(key=lambda x: (not x.get("resume"), bool(x.get("other_core")), not x.get("continue"), -x["time"]))
         sc = (self._cfg.get("systems") or {}).get(g["es"]) or {}
         return {"id": g["id"], "title": g["title"], "emulator": emu, "options": opts,
                 "states": states, "es": g["es"], "system": systems.info(g["es"])["display"],
                 "retroarch": bool(emu["exe"]) and ingame.adapter_for(emu["exe"]).family == "retroarch",
-                "shader_off": bool(sc.get("shader_off"))}
+                "shader_off": bool(sc.get("shader_off")),
+                "sync": self._sync_status(g), "slots": slots}
+
+    def _slots_brief(self, g: dict, emu: dict, ad) -> list:
+        """Sloty zapisów gry do opcji gry (po synchronizacji w game_options; `ad` — emulator
+        z folderami profilu); [] — emulator bez paczek zapisów."""
+        try:
+            bundles = self._game_bundles(g, emu, ad)
+            if not bundles:
+                return []
+            plat, gid = syncclient.game_ids(g)
+            return saveslots.summary(self._profile, plat, gid, bundles)
+        except Exception:
+            log.exception("sloty zapisów")
+            return []
+
+    def _game_bundles(self, g: dict, emu: dict, ad) -> list | None:
+        """Paczki zapisów gry na tym komputerze (savebundles) — None: błąd."""
+        from emustart import savebundles
+        core = savebundles.core_id(emu.get("args", ""))
+        try:
+            return savebundles.for_game(ad, core, launcher.content_guess(self._cfg, g, emu["exe"]),
+                                        launcher.ps2_info(self._cfg, g))
+        except Exception:
+            log.exception("paczki zapisów gry")
+            return None
+
+    def _bundle_states(self, g: dict, emu: dict, ad) -> list | None:
+        """Stany gry z paczki — po synchronizacji z serwerem (serwer jest jedyną prawdą: lista
+        to dokładnie paczka, bez lokalnych plików spoza niej). None — emulator bez paczek stanów."""
+        bundles = self._game_bundles(g, emu, ad)
+        st = next((b for b in bundles or [] if b.kind == "states"), None)
+        if st is None:
+            return None
+        if launcher.post_busy():
+            launcher.wait_post(30)               # zapisy po ostatniej grze jeszcze idą na serwer
+        try:
+            # gra działa (Lumen pozwala przeglądać bibliotekę w trakcie gry): bez synchronizacji —
+            # pliki są w użyciu, a zmiana aktywnego slotu z innego urządzenia podmieniłaby je pod
+            # emulatorem; lista z plików na dysku, synchronizacja po grze
+            if not self._game_running():
+                for b in bundles:
+                    b.adopt_names()
+                syncclient.before(self._cfg, self._profile, bundles, g)   # konflikty zapisów — przy uruchomieniu
+        except Exception:
+            log.exception("zapisy gry z serwera")
+        st.collect()
+        return [{"path": str(p), "arc": arc, "name": Path(p).name, "time": Path(p).stat().st_mtime}
+                for p, arc in st.files if not arc.endswith(".png")]
+
+    # ── sloty zapisów i edycja stanów (emustart/saveslots.py) ──
+    def _game_running(self) -> bool:
+        """Gra uruchamia się albo działa — pliki zapisów w folderach emulatora są w użyciu."""
+        return bool(self._session and self._session.phase not in ("finished", "error", "cancelled"))
+
+    def _slot_ctx(self, game_id: int):
+        """(gra, paczki gry) dla slotów — paczki w folderach profilu gracza."""
+        if self._game_running():
+            # zamiana slotu / zmiana stanu pod działającym emulatorem: jego autozapis przy wyjściu
+            # trafiłby do innego slotu
+            raise saveslots.EditError("Najpierw zamknij grę — zapisy są teraz w użyciu.")
+        g = library.game(int(game_id))
+        if not g:
+            raise saveslots.EditError("Nie ma takiej gry.")
+        emu = self._effective_emu(g)
+        if not emu["exe"]:
+            raise saveslots.EditError("Ta gra nie ma emulatora.")
+        ad = ingame.adapter_for(emu["exe"])
+        profiles.bind(ad, self._profile)
+        bundles = self._game_bundles(g, emu, ad)
+        if not bundles:
+            raise saveslots.EditError("Ten emulator nie ma jeszcze synchronizacji zapisów tej gry.")
+        if launcher.post_busy():
+            launcher.wait_post(30)               # zapisy po ostatniej grze jeszcze idą na serwer
+            if launcher.post_busy():
+                # pliki tej gry właśnie idą na serwer — zamiana slotu / zmiana stanu by się z nimi minęła
+                raise saveslots.EditError("Zapisy po ostatniej grze jeszcze idą na serwer — spróbuj za chwilę.")
+        return g, bundles
+
+    def _slot_call(self, fn) -> dict:
+        try:
+            with self._slot_lock:
+                return fn()
+        except saveslots.EditError as ex:
+            return {"ok": False, "reason": str(ex)}
+        except Exception as ex:
+            log.exception("sloty zapisów")
+            return {"ok": False, "reason": f"Nie udało się ({ex})."}
+
+    def save_slots(self, game_id: int) -> dict:
+        """Sloty zapisów gry: [{slot, active, states, saves, time}]."""
+        def run():
+            g, bundles = self._slot_ctx(game_id)
+            plat, gid = syncclient.game_ids(g)
+            with syncclient._lock:               # dokończenie przerwanej zamiany — nie w trakcie synchronizacji
+                saveslots.finish_swap(self._profile, plat, gid, bundles)
+            return {"ok": True, "slots": saveslots.summary(self._profile, plat, gid, bundles)}
+        return self._slot_call(run)
+
+    def save_slot_set(self, game_id: int, slot: int) -> dict:
+        """Aktywny slot gry (zamiana plików od razu, wybór na serwer)."""
+        def run():
+            g, bundles = self._slot_ctx(game_id)
+            r = saveslots.set_active(self._cfg, self._profile, g, bundles, int(slot))
+            log.info("sloty: %s → slot %d", g["title"], int(slot))
+            return r
+        return self._slot_call(run)
+
+    def state_edit_info(self, game_id: int) -> dict:
+        """Do edycji stanu: wolne numery i pozostałe sloty."""
+        def run():
+            g, bundles = self._slot_ctx(game_id)
+            ed = saveslots.Editor(self._cfg, self._profile, g, bundles)
+            return {"ok": True, "numbers": ed.numbers(), "slots": ed.slots(), "slot": ed.slot,
+                    "retroarch": ed.st.emulator_id == "retroarch"}
+        return self._slot_call(run)
+
+    def _other_core_ctx(self, game_id: int, core: str):
+        """Stany innego rdzenia RetroArcha (lista „Wczytaj zapis” → `other_core`)."""
+        if self._game_running():
+            raise saveslots.EditError("Najpierw zamknij grę — zapisy są teraz w użyciu.")
+        g = library.game(int(game_id))
+        if not g:
+            raise saveslots.EditError("Nie ma takiej gry.")
+        return saveslots.OtherCore(self._cfg, self._profile, g, str(core))
+
+    def state_edit(self, game_id: int, op: str, arc: str, arg=None, core: str = "") -> dict:
+        """Zmiana stanu aktywnego slotu: renumber (arg: numer), copy_new, copy_slot / move_slot
+        (arg: slot), continue, delete; restore (arc: nazwa w koszu). `core` — stan innego rdzenia
+        RetroArcha (`other_core` z listy stanów): tylko delete i restore."""
+        def run():
+            if core:
+                if op not in ("delete", "restore"):
+                    raise saveslots.EditError("Stan innego rdzenia można tylko usunąć albo przywrócić.")
+                ed = self._other_core_ctx(game_id, core)
+                return ed.delete(arc) if op == "delete" else ed.restore(arc)
+            g, bundles = self._slot_ctx(game_id)
+            ed = saveslots.Editor(self._cfg, self._profile, g, bundles)
+            fn = {"renumber": lambda: ed.renumber(arc, int(arg)), "copy_new": lambda: ed.copy_new(arc),
+                  "copy_slot": lambda: ed.to_slot(arc, int(arg)), "move_slot": lambda: ed.to_slot(arc, int(arg), True),
+                  "continue": lambda: ed.set_continue(arc), "delete": lambda: ed.delete(arc),
+                  "restore": lambda: ed.restore(arc)}.get(str(op))
+            if not fn:
+                raise saveslots.EditError("Nieznana zmiana stanu.")
+            return fn()
+        return self._slot_call(run)
+
+    def state_trash(self, game_id: int, core: str = "") -> dict:
+        """Kosz aktywnego slotu: [{name, arc, time, label, thumb}]; `core` — kosz innego rdzenia
+        RetroArcha (przywrócenie: state_edit(…, "restore", name, core=core))."""
+        def run():
+            if core:
+                ed = self._other_core_ctx(game_id, core)
+                items = ed.trash()
+                ed.settle({})
+            else:
+                g, bundles = self._slot_ctx(game_id)
+                items = saveslots.Editor(self._cfg, self._profile, g, bundles).trash()
+            for it in items:
+                n = saveslots.state_no(it["arc"])
+                it["label"] = "Kontynuuj" if it["arc"] == saveslots.AUTO else (f"Stan #{n}" if n is not None else it["arc"])
+                th = ingame.state_thumb(Path(it.pop("path")))
+                if th:
+                    it["thumb"] = "/media/_stany/" + th
+            return {"ok": True, "items": items}
+        return self._slot_call(run)
+
+    def play_other_core(self, game_id: int, core: str) -> dict:
+        """„Wczytaj zapis” — stan innego rdzenia: ta gra przechodzi na RetroArch z tym rdzeniem
+        (wybór także na koncie), brakujący rdzeń — z serwera. Potem launch("arc:<stan>")."""
+        from emustart import emuchoice, installer
+        g = library.game(int(game_id))
+        if not g:
+            return {"ok": False, "reason": "Nie ma takiej gry."}
+        key = f"retroarch#{str(core).lower()}"
+        opt = emuchoice.find(self._cfg, g["es"], key)
+        if not opt:
+            item = emuchoice.install_item(key)
+            if item in (installer.index().get("items") or {}):
+                try:
+                    installer.install(self._cfg, item)
+                    emulators.forget_scan()
+                    opt = emuchoice.find(self._cfg, g["es"], key)
+                except Exception as ex:
+                    log.exception("pobieranie rdzenia %s", core)
+                    return {"ok": False, "reason": f"Nie udało się pobrać rdzenia {core}: {ex}"}
+        if not opt:
+            return {"ok": False, "reason": f"Brak rdzenia {core} na tym komputerze i na serwerze."}
+        self.set_game_emulator(int(game_id), opt)
+        return {"ok": True, "label": opt["label"]}
+
+    def _sync_status(self, g: dict) -> dict:
+        """Stan synchronizacji zapisów gry z serwerem (opcje gry)."""
+        try:
+            return syncclient.status(self._cfg, self._profile, g)
+        except Exception:
+            log.exception("stan synchronizacji zapisów")
+            return {"state": "never"}
 
     def ra_states(self, game_id: int) -> dict:
         """„Wczytaj zapis” — stany ze wszystkich urządzeń (na telefonie: Bridge.raStates).
@@ -987,12 +1218,17 @@ class Api:
         return out
 
     def set_game_emulator(self, game_id: int, opt: dict | None) -> dict:
+        from emustart import emuchoice
         with library.db() as c:
             if not opt:
                 c.execute("DELETE FROM game_emu WHERE game_id=?", (int(game_id),))
             else:
                 c.execute("INSERT OR REPLACE INTO game_emu VALUES(?,?,?,?)",
                           (int(game_id), opt["label"], opt["exe"], opt.get("args", "")))
+        g = library.game(int(game_id))
+        if g:                                 # wybór dla gry → konto (inne komputery konta)
+            threading.Thread(target=lambda: _quiet(emuchoice.record_game, self._cfg, self._profile, g, opt),
+                             daemon=True, name="wybor-emulatora").start()
         return {"ok": True}
 
     def meta_fetch(self, game_id: int, full: bool = False) -> dict:
@@ -1184,8 +1420,15 @@ class Api:
         if data.get("emulator"):
             o = data["emulator"]
             sc.update(label=o["label"], exe=o["exe"], args=o.get("args", ""), enabled=True)
+            self._record_choice(es, o)
         config.save(self._cfg)
         return {"ok": True}
+
+    def _record_choice(self, es: str, opt: dict) -> None:
+        """Wybór emulatora systemu → konto gracza (inne komputery konta — ten sam)."""
+        from emustart import emuchoice
+        threading.Thread(target=lambda: _quiet(emuchoice.record_system, self._cfg, self._profile, es, opt),
+                         daemon=True, name="wybor-emulatora").start()
 
     # ── pobieranie emulatorów ──
     def install_missing(self) -> list:
@@ -1322,41 +1565,6 @@ class Api:
                     "reason": f"Nie ma konta „{str(name).strip()}”."}
         return {"ok": bool(prof), "reason": why, "profile": prof and self._public_profile(prof)}
 
-    # nowe konto z tego (zalogowanego) urządzenia — zatwierdza administrator (emustart/enroll.py)
-    def account_request(self, name: str, password: str) -> dict:
-        r = netsrc.authed_post(self._cfg, "/v1/enroll/account", {"account": str(name), "password": str(password)})
-        if not r.get("ok"):
-            return {"ok": False, "reason": r.get("reason") or r.get("error") or "Serwer nie przyjął prośby.",
-                    "exists": bool(r.get("exists"))}
-        if r.get("status") == "approved":
-            prof = profiles.account_profile(r["account"], r.get("token", ""))
-            return {"ok": True, "status": "approved", "profile": self._public_profile(prof)}
-        pend = [p for p in self._cfg.get("account_requests") or [] if p.get("account") != r["account"]]
-        self._cfg["account_requests"] = pend + [{"rid": r["rid"], "account": r["account"], "code": r.get("pretty", "")}]
-        config.save(self._cfg)
-        return {"ok": True, "status": "pending", "account": r["account"], "code": r.get("pretty", "")}
-
-    def account_requests_poll(self) -> dict:
-        """Prośby o nowe konto z tego urządzenia — zatwierdzone: konto na liście profili."""
-        pend = self._cfg.get("account_requests") or []
-        if not pend or not self._cfg.get("server_key"):
-            return {"ok": True, "done": []}
-        done, keep = [], []
-        for p in pend:
-            r = netsrc.authed_post(self._cfg, "/v1/enroll/account_poll", {"rid": p["rid"]})
-            st = r.get("status") if r.get("ok") else "error"
-            if st == "approved" and r.get("token"):
-                profiles.account_profile(r["account"], r["token"])
-                done.append({"account": p["account"], "status": "approved"})
-            elif st in ("denied", "expired"):
-                done.append({"account": p["account"], "status": st})
-            else:
-                keep.append(p)
-        if keep != pend:
-            self._cfg["account_requests"] = keep
-            config.save(self._cfg)
-        return {"ok": True, "done": done}
-
     # PIN — tylko to urządzenie
     def profile_unlock(self, pid: int, pin: str) -> dict:
         ok, why = profiles.local_pin_check(int(pid), str(pin))
@@ -1386,13 +1594,30 @@ class Api:
         self._profile = int(pid)
         library.meta_set("last_profile", str(self._profile))
         self._user_load(self._profile)
+        self._pull_saves()
         return {"ok": True}
 
-    def profile_create(self, name: str, password: str = "") -> dict:
-        """Nowy profil — z serwerem konto z hasłem. Nazwa zajęta (bez względu na wielkość
-        liter) → exists: UI prosi o hasło tego konta (profile_join) albo o inną nazwę."""
+    def _pull_saves(self) -> None:
+        """W tle: nowsze wersje paczek zapisów tego profilu z serwera (lokalnie bez zmian);
+        bez gry, która właśnie działa albo wysyła zapisy."""
+        pid = self._profile
+
+        def run():
+            skip = set()
+            s = getattr(self, "_session", None)
+            if s and s.game:
+                skip.add(syncclient.game_ids(s.game))
+            try:
+                syncclient.pull_all(self._cfg, pid, skip)
+            except Exception:
+                log.exception("zapisy z serwera")
+        launcher.start_post(run, "zapisy z serwera")
+
+    def profile_create(self, name: str) -> dict:
+        """Nowy profil lokalny (z serwerem nowe konto — zaproszenie albo panel). Nazwa zajęta
+        (bez względu na wielkość liter) → exists: UI prosi o hasło tego konta (profile_join)."""
         try:
-            p = profiles.create(name, cfg=self._cfg, password=str(password or ""))
+            p = profiles.create(name, cfg=self._cfg)
         except profiles.ProfileExists as ex:
             return {"ok": False, "exists": ex.name, "reason": str(ex)}
         except (ValueError, OSError) as ex:
@@ -1507,24 +1732,33 @@ class Api:
                 "systems": rows}
 
     # ── logowanie na serwerze: konto + hasło + klucz urządzenia (emustart/enroll.py) ──
-    def server_enroll(self, text: str, mode: str, account: str, password: str = "") -> dict:
-        """Ustawienia → Zaloguj: link z kodu QR panelu (adresy, odcisk certyfikatu, kod
-        jednorazowy — bez czekania na zatwierdzenie) albo adres tunelu (zatwierdza inne
-        urządzenie konta albo administrator). Klucz urządzenia: TPM, bez niego DPAPI. Hasło idzie
-        tylko w prośbie — program go nie zapisuje. Prośba czeka do 24 h (przetrwa restart)."""
+    def server_enroll(self, text: str, mode: str, account: str = "", password: str = "", code: str = "") -> dict:
+        """Ustawienia → Zaloguj (emustart/enroll.py):
+        - mode "code" — kod logowania ze strony serwera (albo z panelu): link / kod QR (adresy,
+          odcisk certyfikatu, kod, konto) albo adres serwera + `code` wpisany ręcznie. Konto
+          wynika z kodu, bez hasła i bez czekania na zatwierdzenie;
+        - mode "existing" — „Mam konto”: nazwa i hasło; zatwierdza inne urządzenie konta albo
+          administrator. Hasło idzie tylko w prośbie — program go nie zapisuje. Prośba czeka do 24 h.
+        Klucz urządzenia: TPM, bez niego DPAPI."""
         import secrets
         import socket
-        from emustart import accounts, keystore
+        from emustart import keystore
         account = (account or "").strip()
-        if not account or mode not in ("new", "existing"):
-            return {"ok": False, "reason": "Podaj nazwę konta."}
-        if mode == "new" and accounts.policy(password):
-            return {"ok": False, "reason": accounts.policy(password)}
-        if not password:
-            return {"ok": False, "reason": "Podaj hasło konta."}
         login = netsrc.parse_login(text)
         if not login.get("ok"):
             return login
+        if mode == "code":
+            login["code"] = login.get("code") or (code or "").strip()
+            if not login["code"]:
+                return {"ok": False, "reason": "Podaj kod logowania ze strony serwera."}
+            account = login.get("account") or account
+        elif mode == "existing":
+            if not account:
+                return {"ok": False, "reason": "Podaj nazwę konta."}
+            if not password:
+                return {"ok": False, "reason": "Podaj hasło konta."}
+        else:
+            return {"ok": False, "reason": "Nowe konto zakłada się z zaproszenia — zaloguj się na stronie serwera."}
         old = self._cfg.get("enroll_pending")
         if old and (old.get("account") != account or old.get("mode") != mode or login.get("code")):
             self.server_enroll_cancel()
@@ -1538,8 +1772,9 @@ class Api:
             except Exception as ex:
                 log.exception("klucz urządzenia")
                 return {"ok": False, "reason": f"Nie udało się utworzyć klucza urządzenia: {ex}"}
-        body = {"mode": mode, "account": account, "password": password, "name": socket.gethostname(),
-                "class": "pc", "version": __version__, "pubkey": pem, "hw": netsrc.hw_id(),
+        body = {"mode": mode, "account": account if mode == "existing" else "",
+                "password": password if mode == "existing" else "", "name": socket.gethostname(),
+                "class": "pc", "app": "EmuStart", "version": __version__, "pubkey": pem, "hw": netsrc.hw_id(),
                 "login_code": login.get("code", "")}
         r: dict = {"ok": False, "reason": "Serwer nie odpowiada."}
         fp = ""
@@ -1560,17 +1795,17 @@ class Api:
                                      "endpoints": [{"url": u, "kind": k, **({"ca": True} if c else {})}
                                                    for u, k, c in login["endpoints"]]}, trusted=True)
         config.save(self._cfg)
-        log.info("prośba o zalogowanie na %s (%s, konto %s, klucz: %s)%s", r["url"], mode, account, kind,
-                 " — kod z panelu" if login.get("code") else "")
+        log.info("prośba o zalogowanie na %s (%s, konto %s, klucz: %s)", r["url"], mode, account or "z kodu", kind)
         out = {"ok": True, "code": r["pretty"], "account": account, "url": r["url"], "key": kind,
                "expires_in": max(0, r["expires"] - time.time())}
-        if r.get("status") == "approved":                  # kod z panelu — od razu
-            out["status"] = self.server_enroll_poll().get("status")
+        if r.get("status") == "approved":                  # kod logowania — od razu
+            p = self.server_enroll_poll()
+            out.update(status=p.get("status"), account=p.get("account") or account)
         return out
 
     def server_scan(self) -> dict:
-        """Kod QR — tylko na telefonie (aparat); na komputerze: Zaloguj → link z panelu serwera."""
-        return {"ok": False, "reason": "Na komputerze: Zaloguj → wklej link z panelu serwera (Dodaj urządzenie)."}
+        """Kod QR — tylko na telefonie (aparat); na komputerze: Zaloguj → link ze strony serwera."""
+        return {"ok": False, "reason": "Na komputerze: Zaloguj → wklej link ze strony serwera (Pokaż kod logowania)."}
 
     def server_enroll_poll(self) -> dict:
         p = self._cfg.get("enroll_pending")
@@ -1596,17 +1831,34 @@ class Api:
                              name="adresy-serwera").start()
             log.info("zalogowano na serwerze %s (konto %s)", p["url"], self._cfg["server_account"])
             self._adopt_account(self._cfg["server_account"])
+            self._pull_saves()                          # zapisy gier tego konta z serwera
             from emustart import libsync
             if libsync.thin(self._cfg):
                 threading.Thread(target=self._thin_sync, daemon=True, name="biblioteka-serwera").start()
         elif st in ("denied", "expired"):
             self.server_enroll_cancel()
-        return {"ok": True, "status": st, "account": p["account"], "code": p["code"], "reason": r.get("reason", "")}
+        return {"ok": True, "status": st, "account": r.get("account") or p["account"], "code": p["code"],
+                "reason": r.get("reason", "")}
 
-    def server_logout(self) -> dict:
+    def server_logout(self, force: bool = False) -> dict:
         """Ustawienia → Wyloguj z serwera: serwer unieważnia to urządzenie, klucz urządzenia
-        i zapamiętane adresy znikają z tego komputera. Gry, zapisy i profile zostają."""
+        i zapamiętane adresy znikają z tego komputera. Gry, zapisy i profile zostają.
+        Najpierw zapisy: po ostatniej grze (wysyłanie w tle) i zaległe — gdy czegoś nie udało
+        się wysłać, bez `force` nie wylogowuje (gracz wybiera: jeszcze raz / mimo to / anuluj)."""
         from emustart import keystore
+        s = getattr(self, "_session", None)
+        if s and s.phase in ("preparing", "downloading", "extracting", "running", "conflict"):
+            return {"ok": False, "reason": "Trwa gra — wyloguj się po jej zakończeniu."}
+        if self._cfg.get("server_key") and not force:
+            launcher.wait_post(120)                     # zapisy po ostatniej grze
+            try:
+                syncclient.retry(self._cfg)
+            except Exception:
+                log.exception("zapisy przed wylogowaniem")
+            left = syncclient.pending(self._cfg)
+            if left:
+                return {"ok": False, "ask": True, "pending": len(left), "games": [g["name"] for g in left[:8]],
+                        "reason": f"Zapisy {len(left)} {'gry' if len(left) == 1 else 'gier'} nie doszły na serwer."}
         if self._cfg.get("server_key"):
             r = netsrc.authed_post(self._cfg, "/v1/auth/logout", {})
             if not r.get("ok"):
@@ -1710,6 +1962,8 @@ class Api:
                 for k in ("enabled", "label", "exe", "args"):
                     if k in sc:
                         cur[k] = sc[k]
+                if sc.get("exe"):
+                    self._record_choice(es, sc)
         config.save(cfg)
         return {"ok": True}
 
@@ -1863,6 +2117,13 @@ def clean_look(data) -> dict:
         elif isinstance(v, str) and _LOOK_STR.match(v):
             out[k] = v
     return out
+
+
+def _quiet(fn, *args) -> None:
+    try:
+        fn(*args)
+    except Exception:
+        log.exception("%s", getattr(fn, "__name__", "zadanie"))
 
 
 def _recommended_option(es: str, cfg: dict) -> dict:

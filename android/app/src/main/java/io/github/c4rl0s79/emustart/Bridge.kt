@@ -32,6 +32,8 @@ class Bridge(private val act: MainActivity) {
     init {
         pool.execute {
             try { saves.retryPending() } catch (e: Exception) { Log.w(tag, "zaległe zapisy: $e") }
+            // nowsze wersje zapisów z innych urządzeń (w telefonie bez zmian; konflikty — przy grze)
+            try { if (launch == null) saves.pullAll(prefs.profile) } catch (e: Exception) { Log.w(tag, "zapisy z serwera: $e") }
             // blokada profilu z poprzedniego uruchomienia (aplikację zamknięto w trakcie gry)
             try { if (launch == null) saves.releaseStaleLock(prefs.profile) } catch (e: Exception) { }
         }
@@ -54,7 +56,9 @@ class Bridge(private val act: MainActivity) {
         var profile = ""
         var lockedBy = ""
         var emuId = ""
-        var startState = ""        // „Wczytaj zapis”: stan RetroArcha na serwerze (względem profilu)
+        var startState = ""        // „Wczytaj zapis”: wybrany stan RetroArcha (plik w telefonie)
+        @Volatile var conflict: JSONArray? = null   // konflikt zapisów — czeka na decyzję gracza
+        @Volatile var choice = ""
     }
     @Volatile private var launch: Launch? = null
 
@@ -89,8 +93,9 @@ class Bridge(private val act: MainActivity) {
         "get_settings" -> settings()
         "save_settings" -> { saveSettings(a.getJSONObject(0)); JSONObject().put("ok", true) }
         "server_scan" -> scanQr()
-        "server_logout" -> logout()
-        "server_enroll" -> enrollStart(a.optString(0, ""), a.optString(1, ""), a.optString(2, ""), a.optString(3, ""))
+        "server_logout" -> logout(a.optBoolean(0, false))
+        "server_enroll" -> enrollStart(a.optString(0, ""), a.optString(1, ""), a.optString(2, ""), a.optString(3, ""),
+                                       a.optString(4, ""))
         "server_enroll_poll" -> enrollPoll()
         "server_enroll_cancel" -> { enrollCancel(); JSONObject().put("ok", true) }
         "enroll_pending" -> enrollPending()
@@ -99,8 +104,13 @@ class Bridge(private val act: MainActivity) {
         "rescan" -> { systemsCache = null; synchronized(gamesCache) { gamesCache.clear() }; JSONObject().put("ok", true) }
         "launch" -> startLaunch(a.getInt(0), a.optBoolean(2, false), a.optString(1, ""))
         "ra_states" -> raStates(a.getInt(0))
+        "play_other_core" -> playOtherCore(a.getInt(0), a.getString(1))
         "launch_status" -> launchStatus()
-        "launch_cancel" -> { launch?.downloader?.cancel?.set(true); null }
+        "launch_cancel" -> { launch?.downloader?.cancel?.set(true); launch?.let { if (it.conflict != null) it.choice = "skip" }; null }
+        "launch_choice" -> launch?.let { l ->
+            val c = a.optString(0, "")
+            if (l.conflict != null && c in setOf("local", "remote", "skip")) { l.choice = c; true } else false
+        } ?: false
         "launch_dismiss" -> { val l = launch; if (l != null && l.phase in setOf("finished", "error", "cancelled")) launch = null; null }
         "toggle_pin" -> togglePin(a.getInt(0))
         // administrator: grafiki, opisy i wygląd systemów na serwerze (wszystkie urządzenia)
@@ -130,8 +140,6 @@ class Bridge(private val act: MainActivity) {
             pool.execute { pushLook() }             // wygląd na koncie — inne telefony tego konta też
             JSONObject().put("ok", true)
         }
-        "account_request" -> accountRequest(a.getString(0), a.getString(1))
-        "account_requests_poll" -> accountRequestsPoll()
         "quit" -> { act.runOnUiThread { act.finishAndRemoveTask() }; null }
         "copy_status" -> JSONArray()
         "post_status" -> saves.busy
@@ -140,7 +148,7 @@ class Bridge(private val act: MainActivity) {
         "system_info" -> systemInfo(a.optString(0, ""))
         "profiles_list" -> profilesList()
         "profile_select", "profile_setup" -> selectProfile(a.getInt(0))
-        "profile_create" -> createProfile(a.getString(0), a.optString(1, ""))
+        "profile_create" -> createProfile(a.getString(0))
         "profile_join" -> joinProfile(a.getString(0), a.getString(1))
         "profile_login" -> loginProfile(a.getInt(0), a.getString(1))
         "profile_set_password" -> setPassword(a.getInt(0), a.getString(1), a.optString(2, ""))
@@ -221,7 +229,9 @@ class Bridge(private val act: MainActivity) {
             .put("profiles", profList.size.coerceAtLeast(1))
             .put("account", if (prefs.deviceId.isNotEmpty()) prefs.serverAccount else "")
             .put("server", if (prefs.configured) JSONObject().put("ok", online).put("name", "")
-                .put("checking", checking && !online).put("key_rejected", keyRejected) else JSONObject.NULL)
+                .put("checking", checking && !online).put("key_rejected", keyRejected)
+                // urządzenie unieważnione na serwerze — ile gier ma zapisy czekające na wysłanie
+                .put("pending_saves", if (keyRejected) saves.pendingCount() else 0) else JSONObject.NULL)
             .put("py_pad", false).put("pad_backend", "android")
             .put("admin", server.admin)
     }
@@ -356,52 +366,6 @@ class Bridge(private val act: MainActivity) {
                 prefs.lookTime > t -> pushLook()
             }
         } catch (e: Exception) { Log.w(tag, "wygląd z serwera: $e") }
-    }
-
-    // ── nowe konto z tego telefonu (Inny użytkownik → nazwa, której nie ma) — zatwierdza administrator ──
-    private fun accountRequest(name: String, password: String): JSONObject {
-        val r = try { server.postAuthed("/v1/enroll/account", JSONObject().put("account", name).put("password", password)) }
-            catch (e: Exception) { return JSONObject().put("ok", false).put("reason", explain(e)) }
-        if (!r.optBoolean("ok")) return JSONObject().put("ok", false)
-            .put("reason", r.optString("reason", r.optString("error", "Serwer nie przyjął prośby."))).put("exists", r.optBoolean("exists"))
-        val acc = r.optString("account", name)
-        if (r.optString("status") == "approved") {
-            prefs.setToken(acc, r.optString("token"))
-            try { loadProfiles() } catch (e: Exception) { }
-            return JSONObject().put("ok", true).put("status", "approved")
-                .put("profile", JSONObject().put("id", profList.indexOf(acc) + 1).put("name", acc))
-        }
-        val pend = try { JSONArray(prefs.accountRequests) } catch (e: Exception) { JSONArray() }
-        val keep = JSONArray()
-        for (i in 0 until pend.length()) pend.optJSONObject(i)?.takeIf { it.optString("account") != acc }?.let { keep.put(it) }
-        keep.put(JSONObject().put("rid", r.optString("rid")).put("account", acc).put("code", r.optString("pretty")))
-        prefs.accountRequests = keep.toString()
-        return JSONObject().put("ok", true).put("status", "pending").put("account", acc).put("code", r.optString("pretty"))
-    }
-
-    private fun accountRequestsPoll(): JSONObject {
-        val done = JSONArray()
-        val pend = try { JSONArray(prefs.accountRequests) } catch (e: Exception) { JSONArray() }
-        if (pend.length() == 0 || !prefs.configured) return JSONObject().put("ok", true).put("done", done)
-        val keep = JSONArray()
-        for (i in 0 until pend.length()) {
-            val p = pend.optJSONObject(i) ?: continue
-            val r = try { server.postAuthed("/v1/enroll/account_poll", JSONObject().put("rid", p.optString("rid"))) }
-                catch (e: Exception) { JSONObject() }
-            when (if (r.optBoolean("ok")) r.optString("status") else "error") {
-                "approved" -> if (r.optString("token").isNotEmpty()) {
-                    prefs.setToken(r.optString("account", p.optString("account")), r.optString("token"))
-                    done.put(JSONObject().put("account", p.optString("account")).put("status", "approved"))
-                } else keep.put(p)
-                "denied", "expired" -> done.put(JSONObject().put("account", p.optString("account")).put("status", r.optString("status")))
-                else -> keep.put(p)
-            }
-        }
-        if (keep.length() != pend.length()) {
-            prefs.accountRequests = keep.toString()
-            try { loadProfiles() } catch (e: Exception) { }
-        }
-        return JSONObject().put("ok", true).put("done", done)
     }
 
     /** Opis platformy do karuzeli (producent, lata, nośnik, opis) — z serwera, jak na komputerze. */
@@ -821,11 +785,13 @@ class Bridge(private val act: MainActivity) {
         return out
     }
 
-    // ── logowanie na serwerze (emustart/enroll.py): konto + hasło + klucz urządzenia ──
-    private data class Login(val eps: List<Triple<String, String, Boolean>>, val fp: String, val code: String)
+    // ── logowanie na serwerze (emustart/enroll.py): kod logowania (albo konto + hasło) + klucz urządzenia ──
+    private data class Login(val eps: List<Triple<String, String, Boolean>>, val fp: String, val code: String,
+                             val account: String = "")
 
-    /** Link z kodu QR panelu (adresy, odcisk certyfikatu, kod jednorazowy) albo adres tunelu.
-     *  Adres IP bez kodu QR nie ma czym sprawdzić certyfikatu — tylko domena z prawdziwym. */
+    /** Link logowania — kod QR ze strony serwera / z panelu (adresy, odcisk certyfikatu, kod
+     *  jednorazowy, konto) — albo adres tunelu. Adres IP bez kodu QR nie ma czym sprawdzić
+     *  certyfikatu — tylko domena z prawdziwym. */
     private fun parseLogin(text0: String): Pair<Login?, String> {
         val text = text0.trim()
         if (text.lowercase().startsWith("emustart://login")) {
@@ -839,10 +805,10 @@ class Bridge(private val act: MainActivity) {
                     .map { Triple(it.getString("u").trimEnd('/'), it.optString("k"), it.optInt("ca", 0) == 1) }
                 val fp = d.optString("f").lowercase()
                 if (eps.isEmpty() || !Regex("[0-9a-f]{64}").matches(fp)) throw IllegalArgumentException("brak adresów")
-                Pair(Login(eps, fp, d.optString("c")), "")
+                Pair(Login(eps, fp, d.optString("c"), d.optString("a")), "")
             } catch (e: Exception) { Pair(null, "To nie jest kod logowania EmuStart.") }
         }
-        if (text.isBlank()) return Pair(null, "Podaj adres serwera albo zeskanuj kod QR z panelu.")
+        if (text.isBlank()) return Pair(null, "Podaj adres serwera albo zeskanuj kod QR ze strony serwera.")
         if (text.lowercase().startsWith("http://"))
             return Pair(null, "Tylko połączenie szyfrowane — podaj adres https (tunel) albo użyj kodu QR z panelu.")
         val u = (if (text.lowercase().startsWith("https://")) text else "https://$text").trimEnd('/')
@@ -853,13 +819,28 @@ class Bridge(private val act: MainActivity) {
         return Pair(Login(listOf(Triple(u, "tunnel", true)), "", ""), "")
     }
 
-    private fun enrollStart(text: String, mode: String, account: String, password: String): JSONObject {
-        if (account.isBlank() || mode !in setOf("new", "existing"))
-            return JSONObject().put("ok", false).put("reason", "Podaj nazwę konta.")
-        // hasło konta (emustart/accounts.py) idzie tylko w prośbie — telefon go nie zapisuje
-        if (password.isEmpty()) return JSONObject().put("ok", false).put("reason", "Podaj hasło konta.")
-        val (login, why) = parseLogin(text)
-        if (login == null) return JSONObject().put("ok", false).put("reason", why)
+    /** mode "code" — kod logowania (z linku / kodu QR albo wpisany: `code`), konto z kodu, bez
+     *  czekania; "existing" — „Mam konto”: nazwa i hasło (hasło idzie tylko w prośbie — telefon
+     *  go nie zapisuje), zatwierdza urządzenie konta albo administrator. */
+    private fun enrollStart(text: String, mode: String, account0: String, password: String, code0: String): JSONObject {
+        val (login0, why) = parseLogin(text)
+        if (login0 == null) return JSONObject().put("ok", false).put("reason", why)
+        var account = account0.trim()
+        val login: Login
+        when (mode) {
+            "code" -> {
+                login = login0.copy(code = login0.code.ifEmpty { code0.trim() })
+                if (login.code.isEmpty()) return JSONObject().put("ok", false).put("reason", "Podaj kod logowania ze strony serwera.")
+                account = login.account.ifEmpty { account }
+            }
+            "existing" -> {
+                if (account.isBlank()) return JSONObject().put("ok", false).put("reason", "Podaj nazwę konta.")
+                if (password.isEmpty()) return JSONObject().put("ok", false).put("reason", "Podaj hasło konta.")
+                login = login0
+            }
+            else -> return JSONObject().put("ok", false)
+                .put("reason", "Nowe konto zakłada się z zaproszenia — zaloguj się na stronie serwera.")
+        }
         val old = prefs.enrollPending.takeIf { it.isNotEmpty() }?.let { JSONObject(it) }
         if (old != null && (old.optString("account") != account || old.optString("mode") != mode || login.code.isNotEmpty())) enrollCancel()
         val keep = old != null && prefs.enrollPending.isNotEmpty()
@@ -869,8 +850,9 @@ class Bridge(private val act: MainActivity) {
         } catch (e: Exception) {
             return JSONObject().put("ok", false).put("reason", "Nie udało się utworzyć klucza urządzenia: ${e.message}")
         }
-        val body = JSONObject().put("mode", mode).put("account", account).put("password", password)
-            .put("name", saves.device).put("class", "phone").put("version", BuildConfig.VERSION_NAME)
+        val body = JSONObject().put("mode", mode).put("account", if (mode == "existing") account else "")
+            .put("password", if (mode == "existing") password else "")
+            .put("name", saves.device).put("class", "phone").put("app", "EmuStart Android").put("version", BuildConfig.VERSION_NAME)
             .put("pubkey", pem).put("hw", server.hwId).put("login_code", login.code)
         var r = JSONObject().put("ok", false).put("reason", "Serwer nie odpowiada.")
         var used = Triple("", "", true)
@@ -890,7 +872,10 @@ class Bridge(private val act: MainActivity) {
         Log.i(tag, "prośba o zalogowanie na ${used.first} ($mode, konto $account, klucz: $kind)")
         val out = JSONObject().put("ok", true).put("code", r.getString("pretty")).put("account", account)
             .put("url", used.first).put("key", kind)
-        if (r.optString("status") == "approved") out.put("status", enrollPoll().optString("status"))   // kod z panelu
+        if (r.optString("status") == "approved") {                  // kod logowania — od razu
+            val p = enrollPoll()
+            out.put("status", p.optString("status")).put("account", p.optString("account").ifEmpty { account })
+        }
         return out
     }
 
@@ -923,10 +908,12 @@ class Bridge(private val act: MainActivity) {
                 systemsCache = null
                 learnedAt = 0L
                 Log.i(tag, "zalogowano na serwerze $url (konto ${prefs.serverAccount})")
+                val acc = prefs.serverAccount
+                pool.execute { try { saves.pullAll(acc) } catch (e: Exception) { Log.w(tag, "zapisy konta: $e") } }
             }
             "denied", "expired" -> enrollCancel()
         }
-        return JSONObject().put("ok", true).put("status", st).put("account", p.optString("account"))
+        return JSONObject().put("ok", true).put("status", st).put("account", r.optString("account", p.optString("account")))
             .put("code", p.optString("code")).put("reason", r.optString("reason"))
     }
 
@@ -937,7 +924,21 @@ class Bridge(private val act: MainActivity) {
     }
 
     /** Wyloguj z serwera: serwer unieważnia ten telefon, klucz urządzenia i adresy znikają. */
-    private fun logout(): JSONObject {
+    /** Wylogowanie: najpierw zapisy (po ostatniej grze i zaległe); gdy czegoś nie udało się
+     *  wysłać, bez `force` nie wylogowuje — gracz wybiera: jeszcze raz / mimo to / anuluj. */
+    private fun logout(force: Boolean = false): JSONObject {
+        val l = launch
+        if (l != null && l.phase in setOf("preparing", "downloading", "running", "conflict"))
+            return JSONObject().put("ok", false).put("reason", "Trwa gra — wyloguj się po jej zakończeniu.")
+        if (prefs.configured && !force) {
+            val t0 = System.currentTimeMillis()
+            while (saves.busy.isNotEmpty() && System.currentTimeMillis() - t0 < 120_000) Thread.sleep(500)
+            try { saves.retryPending() } catch (e: Exception) { Log.w(tag, "zapisy przed wylogowaniem: $e") }
+            val left = saves.pendingGames()
+            if (left.isNotEmpty()) return JSONObject().put("ok", false).put("ask", true).put("pending", left.size)
+                .put("games", JSONArray(left.take(8)))
+                .put("reason", "Zapisy ${left.size} ${if (left.size == 1) "gry" else "gier"} nie doszły na serwer.")
+        }
         if (prefs.configured) try { server.postAuthed("/v1/auth/logout", JSONObject()) } catch (e: Exception) { Log.w(tag, "wylogowanie: $e") }
         if (prefs.deviceKey.isNotEmpty()) DeviceKey.delete(prefs.deviceKey)
         prefs.forgetServer()
@@ -989,7 +990,11 @@ class Bridge(private val act: MainActivity) {
         }
         pinBlock(prefs.profile)?.let { return it.put("profile_pin", true) }
         val l = Launch(g, s)
-        l.startState = if (state.startsWith("ra:")) state.removePrefix("ra:") else ""
+        l.startState = when {
+            state.startsWith("ra:") -> state.removePrefix("ra:")
+            state.startsWith("arc:") -> state                     // stan z paczki — po synchronizacji przed grą
+            else -> ""
+        }
         launch = l
         pool.execute { runLaunch(l, emu, takeover) }
         return JSONObject().put("ok", true)
@@ -1037,7 +1042,7 @@ class Bridge(private val act: MainActivity) {
                                     l.sys.optString("plat"), g.optJSONObject("meta")?.optString("serial") ?: "",
                                     zipStems(main0).joinToString("|"))
                 try {
-                    val msg = saves.before(prefs.profile, emu, sg, takeover)
+                    val msg = saves.before(prefs.profile, emu, sg, takeover) { cs -> askConflict(l, cs) }
                     l.message = msg
                     if (msg.isNotEmpty()) Log.i(tag, msg)
                     // „Wczytaj zapis”: wybrany stan (z dowolnego urządzenia) jako autozapis — RetroArch go wczyta
@@ -1095,8 +1100,26 @@ class Bridge(private val act: MainActivity) {
             .put("system", l.sys.optString("display")).put("game_id", l.game.optInt("id"))
             .put("copying", false).put("locked_by", l.lockedBy)
             .put("missing_core", l.missingCore)
+        l.conflict?.let { o.put("conflict", it) }
         l.progress?.let { o.put("progress", JSONObject(it.snapshot())) }
         return o
+    }
+
+    /** Konflikt zapisów (zmiany tu i na innym urządzeniu): okno uruchamiania pokazuje obie
+     *  wersje i czeka na decyzję gracza — z tego urządzenia / z serwera / pomiń. */
+    private fun askConflict(l: Launch, cs: List<SaveSync.Conflict>): String {
+        l.choice = ""
+        l.message = "Zapisy tej gry zmieniły się na tym urządzeniu i na innym."
+        l.conflict = JSONArray(cs.map { it.describe() })
+        l.phase = "conflict"
+        try {
+            while (l.choice.isEmpty() && launch === l) Thread.sleep(200)
+        } finally {
+            l.conflict = null
+            l.phase = "preparing"
+            l.message = "Zapisy profilu…"
+        }
+        return l.choice.ifEmpty { "skip" }
     }
 
     /** Powrót z emulatora: gra skończona. */
@@ -1202,6 +1225,9 @@ class Bridge(private val act: MainActivity) {
             // wygląd innego użytkownika — z jego konta (bez nadpisywania go wyglądem poprzedniego)
             prefs.lookTime = 0L
             try { pullLook() } catch (e: Exception) { Log.w(tag, "wygląd profilu: $e") }
+            try { pullEmuChoices() } catch (e: Exception) { Log.w(tag, "wybory emulatorów profilu: $e") }
+            pool.execute { try { saves.pullAll(n, setOfNotNull(launch?.saveGame?.key)) } catch (e: Exception) { Log.w(tag, "zapisy profilu: $e") } }
+            systemsCache = null
         }
         return JSONObject().put("ok", true).put("look", prefs.look)
     }
@@ -1221,15 +1247,13 @@ class Bridge(private val act: MainActivity) {
         return JSONObject().put("ok", true).put("profile", JSONObject().put("id", profList.indexOf(name) + 1).put("name", name))
     }
 
-    private fun createProfile(name: String, password: String): JSONObject = try {
-        if (profPin.isEmpty() && server.profiles() == null) {
-            // starszy serwer: profil bez hasła, jak dotąd
-            val n = saves.createProfile(name)
-            profList = saves.profiles()
-            JSONObject().put("ok", true).put("profile", JSONObject().put("id", profList.indexOf(n) + 1).put("name", n))
-        } else opResult(name, server.profileOp("create", JSONObject().put("name", name).put("password", password)))
-    } catch (e: Exception) {
-        JSONObject().put("ok", false).put("reason", if (e is IllegalArgumentException) e.message else explain(e))
+    /** Nowe konto nie powstaje na telefonie (0.49) — zaproszenie albo panel serwera; nazwa
+     *  istniejącego konta → hasło tego konta (joinProfile). */
+    private fun createProfile(name: String): JSONObject {
+        val taken = try { saves.profiles().firstOrNull { it.equals(name.trim(), true) } } catch (e: Exception) { null }
+        if (taken != null) return JSONObject().put("ok", false).put("exists", taken).put("reason", "Profil „$taken” już istnieje.")
+        return JSONObject().put("ok", false).put("reason", "Nowe konto zakłada się z zaproszenia administratora (strona " +
+            "serwera) albo w panelu serwera — potem dodaj je tutaj (Inny użytkownik → nazwa i hasło).")
     }
 
     /** Konto innego użytkownika na tym telefonie — z jego hasłem. */
@@ -1246,12 +1270,7 @@ class Bridge(private val act: MainActivity) {
         val n = profList.getOrNull(id - 1) ?: return JSONObject().put("ok", false).put("reason", "Nie ma takiego profilu.")
         return try {
             val body = JSONObject().put("name", n).put("password", password).put("old", old)
-            var r = server.profileOp("password", body)
-            if (r.optString("error").contains("Nie ma konta")) {
-                saves.createProfile(n)               // konto jeszcze bez folderu
-                r = server.profileOp("password", body)
-            }
-            opResult(n, r)
+            opResult(n, server.profileOp("password", body))
         } catch (e: Exception) { JSONObject().put("ok", false).put("reason", explain(e)) }
     }
 
@@ -1360,8 +1379,8 @@ class Bridge(private val act: MainActivity) {
     }
 
     /** Menedżer zapisów: stany tej gry z komputera i telefonu, wspólne zapisy w grze. */
-    /** „Wczytaj zapis” na telefonie: stany RetroArcha tej gry ze wszystkich urządzeń konta
-     *  (wspólny folder na serwerze, rdzeń wybrany na tym telefonie), najnowsze pierwsze, z miniaturami. */
+    /** „Wczytaj zapis” na telefonie: stany RetroArcha tej gry (rdzeń wybrany na tym telefonie)
+     *  po synchronizacji z serwerem — te same na każdym urządzeniu, najnowsze pierwsze, z miniaturami. */
     private fun raStates(id: Int): JSONObject {
         if (prefs.profile.isEmpty()) return JSONObject().put("ok", false)
             .put("reason", "Wybierz profil gracza — stany należą do profilu.")
@@ -1371,46 +1390,70 @@ class Bridge(private val act: MainActivity) {
             val emu = chosenEmu(s)
             if (Emulators.baseId(emu) != "retroarch")
                 return JSONObject().put("ok", true).put("states", JSONArray())
-                    .put("note", "Wspólne stany ma tylko RetroArch — ten system gra w innym emulatorze.")
+                    .put("note", "Stany na serwerze ma tylko RetroArch — ten system gra w innym emulatorze.")
             val core = Emulators.retroCore(s.optString("plat"), Emulators.coreOf(emu).ifEmpty { s.optString("core") })
-            val coreDir = Saves.normCore(Saves.coreDirOf(core))
-            val file = g.optString("file")
-            val stems = listOf(File(file).nameWithoutExtension, g.optString("name")).filter { it.isNotEmpty() }
-            val cat = server.saveCatalog(mapOf("profile" to prefs.profile, "es" to g.optString("es"),
-                                               "name" to g.optString("name"), "stems" to stems.joinToString("|")))
-            val all = cat.optJSONArray("states") ?: JSONArray()
+            val file = File(g.optString("file"))
+            val sg = Saves.Game(g.optString("es"), g.optString("name"), file.nameWithoutExtension, File(act.filesDir, "brak"),
+                                core, s.optString("plat"))
+            val view = saves.raStates(prefs.profile, emu, sg)
+            val files = view.states
             val out = JSONArray()
             var thumbs = 0
-            val list = (0 until all.length()).map { all.getJSONObject(it) }
-                .filter { it.optString("kind") == "ra" && it.optString("platform") == "shared"
-                          && Saves.normCore(it.optString("core")) == coreDir }
-                .sortedWith(compareBy<JSONObject>({ it.optString("slot") != "auto" }, { -it.optDouble("mtime") }))
-            for (st in list) {
-                val auto = st.optString("slot") == "auto"
-                val who = st.optString("device").let { d ->
-                    if (d.isEmpty()) "" else (if (st.optString("device_platform") == "telefon") "telefon " else "") + d }
-                val kind = if (st.optString("state_kind") == "auto") "autozapis przy wyjściu" else ""
-                val o = JSONObject().put("path", "ra:" + st.optString("rel")).put("name", st.optString("name"))
-                    .put("time", st.optDouble("mtime"))
-                    .put("label", if (auto) "Kontynuuj — najnowszy stan" else "Stan #${st.optString("slot").toIntOrNull() ?: 0}")
+            val list = files.filterKeys { !it.endsWith(".png") }.entries
+                .sortedWith(compareBy<Map.Entry<String, File>>({ !it.key.endsWith(".auto") }, { -it.value.lastModified() }))
+            val slotRx = Regex("\\.state(\\d*)")
+            for ((arc, f) in list) {
+                val auto = arc.endsWith(".auto")
+                val slot = slotRx.find(arc)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+                val o = JSONObject().put("path", "ra:" + f.absolutePath).put("name", f.name)
+                    .put("time", f.lastModified() / 1000.0)
+                    .put("label", if (auto) "Kontynuuj — najnowszy stan" else "Stan #$slot")
                     .put("continue", auto)
-                    .put("detail", listOf(who, kind).filter { it.isNotEmpty() }.joinToString(" · "))
-                val shot = st.optString("shot")
-                if (shot.isNotEmpty() && thumbs < 24) {
-                    try {
-                        server.nasRead("${prefs.profile}/$shot")?.takeIf { it.size < 600_000 }?.let {
-                            o.put("thumb", "data:image/png;base64," + android.util.Base64.encodeToString(it, android.util.Base64.NO_WRAP))
-                            thumbs++
-                        }
-                    } catch (e: Exception) { Log.w(tag, "miniatura stanu: $e") }
+                val shot = files["$arc.png"]
+                if (shot != null && shot.length() < 600_000 && thumbs < 24) {
+                    o.put("thumb", "data:image/png;base64," + android.util.Base64.encodeToString(shot.readBytes(), android.util.Base64.NO_WRAP))
+                    thumbs++
                 }
                 out.put(o)
             }
-            JSONObject().put("ok", true).put("states", out)
+            // stany innych rdzeni tej gry (inne urządzenia) — widać je, ale tu się nie wczytają
+            val mine = SaveSync.coreId(core)
+            for ((c, f) in saves.otherCoreStates(prefs.profile, sg).sortedByDescending { it.second.lastModified() }) {
+                val m = Regex("\\.state(\\d*)(\\.auto)?$").find(f.name)
+                val o = JSONObject().put("path", "inny:" + f.absolutePath).put("name", f.name).put("arc", f.name)
+                    .put("time", f.lastModified() / 1000.0).put("other_core", c)
+                    .put("label", if (m?.groupValues?.get(2)?.isNotEmpty() == true) "Kontynuuj" else "Stan #${m?.groupValues?.get(1)?.toIntOrNull() ?: 0}")
+                    .put("detail", "rdzeń $c — wczytanie przełączy system na ten rdzeń")
+                val shot = File(f.path + ".png")
+                if (shot.isFile && shot.length() < 600_000 && thumbs < 24) {
+                    o.put("thumb", "data:image/png;base64," + android.util.Base64.encodeToString(shot.readBytes(), android.util.Base64.NO_WRAP))
+                    thumbs++
+                }
+                out.put(o)
+            }
+            JSONObject().put("ok", true).put("states", out).put("saves", view.saves)
+                .put("offline", view.offline).put("conflicts", view.conflicts)
         } catch (e: Exception) {
             JSONObject().put("ok", false).put("reason", explain(e))
         }
     }
+
+    /** „Wczytaj zapis” — stan innego rdzenia: system przechodzi na RetroArch z tym rdzeniem
+     *  (wybór na koncie, jak w Ustawieniach), potem gra startuje z tego stanu. */
+    private fun playOtherCore(id: Int, core: String): JSONObject = try {
+        val g = server.game(id)
+        val s = sysByEs(g.optString("es")) ?: throw IllegalStateException("Nieznany system.")
+        val opts = Emulators.options(act, s.optString("plat"), s.optString("core"), cores(s))
+        val pick = opts.firstOrNull { Emulators.baseId(it.first) == "retroarch" && SaveSync.coreId(Emulators.coreOf(it.first)) == core }
+        if (pick == null) JSONObject().put("ok", false).put("reason",
+            "RetroArch na tym telefonie nie ma rdzenia $core dla tego systemu — pobierz go w RetroArchu (Online Updater → Core Downloader).")
+        else {
+            prefs.setEmulatorChoice(s.optString("es"), pick.first)
+            systemsCache = null
+            pool.execute { pushEmuChoices() }
+            JSONObject().put("ok", true).put("label", pick.second)
+        }
+    } catch (e: Exception) { JSONObject().put("ok", false).put("reason", explain(e)) }
 
     private fun saveManager(id: Int): JSONObject {
         if (prefs.profile.isEmpty()) return JSONObject().put("ok", false)
