@@ -224,6 +224,9 @@ export function registerEmustartIpc(handle: Handle, ctx: Ctx): void {
     lumen_controller_label: { timeout: 15_000 },
     lumen_controller_profile: { timeout: 15_000 },
     lumen_controller_profile_set: { timeout: 15_000 },
+    // hiding by disabling devices in Windows: status, one-time setup (waits for the UAC answer)
+    lumen_hide_status: { timeout: 20_000 },
+    lumen_hide_setup: { timeout: 180_000 },
     // settings: emulators, platform options (the name / logo on the server — administrator)
     autodetect: { timeout: 120_000, changes: true },
     install_missing: { timeout: 60_000 },

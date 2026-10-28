@@ -11,6 +11,7 @@ import {
   effectiveLabel,
   FAMILIES,
   familyNote,
+  hideNote,
   hideIn,
   moveIn,
   nextPolicy,
@@ -28,7 +29,7 @@ import {
 type Page = { kind: 'list' } | { kind: 'edit'; key: string }
 
 const call = <T,>(
-  m: 'lumen_controllers' | 'lumen_controller_label' | 'lumen_controller_profile' | 'lumen_controller_profile_set',
+  m: 'lumen_controllers' | 'lumen_controller_label' | 'lumen_controller_profile' | 'lumen_controller_profile_set' | 'lumen_hide_status' | 'lumen_hide_setup',
   ...a: unknown[]
 ): Promise<T> => api().emustart.account<T>(m, ...a)
 
@@ -42,7 +43,8 @@ interface Row {
   head?: boolean
 }
 
-export function Controllers({ game, onClose }: { game?: { id: string; name: string }; onClose: () => void }) {
+/** `game.key`: the profile key when known (Steam: steam:<appid>); else from the EmuStart game id */
+export function Controllers({ game, onClose }: { game?: { id: string; name: string; key?: string }; onClose: () => void }) {
   const [page, setPage] = useState<Page | null>(game ? null : { kind: 'list' })
   const [list, setList] = useState<LumenControllers | null>(null)
   const [st, setSt] = useState<LumenPadProfileState | null>(null)
@@ -56,10 +58,24 @@ export function Controllers({ game, onClose }: { game?: { id: string; name: stri
   const follow = useRef<string | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const toast = useStore((s) => s.toast)
+  /** hiding by disabling devices in Windows (one-time administrator setup: lumen_hide.py) */
+  const [winHide, setWinHide] = useState<{ ready: boolean; reason: string; busy?: boolean } | null>(null)
+  useEffect(() => {
+    void call<{ ready: boolean; reason: string }>('lumen_hide_status').then(setWinHide, () => setWinHide(null))
+  }, [])
+  const setupHide = async (): Promise<void> => {
+    setWinHide((h) => ({ ready: false, reason: h?.reason ?? '', busy: true }))
+    toast('Windows zapyta o zgodę administratora — potwierdź, żeby Lumen mógł ukrywać kontrolery.')
+    const r = await attempt(call<{ ok: boolean; reason: string }>('lumen_hide_setup'))
+    const s = await call<{ ready: boolean; reason: string }>('lumen_hide_status').catch(() => null)
+    setWinHide(s)
+    if (r) toast(r.ok ? 'Ukrywanie kontrolerów gotowe.' : r.reason || 'Nie skonfigurowano.', r.ok ? 'info' : 'error')
+  }
 
   // from "Opcje gry": straight to the game's profile (the version that plays)
   useEffect(() => {
     if (!game) return
+    if (game.key) return setPage({ kind: 'edit', key: game.key })
     void api()
       .emustart.controllerKey(game.id)
       .then((key) => setPage({ kind: 'edit', key }))
@@ -166,7 +182,16 @@ export function Controllers({ game, onClose }: { game?: { id: string; name: stri
           value: has(`emu:${f}`),
           act: () => setPage({ kind: 'edit', key: `emu:${f}` })
         })
-      const games = list.profiles.filter((k) => k.startsWith('game:')).length
+      out.push({ id: 'h:hide', label: 'Ukrywanie w Windows', head: true })
+      out.push({
+        id: 'hide',
+        label: winHide?.ready ? 'Gotowe' : winHide?.busy ? 'Czekam na zgodę administratora…' : 'Skonfiguruj (jedno pytanie administratora)',
+        value: winHide?.ready
+          ? 'ukryte kontrolery są wyłączane na czas gry, także w grach Steam'
+          : 'bez tego ukryte kontrolery widzą gry Steam i programy bez SDL',
+        act: winHide?.ready || winHide?.busy ? undefined : () => void setupHide()
+      })
+      const games = list.profiles.filter((k) => k.startsWith('game:') || k.startsWith('steam:')).length
       out.push({
         id: 'p:games',
         label: 'Profile gier',
@@ -355,6 +380,9 @@ export function Controllers({ game, onClose }: { game?: { id: string; name: stri
           </div>
         )}
         {page?.kind === 'edit' && st && <p className="details__muted">{familyNote(st)}</p>}
+        {page?.kind === 'edit' && st?.profile && (st.profile.hidden.length > 0 || st.profile.unknown === 'hide') && (
+          <p className="details__muted">{hideNote(!!winHide?.ready)}</p>
+        )}
       </Modal>
       {rename && (
         <OnScreenKeyboard

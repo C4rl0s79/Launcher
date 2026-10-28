@@ -13,7 +13,7 @@ export const FAMILIES: [string, string][] = [
 export const POLICY: [LumenPadProfile['unknown'], string][] = [
   ['passthrough', 'kolejni gracze, w kolejności Windows'],
   ['ignore', 'bez gracza'],
-  ['hide', 'ukryte (HidHide jeszcze nieobsługiwany — na razie bez gracza)']
+  ['hide', 'ukryte przed grą']
 ]
 
 export const nextPolicy = (u: LumenPadProfile['unknown']): LumenPadProfile['unknown'] => POLICY[(POLICY.findIndex(([v]) => v === u) + 1) % POLICY.length][0]
@@ -48,6 +48,12 @@ export function playerNumbers(order: string[], connected: Set<string>): number[]
   return order.map((k) => (connected.has(k) ? ++n : 0))
 }
 
+/** what "hidden" means — without a driver (Lumen installs nothing next to it) */
+export const hideNote = (windowsReady: boolean): string =>
+  windowsReady
+    ? 'Ukryte: wyłączane w Windows na czas gry (także gry Steam) i włączane po grze — gra ich w ogóle nie widzi.'
+    : 'Ukryte: emulator nie dostaje ich jako gracza, a programy SDL uruchamiane przez Lumen ich nie widzą (gdy żaden gracz nie ma tego samego modelu). Pełne ukrycie, także w grach Steam: „Ukrywanie w Windows” na liście Kontrolerów.'
+
 /** a new profile starts from what applies now (else: connected controllers in Windows order) */
 export function startProfile(st: Pick<LumenPadProfileState, 'effective_profile' | 'devices'>): LumenPadProfile {
   const e = st.effective_profile
@@ -60,7 +66,7 @@ export function effectiveLabel(st: Pick<LumenPadProfileState, 'effective' | 'key
   const e = st.effective
   if (!e) return 'kolejność padów EmuStart (brak profilu)'
   if (e === st.key) return 'ten profil'
-  if (e.startsWith('game:')) return 'profil tej gry'
+  if (e.startsWith('game:') || e.startsWith('steam:')) return 'profil tej gry'
   if (e.startsWith('emu:')) return `profil emulatora ${FAMILIES.find(([f]) => `emu:${f}` === e)?.[1] ?? e.slice(4)}`
   return 'profil domyślny'
 }
@@ -68,13 +74,15 @@ export function effectiveLabel(st: Pick<LumenPadProfileState, 'effective' | 'key
 export function familyNote(st: Pick<LumenPadProfileState, 'key' | 'family' | 'family_label'>): string {
   const f = st.family
   if (st.key === 'default') return 'Profil domyślny obowiązuje w grach i emulatorach bez własnego profilu.'
+  if (f === 'steam') return 'Gra Steam: Lumen nie ustawia tu kolejności graczy — ukrywa tylko wybrane kontrolery na czas gry.'
   if (f === 'duckstation' || f === 'pcsx2') return `${st.family_label}: kolejność graczy ustawiana w emulatorze przy starcie gry, po grze przywracana.`
   if (f === 'retroarch' || f === 'dolphin') return `${st.family_label}: tylko pady XInput — kierownica albo pad bez XInput nie dostanie tu gracza.`
   if (!f) return 'Nie wiadomo, jakim emulatorem uruchomi się gra — profil zadziała, gdy będzie to DuckStation, PCSX2, RetroArch albo Dolphin.'
   return `${st.family_label} nie jest jeszcze ustawiany automatycznie — przy starcie gry zobaczysz, który kontroler ma być pierwszy.`
 }
 
-export const scopeWord = (key: string): string => (key.startsWith('game:') ? 'w tej grze' : key.startsWith('emu:') ? 'w tym emulatorze' : 'we wszystkich grach')
+export const scopeWord = (key: string): string =>
+  key.startsWith('game:') || key.startsWith('steam:') ? 'w tej grze' : key.startsWith('emu:') ? 'w tym emulatorze' : 'we wszystkich grach'
 
 export const devValue = (d: LumenController | undefined, key: string): string =>
   d ? `${d.bus_label} · ${d.short}${d.xinput_slot != null ? ` · XInput ${d.xinput_slot + 1}` : ''}` : key.split(':').slice(0, 2).join(':')

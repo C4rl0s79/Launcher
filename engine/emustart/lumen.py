@@ -20,8 +20,8 @@ import sys
 import threading
 import time
 
-from emustart import (api as api_mod, cache, catalog, config, libsync, library, lumen_discs, lumen_pads, netsrc,
-                      profiles, savesync)
+from emustart import (api as api_mod, cache, catalog, config, libsync, library, lumen_discs, lumen_hide, lumen_pads,
+                      netsrc, paths, profiles, savesync)
 
 log = logging.getLogger("emustart.lumen")
 
@@ -165,6 +165,9 @@ class LumenApi(api_mod.Api):
         install_device_name(profiles, api_mod, savemgr)
         from emustart import ingame, launcher, pads
         lumen_pads.install(launcher, pads, ingame)      # profile kontrolerów per gra/emulator
+        # kontrolery wyłączone na czas gry, a Lumen padł w jej trakcie — włączane w tle
+        threading.Thread(target=self._controllers_restore, daemon=True, name="lumen-hide-restore").start()
+        self._steam_hidden: list = []
         try:
             lumen_discs.merge(library.db())
         except Exception:
@@ -349,7 +352,9 @@ class LumenApi(api_mod.Api):
         """Profil `game:<id>` / `emu:<rodzina>` / `default` i ten, który faktycznie obowiązuje
         (gra → emulator → default), z kontrolerami do edytora kolejności."""
         game_id, family = None, ""
-        if str(key).startswith("game:"):
+        if str(key).startswith("steam:"):
+            family = "steam"
+        elif str(key).startswith("game:"):
             g = library.game(int(str(key)[5:]))
             game_id = g["id"] if g else None
             emu = self._effective_emu(g) if g else {}
@@ -359,7 +364,8 @@ class LumenApi(api_mod.Api):
         elif str(key).startswith("emu:"):
             family = str(key)[4:]
         own = (lumen_pads.profiles(self._cfg)).get(str(key))
-        eff_key, eff = lumen_pads.profile_for(self._cfg, game_id, family)
+        eff_key, eff = lumen_pads.profile_for(self._cfg, game_id, family,
+                                              str(key) if family == "steam" else None)
         return {"key": str(key), "family": family, "family_label": lumen_pads.FAMILY_LABEL.get(family, family),
                 "profile": lumen_pads.clean_profile(own) if isinstance(own, dict) else None,
                 "effective": eff_key, "effective_profile": eff, **self.lumen_controllers()}
@@ -370,6 +376,39 @@ class LumenApi(api_mod.Api):
             return {"ok": False, "reason": "Nieznany profil kontrolerów."}
         config.save(self._cfg)
         return dict(self.lumen_controller_profile(str(key)), ok=True)
+
+    # ── ukrywanie kontrolerów: wyłączenie w Windows na czas gry (lumen_hide.py) ──
+
+    def _controllers_restore(self) -> None:
+        try:
+            lumen_hide.restore_pending(paths.APP)
+        except Exception:
+            log.exception("kontrolery: przywracanie po awarii")
+
+    def lumen_hide_status(self) -> dict:
+        return lumen_hide.status(paths.APP)
+
+    def lumen_hide_setup(self) -> dict:
+        """Jedno pytanie administratora: zadanie Harmonogramu, które wyłącza i włącza kontrolery."""
+        return lumen_hide.setup(paths.APP)
+
+    def lumen_hide_remove(self) -> dict:
+        return lumen_hide.remove(paths.APP)
+
+    def lumen_steam_begin(self, appid: int) -> dict:
+        """Przed startem gry Steam: urządzenia ukryte w jej profilu (albo domyślnym) — wyłączone."""
+        self.lumen_steam_end()
+        devs = lumen_pads.to_hide(self._cfg, family="steam", game_key=f"steam:{int(appid)}")
+        h = lumen_pads.hide_devices(devs)
+        self._steam_hidden = h["nodes"]
+        return {"ok": not h["note"], "hidden": [d.get("label", "") for d in devs if d["node"] in h["nodes"]],
+                "note": h["note"]}
+
+    def lumen_steam_end(self) -> dict:
+        """Gra Steam zakończona (albo nie wystartowała): urządzenia wracają."""
+        nodes, self._steam_hidden = list(getattr(self, "_steam_hidden", []) or []), []
+        lumen_pads.unhide(nodes)
+        return {"ok": True, "restored": len(nodes)}
 
 
 def engine_title() -> str:

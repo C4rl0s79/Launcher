@@ -9,6 +9,7 @@ import { CategoryPicker } from '../modals/CategoryPicker'
 import { ArtPicker } from '../modals/ArtPicker'
 import { EmuSaves } from '../components/EmuSaves'
 import { GameOptions } from '../components/GameOptions'
+import { Controllers } from '../components/Controllers'
 import { usePrimaryAction } from '../lib/primary'
 import { formatBytes, formatEta, formatLastPlayed, formatPlaytime, htmlToParagraphs, STATE_LABEL, stateLabel, versionCountLabel } from '../lib/format'
 
@@ -18,7 +19,7 @@ export function DetailsScreen({ gameId }: { gameId: string }) {
   const collections = useStore((s) => s.snapshot?.collections ?? null)
   const close = (): void => useStore.getState().openDetails(null)
   const [details, setDetails] = useState<DetailsResult | null>(null)
-  const [modal, setModal] = useState<'categories' | 'art' | 'saves' | 'options' | null>(null)
+  const [modal, setModal] = useState<'categories' | 'art' | 'saves' | 'options' | 'pads' | null>(null)
   const [logoOk, setLogoOk] = useState(true)
   const isEmu = game?.source === 'emustart'
   const emuSummary = useStore((s) => s.snapshot?.emustart)
@@ -233,6 +234,11 @@ export function DetailsScreen({ gameId }: { gameId: string }) {
               <button className="btn" data-nav data-key="store" onClick={() => void attempt(api().game.openInSteam(gameId, 'store'))}>
                 Strona sklepu
               </button>
+              {game.appId && emuSummary?.engine === 'ready' && (
+                <button className="btn" data-nav data-key="pads" onClick={() => setModal('pads')}>
+                  Kontrolery
+                </button>
+              )}
             </>
           )}
         </div>
@@ -293,6 +299,9 @@ export function DetailsScreen({ gameId }: { gameId: string }) {
       {modal === 'art' && <ArtPicker game={game} onClose={() => setModal(null)} />}
       {modal === 'saves' && <EmuSaves game={game} onClose={() => setModal(null)} />}
       {modal === 'options' && <GameOptions game={game} onClose={() => setModal(null)} />}
+      {modal === 'pads' && game.appId && (
+        <Controllers game={{ id: game.id, name: game.name, key: `steam:${game.appId}` }} onClose={() => setModal(null)} />
+      )}
     </div>,
     document.body
   )

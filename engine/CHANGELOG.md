@@ -30,6 +30,13 @@ Plan najbliższych zmian: [ROADMAP.md](ROADMAP.md).
   się nawzajem (401, „nieznane urządzenie”). Kod EmuStart bez zmian.
 - **Nazwa urządzenia Lumen: „<komputer> (Lumen)”** (`lumen.install_device_name`) w `profiles`
   (blokada profilu, znaczniki, kopie zapasowe), `api` (logowanie, menedżer zapisów) i `savemgr`.
+- **Profile kontrolerów — tylko w Lumen** (`emustart/lumen_pads.py`, `emustart/lumen_hide.py`; `pads.py`,
+  `ingame.py`, `launcher.py` bez zmian — Lumen opakowuje `pads.order`, `Session._play` i `remap_pads`):
+  profile `game:<id>` / `steam:<appid>` → `emu:<rodzina>` → `default` (kolejność graczy, ukryte urządzenia,
+  urządzenia spoza profilu). Ukrywanie: wolne sloty emulatora → urządzenie, którego nie ma, zmienne SDL
+  z VID:PID, a po jednorazowej zgodzie administratora — wyłączenie urządzenia w Windows na czas gry
+  (zadanie Harmonogramu z `pnputil`, przywracanie po grze, po awarii i przy wyjściu z Lumen).
+  Bez profilu — tryb kolejności EmuStart jak dotąd.
 - Od EmuStart 0.48.0 zapisy przy logowaniu / starcie / wylogowaniu i blokada profilu są w EmuStart
   (Lumen nie dokłada już własnych — `lumen_saves.py` usunięty).
 

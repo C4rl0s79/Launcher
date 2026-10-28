@@ -14,7 +14,7 @@ import { ops, PrefsError, PrefsStore } from './store/prefs'
 import { SettingsStore } from './store/settings'
 import { LibraryService } from './library/service'
 import { StoreMetadataProvider } from './steam/storeMeta'
-import { openSteam, openSteamUri, shortcutRunUri } from './steam/actions'
+import { DRY_RUN, openSteam, openSteamUri, shortcutRunUri } from './steam/actions'
 import { pickBestMatch, pickExactMatch, SgdbAuthError, SgdbClient } from './art/sgdb'
 import { LaunchBoxService } from './launchbox/service'
 import { XInputPoller } from './input/xinput'
@@ -131,6 +131,9 @@ const artwork = new ArtworkService({
 let win: BrowserWindow | null = null
 let modes: UiModeManager | null = null
 let launchedAppId: number | undefined
+/** Steam game whose controller profile hid devices (disabled in Windows until the game ends) */
+let hiddenForAppId: number | undefined
+let hiddenWatchdog: NodeJS.Timeout | undefined
 const artRev = new Map<string, number>()
 
 function send(channel: string, ...args: unknown[]): void {
@@ -540,12 +543,63 @@ async function playSteam(gameId: string): Promise<ActionResult> {
   if (library.current.steam.status === 'notInstalled') return fail('Nie znaleziono klienta Steam na tym komputerze.')
   if (!isPlayable(game.installState))
     return fail(game.source === 'shortcut' ? 'Nie znaleziono programu tego skrótu na dysku.' : 'Gra nie jest gotowa do uruchomienia.')
-  if (game.shortcut) await openSteamUri(shortcutRunUri(game.shortcut.gameId64))
-  else await openSteam('run', game.appId)
+  const hide = await hideControllers(game.appId)
+  try {
+    if (game.shortcut) await openSteamUri(shortcutRunUri(game.shortcut.gameId64))
+    else await openSteam('run', game.appId)
+  } catch (e) {
+    await showControllers() // Steam was not asked to run the game: controllers back right away
+    throw e
+  }
   launchedAppId = game.appId
   const steamRunning = library.current.steam.status === 'running'
   if (settings.get().afterLaunch === 'minimize') setTimeout(() => win?.minimize(), steamRunning ? 1500 : 4000)
-  return { ok: true, message: steamRunning ? 'Uruchamianie przez Steam…' : 'Uruchamianie Steam i gry…' }
+  return { ok: true, message: (steamRunning ? 'Uruchamianie przez Steam…' : 'Uruchamianie Steam i gry…') + (hide ? ` ${hide}` : '') }
+}
+
+/**
+ * Controllers hidden in the game's profile (the engine disables them in Windows: lumen_hide.py) —
+ * back when Steam reports the game ended, or when it never starts. Returns a note for the player.
+ */
+async function hideControllers(appId: number | undefined): Promise<string> {
+  // lumen_steam_begin itself brings back what the previous Steam game hid
+  clearTimeout(hiddenWatchdog)
+  hiddenForAppId = undefined
+  if (!appId || engine.state !== 'ready') return ''
+  if (DRY_RUN) {
+    log.info('app', `DRY RUN, not hiding controllers for ${appId}`)
+    return ''
+  }
+  // set before the call: if it times out, the engine may still have disabled devices — the game's end
+  // (or the watchdog, or Lumen exiting) brings them back either way
+  hiddenForAppId = appId
+  // the game never started (download, error, closed dialog): devices back after 10 minutes
+  hiddenWatchdog = setTimeout(() => {
+    if (library.current.steam.runningAppId !== appId) void showControllers()
+  }, 10 * 60_000)
+  try {
+    const r = await engine.call<{ hidden: string[]; note: string }>('lumen_steam_begin', [appId], 60_000)
+    if (!r.hidden.length && hiddenForAppId === appId) {
+      clearTimeout(hiddenWatchdog)
+      hiddenForAppId = undefined
+    }
+    if (r.hidden.length) log.info('app', `controllers hidden for ${appId}: ${r.hidden.join(', ')}`)
+    return [r.hidden.length ? `Ukryte na czas gry: ${r.hidden.join(', ')}.` : '', r.note].filter(Boolean).join(' ')
+  } catch (e) {
+    log.warn('app', `hiding controllers failed: ${(e as Error).message}`)
+    return ''
+  }
+}
+
+async function showControllers(): Promise<void> {
+  clearTimeout(hiddenWatchdog)
+  if (hiddenForAppId === undefined) return
+  hiddenForAppId = undefined
+  try {
+    await engine.call('lumen_steam_end', [], 60_000)
+  } catch (e) {
+    log.warn('app', `restoring controllers failed: ${(e as Error).message}`)
+  }
 }
 
 /** Ask the Steam client to install a game (Steam shows its own dialog and runs the download). */
@@ -937,6 +991,7 @@ app.whenReady().then(async () => {
     log.info('app', `game ${appId} exited (per Steam registry)`)
     if (launchedAppId === appId && settings.get().restoreAfterGame) restoreWindow()
     launchedAppId = undefined
+    if (hiddenForAppId === appId) void showControllers()
   })
   createWindow()
   // controller: passive XInput polling, only while Lumen has focus (never while a game runs)
@@ -980,6 +1035,7 @@ app.on('before-quit', (e) => {
 })
 
 async function shutdown(): Promise<void> {
+  await showControllers() // never leave a wheel disabled after Lumen exits
   library.stop()
   emu.stop()
   await artwork.flush()

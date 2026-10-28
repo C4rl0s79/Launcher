@@ -74,8 +74,9 @@ def parse_ids(instance_id: str, ancestors: list) -> dict:
         bus = "usb"
     else:
         bus = "other"
+    from emustart.lumen_hide import node_of
     return {"vid": vid, "pid": pid, "bus": bus, "mac": mac,
-            "xinput": "&IG_" in up[0]}
+            "xinput": "&IG_" in up[0], "node": node_of(instance_id, ancestors)}
 
 
 def _clean_serial(s: str) -> str:
@@ -493,6 +494,8 @@ def diag(cfg: dict, with_sdl: bool = True, profile_key: str | None = None) -> di
     devs = current(cfg)
     out: dict = {"devices": devs, "sdl_dll": "", "sdl_error": "", "sdl_unmatched": [], "missing": []}
     out["sdl_skipped"] = not with_sdl
+    from emustart import lumen_hide, paths
+    out["hide_task"] = lumen_hide.status(paths.APP)
     if with_sdl:
         dll = find_sdl(cfg)
         out["sdl_dll"] = str(dll or "")
@@ -511,10 +514,11 @@ def diag(cfg: dict, with_sdl: bool = True, profile_key: str | None = None) -> di
         r = resolve(prof, devs)
         for i, d in enumerate(r["players"]):
             d["player"] = i + 1
-        for d in r["hidden"]:
-            d["visibility"] = "widoczne, ukryte w profilu"
-        for d in r["outside"]:
-            d["visibility"] = "widoczne, spoza profilu (" + prof["unknown"] + ")"
+        sdl_off = set(sdl_ignore(r["players"], hidden_of(prof, r)))
+        for d in r["hidden"] + r["outside"]:
+            hid = d in r["hidden"] or prof["unknown"] == "hide"
+            d["visibility"] = ("ukryte" if hid else "spoza profilu, bez gracza") + (
+                " (też przed SDL)" if hid and vidpid(d) in sdl_off else "")
         out["profile"] = key
     else:
         order = pads.order(cfg, [{"slot": s, "wireless": False} for s in sorted(
@@ -556,7 +560,11 @@ def format_diag(r: dict) -> str:
     for j in r.get("sdl_unmatched") or []:
         lines.append(f"SDL-{j['sdl']}: {j.get('name', '')} [{j.get('vid', '')}:{j.get('pid', '')}] — bez pary w rejestrze "
                      f"(np. dodatkowy interfejs HID urządzenia); emulator też go numeruje")
-    lines.append("Widoczność: HidHide jeszcze nieobsługiwany — wszystkie urządzenia widoczne")
+    task = r.get("hide_task") or {}
+    lines.append("Ukrywanie: wyłączane w Windows na czas gry (emulatory i gry Steam)" if task.get("ready") else
+                 "Ukrywanie: bez gracza w konfiguracji emulatora, a programom SDL uruchamianym przez Lumen ukryte "
+                 "wg VID:PID; gry Steam nieobjęte — „Ukrywanie w Windows” nieskonfigurowane"
+                 + (f" ({task['reason']})" if task.get("reason") else ""))
     for m in r["missing"]:
         lines.append(f"Zarejestrowany, niepodłączony: {m['label']} [{short_id(m['key'])}] {m['key']}")
     return "\n".join(lines)
@@ -570,7 +578,11 @@ def format_diag(r: dict) -> str:
 #     "unknown": "passthrough" | "ignore" | "hide"}}   # urządzenia spoza `order`:
 #         passthrough — kolejni gracze po urządzeniach z profilu (w kolejności Windows),
 #         ignore      — bez gracza,
-#         hide        — bez gracza i ukryte przed grą (HidHide; bez niego jak ignore + komunikat).
+#         hide        — bez gracza i ukryte przed grą jak urządzenia z `hidden`.
+# Ukrywanie bez sterownika (Lumen jest samodzielny — bez HidHide): wolne sloty graczy emulatora
+# dostają nieistniejące urządzenie (NO_DEVICE), a proces gry uruchamiany przez silnik dostaje
+# SDL_JOYSTICK_BLACKLIST_DEVICES / SDL_GAMECONTROLLER_IGNORE_DEVICES z VID:PID ukrytych urządzeń
+# (tylko gdy żaden gracz nie ma tego samego VID:PID).
 # Pierwszeństwo: gra → emulator → default; bez żadnego — tryb kolejności EmuStart bez zmian.
 #
 # Start gry: Lumen opakowuje `launcher.Session._play` (kontekst gry w wątku sesji), `pads.order`
@@ -578,11 +590,13 @@ def format_diag(r: dict) -> str:
 # z przywracaniem po grze i po awarii przez mechanizm EmuStart `pad_restore.json`).
 
 UNKNOWN = ("passthrough", "ignore", "hide")
+NO_DEVICE = 15                                   # numer urządzenia, którego nie ma (wolny slot gracza)
+SDL_ENV = ("SDL_JOYSTICK_BLACKLIST_DEVICES", "SDL_GAMECONTROLLER_IGNORE_DEVICES")
 SDL_FAMILIES = ("duckstation", "pcsx2")         # [PadN] … = SDL-n/… albo XInput-n/…
 XINPUT_FAMILIES = ("retroarch", "dolphin")      # indeks pada = slot XInput
-FAMILY_LABEL = {"duckstation": "DuckStation", "pcsx2": "PCSX2", "retroarch": "RetroArch", "dolphin": "Dolphin",
+FAMILY_LABEL = {"steam": "Steam", "duckstation": "DuckStation", "pcsx2": "PCSX2", "retroarch": "RetroArch", "dolphin": "Dolphin",
                 "ppsspp": "PPSSPP", "rpcs3": "RPCS3"}
-_PROFILE_KEY = re.compile(r"default|emu:[a-z0-9_]+|game:\d+")
+_PROFILE_KEY = re.compile(r"default|emu:[a-z0-9_]+|game:\d+|steam:\d+")
 
 
 def profiles(cfg: dict) -> dict:
@@ -612,9 +626,11 @@ def set_profile(cfg: dict, key: str, profile: dict | None) -> bool:
     return True
 
 
-def profile_for(cfg: dict, game_id=None, family: str = "") -> tuple:
+def profile_for(cfg: dict, game_id=None, family: str = "", game_key: str | None = None) -> tuple:
+    """Profil gry (`game:<id>` albo podany `game_key`, np. `steam:<appid>`) → emulatora → default."""
     profs = (cfg.get("pad_order") or {}).get("profiles") or {}
-    keys = ([f"game:{int(game_id)}"] if game_id is not None else []) + ([f"emu:{family}"] if family else [])
+    keys = [game_key] if game_key else ([f"game:{int(game_id)}"] if game_id is not None else [])
+    keys += [f"emu:{family}"] if family and family != "steam" else []
     for k in keys + ["default"]:
         if isinstance(profs.get(k), dict):
             return k, clean_profile(profs[k])
@@ -662,20 +678,92 @@ def plan(cfg: dict, game_id, family: str, devs: list) -> dict | None:
     if dropped and family in SDL_FAMILIES + XINPUT_FAMILIES:
         notes.append(f"{name}: bez przypisania — " + ", ".join(d.get("label", "") for d in dropped) +
                      (" (tylko pady XInput)." if family in XINPUT_FAMILIES else " (brak indeksu SDL)."))
-    if r["hidden"] or (prof["unknown"] == "hide" and r["outside"]):
-        notes.append("Ukrywanie urządzeń przed grą wymaga HidHide — ukryte urządzenia nie dostają "
-                     "gracza, ale gra nadal je widzi.")
+    hide = hidden_of(prof, r)
+    ignore = sdl_ignore(usable, hide)
+    shared = [d for d in hide if vidpid(d) not in ignore]
+    if shared:
+        notes.append("Nie da się ukryć przed grą: " + ", ".join(d.get("label", "") for d in shared) +
+                     " — ten sam model co kontroler gracza; nie dostaje gracza w emulatorze.")
     return {"profile": key, "family": family, "players": usable,
-            "xinput": [d["xinput_slot"] for d in usable if d.get("xinput_slot") is not None], "notes": notes}
+            "xinput": [d["xinput_slot"] for d in usable if d.get("xinput_slot") is not None],
+            # urządzenia bez gracza: wolne sloty emulatora → NO_DEVICE (inaczej mogłyby je zająć)
+            "fill": bool(r["hidden"] or r["outside"] or dropped),
+            "sdl_ignore": ignore, "notes": notes}
 
 
-def remap_ini(ingame, path: Path, section_fmt: str, players: list, max_players: int = 4):
+def vidpid(d: dict) -> str:
+    """0xVVVV/0xPPPP dla SDL; '' gdy identyfikator urządzenia nie ma VID/PID."""
+    v, p = d.get("vid") or "", d.get("pid") or ""
+    return f"0x{v}/0x{p}".lower() if v and p else ""
+
+
+def hidden_of(prof: dict, r: dict) -> list:
+    """Urządzenia do ukrycia przed grą: z `hidden`, a przy polityce „hide” — także spoza profilu."""
+    return r["hidden"] + (r["outside"] if prof["unknown"] == "hide" else [])
+
+
+def sdl_ignore(players: list, hide: list) -> list:
+    """VID:PID dla SDL (0xVVVV/0xPPPP) — bez modeli, których używa któryś gracz."""
+    used = {vidpid(d) for d in players}
+    return list(dict.fromkeys(v for v in map(vidpid, hide) if v and v not in used))
+
+
+def set_sdl_env(ignore: list) -> dict:
+    """Ustawia zmienne SDL dla procesu gry (dziedziczy środowisko silnika); zwraca stare wartości."""
+    old = {k: os.environ.get(k) for k in SDL_ENV}
+    for k in SDL_ENV:
+        os.environ[k] = ",".join([v for v in [old[k]] if v] + ignore)
+    return old
+
+
+def restore_env(old: dict) -> None:
+    for k, v in old.items():
+        if v is None:
+            os.environ.pop(k, None)
+        else:
+            os.environ[k] = v
+
+
+def to_hide(cfg: dict, game_id=None, family: str = "", game_key: str | None = None) -> list:
+    """Podłączone urządzenia, które profil gry ukrywa (z węzłem do wyłączenia w Windows)."""
+    _key, prof = profile_for(cfg, game_id, family, game_key)
+    if not prof:
+        return []
+    return [d for d in hidden_of(prof, resolve(prof, current(cfg))) if d.get("node")]
+
+
+def hide_devices(devs: list) -> dict:
+    """Wyłącza urządzenia na czas gry (zadanie Harmonogramu, gdy skonfigurowane).
+    {"nodes": wyłączone węzły, "note": komunikat dla gracza ('' — bez uwag)}."""
+    from emustart import lumen_hide, paths
+    if not devs or not lumen_hide.status(paths.APP)["ready"]:
+        return {"nodes": [], "note": ""}
+    nodes = list(dict.fromkeys(d["node"] for d in devs))
+    done = set(lumen_hide.apply(paths.APP, disable=nodes)["done"])
+    miss = [d.get("label", "") for d in devs if d["node"] not in done]
+    log.info("kontrolery: wyłączone na czas gry: %s", ", ".join(d.get("label", "") for d in devs if d["node"] in done))
+    return {"nodes": [n for n in nodes if n in done], "note": ("Nie udało się ukryć: " + ", ".join(miss) + ".") if miss else ""}
+
+
+def unhide(nodes: list) -> None:
+    from emustart import lumen_hide, paths
+    if nodes:
+        r = lumen_hide.apply(paths.APP, enable=nodes)
+        log.info("kontrolery: włączone po grze: %s%s", ", ".join(r["done"]),
+                 f" (błędy: {'; '.join(r['errors'])})" if r["errors"] else "")
+
+
+def remap_ini(ingame, path: Path, section_fmt: str, players: list, max_players: int = 4, fill: bool = False):
     """[PadN] DuckStation/PCSX2 wg graczy z profilu: SDL-n → indeks SDL urządzenia, XInput-n → jego
     slot XInput (każde źródło osobno — w EmuStart oba dostają slot XInput). Przywracanie jak
     w EmuStart: wraca tylko numer urządzenia, zmiany przypisań w trakcie gry zostają."""
     pat = re.compile(r"\b(SDL|XInput)-(\d+)/")
     changes = {}
-    for p, d in enumerate(players[:max_players]):
+    none = {"sdl": NO_DEVICE, "xinput_slot": NO_DEVICE}
+    for p in range(max_players):
+        if p >= len(players) and not fill:
+            break
+        d = players[p] if p < len(players) else none        # wolny slot: urządzenie, którego nie ma
         sec = section_fmt.format(p + 1)
         idx = {"SDL": d.get("sdl"), "XInput": d.get("xinput_slot")}
         for k, v in ingame.ini_section(path, sec).items():
@@ -768,15 +856,32 @@ def install(launcher_mod, pads_mod, ingame_mod) -> None:
         if launch:
             if "plan" not in launch:
                 launch["plan"] = None
+                note = ""
+                try:
+                    # najpierw ukrycie (wyłączenie w Windows) — indeksy SDL i sloty liczone już bez tych urządzeń
+                    h = hide_devices(to_hide(cfg, launch["game_id"], launch["family"]))
+                    launch["hidden_nodes"], note = h["nodes"], h["note"]
+                    if h["nodes"]:
+                        time.sleep(0.5)
+                except Exception:
+                    log.exception("kontrolery: ukrywanie")
                 try:
                     launch["plan"] = launch_plan(cfg, launch["game_id"], launch["exe"], launch["family"])
                 except Exception:
                     log.exception("kontrolery: profil gry")
                 p = launch["plan"]
-                if p and p["notes"] and not getattr(launch["session"], "notice", ""):
-                    launch["session"].notice = " ".join(p["notes"])
-            if launch["plan"]:
-                return list(launch["plan"]["xinput"])
+                notes = ([note] if note else []) + (p["notes"] if p else [])
+                if notes and not getattr(launch["session"], "notice", ""):
+                    launch["session"].notice = " ".join(notes)
+                if p and p["sdl_ignore"]:
+                    launch["env"] = set_sdl_env(p["sdl_ignore"])
+                    log.info("kontrolery: ukryte przed SDL %s", ",".join(p["sdl_ignore"]))
+            p = launch["plan"]
+            if p:
+                xi = list(p["xinput"])
+                if p["fill"] and p["family"] in XINPUT_FAMILIES:
+                    xi += [NO_DEVICE] * (4 - len(xi))
+                return xi
         return orig_order(cfg, pads)
 
     def is_identity(o):
@@ -794,6 +899,12 @@ def install(launcher_mod, pads_mod, ingame_mod) -> None:
         try:
             return orig_play(self, g, exe, args, rom)
         finally:
+            if _ctx.launch.get("env") is not None:
+                restore_env(_ctx.launch["env"])
+            try:
+                unhide(_ctx.launch.get("hidden_nodes") or [])
+            except Exception:
+                log.exception("kontrolery: włączanie po grze")
             _ctx.launch = None
 
     pads_mod.order, pads_mod.is_identity = order, is_identity
@@ -803,6 +914,6 @@ def install(launcher_mod, pads_mod, ingame_mod) -> None:
             launch = getattr(_ctx, "launch", None)
             p = launch.get("plan") if launch else None
             if p and p["family"] == self.family:
-                return remap_ini(ingame_mod, self._ini(), "Pad{}", p["players"])
+                return remap_ini(ingame_mod, self._ini(), "Pad{}", p["players"], fill=p["fill"])
             return _orig(self, order_)
         cls.remap_pads = remap_pads

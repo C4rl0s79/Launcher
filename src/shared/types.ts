@@ -534,6 +534,8 @@ export type EmuAccountMethod =
   | 'lumen_controller_label'
   | 'lumen_controller_profile'
   | 'lumen_controller_profile_set'
+  | 'lumen_hide_status'
+  | 'lumen_hide_setup'
   | 'autodetect'
   | 'install_missing'
   | 'art_keys_push'
@@ -602,7 +604,7 @@ export interface LumenControllers {
   devices: LumenController[]
   /** registered, not connected now */
   missing: LumenController[]
-  /** keys of saved profiles: default | emu:<family> | game:<id> */
+  /** keys of saved profiles: default | emu:<family> | game:<id> | steam:<appid> */
   profiles: string[]
 }
 

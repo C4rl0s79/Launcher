@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from emustart import config, lumen, lumen_pads as lp
 
 USB_PAD = ("HID\\VID_045E&PID_02FF&IG_00\\8&1A2B3C4D&0&0000", ["USB\\VID_045E&PID_028E\\7&AA&0&2"])
@@ -22,7 +24,8 @@ def _dev(ids, path, **kw):
 
 
 def test_parse_bus_vid_pid_mac():
-    assert lp.parse_ids(*USB_PAD) == {"vid": "045e", "pid": "02ff", "bus": "usb", "mac": "", "xinput": True}
+    assert lp.parse_ids(*USB_PAD) == {"vid": "045e", "pid": "02ff", "bus": "usb", "mac": "", "xinput": True,
+                                      "node": USB_PAD[1][0]}
     assert lp.parse_ids(*WHEEL)["bus"] == "usb"
     bt = lp.parse_ids(*DS4_BT)
     assert (bt["vid"], bt["pid"], bt["bus"], bt["mac"]) == ("054c", "09cc", "bt", "a4:ae:12:34:56:78")
@@ -206,7 +209,9 @@ def test_plan_other_emulator_is_informational():
     cfg = {"pad_order": {"profiles": {"default": {"order": [pad_bt["key"]], "unknown": "hide"}}}}
     p = lp.plan(cfg, 5, "ppsspp", [xbox, pad_bt, wheel])
     assert p["players"] == [] and p["xinput"] == []
-    assert "Pad BT" in p["notes"][0] and "HidHide" in p["notes"][-1]
+    assert "Pad BT" in p["notes"][0] and len(p["notes"]) == 1
+    # polityka „hide”: obce urządzenia ukryte przed SDL (inny model niż gracz)
+    assert p["sdl_ignore"] == [lp.vidpid(xbox), lp.vidpid(wheel)] and p["fill"]
 
 
 INI = """[Main]
@@ -276,10 +281,11 @@ def test_install_wraps_launch_without_touching_other_paths():
     pads_mod = types.SimpleNamespace(order=lambda cfg, pads=None: ["emustart"], is_identity=lambda o: True)
     ingame_mod = types.SimpleNamespace(DuckStation=Ad, PCSX2=PCSX2, adapter_for=lambda exe: Ad())
     launcher_mod = types.SimpleNamespace(Session=Session)
-    plan_ = {"family": "duckstation", "players": ["kierownica"], "xinput": [], "notes": ["uwaga"]}
+    plan_ = {"family": "duckstation", "players": ["kierownica"], "xinput": [], "notes": ["uwaga"],
+             "fill": False, "sdl_ignore": []}
     orig_launch_plan, orig_remap_ini = lp.launch_plan, lp.remap_ini
     lp.launch_plan = lambda cfg, gid, exe, fam: dict(plan_, gid=gid)
-    lp.remap_ini = lambda ingame, path, fmt, players: calls.setdefault("remap_ini", (path, fmt, players))
+    lp.remap_ini = lambda ingame, path, fmt, players, fill=False: calls.setdefault("remap_ini", (path, fmt, players))
     try:
         lp.install(launcher_mod, pads_mod, ingame_mod)
         s = Session()
@@ -316,3 +322,72 @@ def test_api_controllers_lists_saved_profiles(monkeypatch):
     monkeypatch.setattr(lp, "current", lambda cfg, save=None: [])
     r = api.lumen_controllers()
     assert r["profiles"] == ["default", "game:4"] and r["devices"] == []
+
+
+# ── ukrywanie bez sterownika ──
+
+def test_remap_ini_fill_frees_unused_players(tmp_path):
+    from emustart import ingame
+    xbox, _pad_bt, _wheel = _devs()
+    ini = tmp_path / "settings.ini"
+    ini.write_text(INI, encoding="utf-8")
+    restore = lp.remap_ini(ingame, ini, "Pad{}", [xbox], fill=True)
+    # Pad2 (dawniej XInput-1 — np. ukryty pad) dostaje urządzenie, którego nie ma
+    assert ingame.ini_section(ini, "Pad2")["Cross"] == f"XInput-{lp.NO_DEVICE}/A"
+    restore()
+    assert ini.read_text(encoding="utf-8") == INI
+
+
+def test_hidden_same_model_as_player_is_not_hidden_from_sdl():
+    xbox, pad_bt, wheel = _devs()
+    twin = dict(pad_bt, key="twin", label="Drugi BT")
+    cfg = {"pad_order": {"profiles": {"default": {"order": [pad_bt["key"]], "hidden": ["twin", wheel["key"]],
+                                                  "unknown": "ignore"}}}}
+    p = lp.plan(cfg, 1, "duckstation", [xbox, pad_bt, wheel, twin])
+    assert p["sdl_ignore"] == [lp.vidpid(wheel)]
+    assert any("Drugi BT" in n for n in p["notes"])
+
+
+def test_sdl_env_set_and_restore(monkeypatch):
+    monkeypatch.setenv("SDL_JOYSTICK_BLACKLIST_DEVICES", "0x1111/0x2222")
+    monkeypatch.delenv("SDL_GAMECONTROLLER_IGNORE_DEVICES", raising=False)
+    old = lp.set_sdl_env(["0x046d/0xc24f"])
+    assert os.environ["SDL_JOYSTICK_BLACKLIST_DEVICES"] == "0x1111/0x2222,0x046d/0xc24f"
+    assert os.environ["SDL_GAMECONTROLLER_IGNORE_DEVICES"] == "0x046d/0xc24f"
+    lp.restore_env(old)
+    assert os.environ["SDL_JOYSTICK_BLACKLIST_DEVICES"] == "0x1111/0x2222"
+    assert "SDL_GAMECONTROLLER_IGNORE_DEVICES" not in os.environ
+
+
+def test_install_xinput_family_fills_ports_and_sets_env(monkeypatch):
+    import types
+    seen = {}
+
+    class Ad:
+        family = "retroarch"
+
+        def _ini(self):
+            return "ini"
+
+        def remap_pads(self, order):
+            return None
+
+    class Session:
+        notice = ""
+
+        def _play(self, g, exe, args, rom):
+            seen["order"] = pads_mod.order({}, None)
+            seen["env"] = os.environ.get("SDL_GAMECONTROLLER_IGNORE_DEVICES")
+
+    monkeypatch.delenv("SDL_GAMECONTROLLER_IGNORE_DEVICES", raising=False)
+    pads_mod = types.SimpleNamespace(order=lambda cfg, pads=None: [0], is_identity=lambda o: True)
+    ingame_mod = types.SimpleNamespace(DuckStation=type("D", (Ad,), {}), PCSX2=type("P", (Ad,), {}),
+                                       adapter_for=lambda exe: Ad())
+    plan_ = {"family": "retroarch", "players": [], "xinput": [1], "notes": [], "fill": True,
+             "sdl_ignore": ["0x054c/0x09cc"]}
+    monkeypatch.setattr(lp, "launch_plan", lambda *a: dict(plan_))
+    lp.install(types.SimpleNamespace(Session=Session), pads_mod, ingame_mod)
+    Session()._play({"id": 3}, "ra.exe", "", "rom")
+    assert seen["order"] == [1, lp.NO_DEVICE, lp.NO_DEVICE, lp.NO_DEVICE]
+    assert seen["env"] == "0x054c/0x09cc"
+    assert "SDL_GAMECONTROLLER_IGNORE_DEVICES" not in os.environ      # po grze środowisko wraca
