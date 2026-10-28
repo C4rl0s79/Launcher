@@ -40,6 +40,16 @@ Plan najbliższych zmian: [ROADMAP.md](ROADMAP.md).
 - Od EmuStart 0.48.0 zapisy przy logowaniu / starcie / wylogowaniu i blokada profilu są w EmuStart
   (Lumen nie dokłada już własnych — `lumen_saves.py` usunięty).
 
+## [0.49.1] — 2026-10-27
+
+Zakres: strona serwera (`webportal.py`). Zaktualizuj serwer.
+
+### Poprawione
+- **Strona serwera: „Wyloguj” dawało „Error code: 501, Unsupported method ('{}GET')”.** Serwer
+  odpowiadał, zanim przeczytał treść zapytania; połączenie zostaje otwarte, więc nieprzeczytane
+  `{}` doklejało się do następnego zapytania przeglądarki. To samo po odmowie (wygasła sesja).
+  Teraz treść jest czytana zawsze przed odpowiedzią.
+
 ## [0.49.0] — 2026-10-27
 
 Zakres: strona serwera (`webportal.py`, `web/portal/`), zaproszenia (`invites.py`), konta
