@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { EmuLocalState, EmuRemoteState, EmuSaveSlot, EmuSaves as Saves, EmuStateEditInfo, EmuStateEditOp, EmuTrashState, Game } from '@shared/types'
 import { api, attempt, useStore } from '../store'
 import { formatBytes, formatLastPlayed, plural } from '../lib/format'
-import { currentFocus } from '../nav/engine'
+import { currentFocus, focusFirst } from '../nav/engine'
 import { Modal } from './Modal'
 
 // A game's saves (both layouts) — the same data as EmuStart's game options: sync status of in-game
@@ -307,6 +307,11 @@ function StateEdit({
   const [busy, setBusy] = useState(false)
   const toast = useStore((s) => s.toast)
   const arc = st.arc ?? ''
+  const list = useRef<HTMLDivElement>(null)
+  // one dialog for all pages (a new dialog per page would hand the focus back to the list under it)
+  useEffect(() => {
+    if (list.current) focusFirst(list.current)
+  }, [page, info])
 
   useEffect(() => {
     void attempt(api().emustart.stateEditInfo(game.id)).then((r) => (r ? setInfo(r) : onClose()))
@@ -356,8 +361,8 @@ function StateEdit({
   }
 
   return (
-    <Modal key={page} title={titles[page]} onClose={back}>
-      <div className="saves__list" data-nav-group="state-edit">
+    <Modal title={titles[page]} onClose={back}>
+      <div ref={list} className="saves__list" data-nav-group={`state-edit-${page}`}>
         {rows.map((r, i) => (
           <button key={r.key} className="saves__row" data-nav data-autofocus={i === 0 || undefined} disabled={busy} onClick={r.act}>
             <span className="saves__text">
