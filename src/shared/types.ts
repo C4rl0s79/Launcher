@@ -668,6 +668,8 @@ export interface EmuGameOptions {
   sync: EmuSaveSync
   /** save states in the game's bundle */
   states: number
+  /** save slots of the game on this PC (EmuStart 0.50); empty = the emulator has no save bundles */
+  slots: EmuSaveSlot[]
   /** this device's account administers the server (edit metadata and server art) */
   admin: boolean
 }
@@ -703,6 +705,8 @@ export interface EmuLocalState {
   arc?: string
   /** state saved by another core of this game: playing it switches the game to that core */
   otherCore?: string
+  /** RetroArch's "Kontynuuj" (autosave) */
+  continue?: boolean
   /** "rdzeń bsnes — nie wczyta się w snes9x" */
   detail?: string
 }
@@ -720,9 +724,45 @@ export interface EmuRemoteState {
 }
 
 /** Everything the desktop shows about a game's saves */
+/** One save slot ("przejście") of a game: its own states, in-game saves and memory cards (EmuStart 0.50) */
+export interface EmuSaveSlot {
+  slot: number
+  /** in the emulator's folders — the game starts on it */
+  active: boolean
+  states: number
+  /** in-game saves / memory card files */
+  saves: number
+  /** newest file, unix seconds (0 = empty) */
+  time: number
+  /** states in this slot's trash */
+  trash: number
+}
+
+/** A deleted save state in the active slot's trash (restore puts it back) */
+export interface EmuTrashState {
+  /** name in the trash */
+  name: string
+  arc: string
+  label: string
+  time: number
+  thumb?: string
+}
+
+/** What a state can be changed to: free numbers and the other slots */
+export interface EmuStateEditInfo {
+  numbers: number[]
+  slots: number[]
+  slot: number
+  retroarch: boolean
+}
+
+export type EmuStateEditOp = 'renumber' | 'copy_new' | 'copy_slot' | 'move_slot' | 'continue' | 'delete' | 'restore'
+
 export interface EmuSaves {
   sync: EmuSaveSync & { bundles: number }
   states: EmuLocalState[]
+  /** save slots of the game (empty — the emulator has no save bundles) */
+  slots: EmuSaveSlot[]
   /** PS2 states of this PC and the phone; absent with a reason when the server is out of reach */
   remote: { ok: true; here: string; states: EmuRemoteState[] } | { ok: false; reason: string }
 }

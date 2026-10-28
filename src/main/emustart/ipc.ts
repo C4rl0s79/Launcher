@@ -1,7 +1,7 @@
 import { stat } from 'node:fs/promises'
 import type { BrowserWindow } from 'electron'
 import { IPC } from '@shared/api'
-import type { EmuServerArt, EmuSettingsChange, EmuGameOptions, EmuActionResult, EmuEmulatorOption, EmuSystemInfo, EmuSystemLogo, EmuLocalState, EmuRemoteState, EmuSaves, EmuSaveSync, EmuOptions, EmuOptionsPatch, EmuReadiness, EmuSettings, JobsSnapshot } from '@shared/types'
+import type { EmuServerArt, EmuSettingsChange, EmuGameOptions, EmuActionResult, EmuEmulatorOption, EmuSystemInfo, EmuSystemLogo, EmuLocalState, EmuRemoteState, EmuSaves, EmuSaveSlot, EmuSaveSync, EmuStateEditInfo, EmuStateEditOp, EmuTrashState, EmuOptions, EmuOptionsPatch, EmuReadiness, EmuSettings, JobsSnapshot } from '@shared/types'
 import type { EmustartEngine } from './engine'
 import type { EmustartProvider } from './provider'
 
@@ -22,6 +22,34 @@ interface Ctx {
 }
 
 /** EmuStart's get_settings → the shared options (engine keys stay in the engine). */
+const STATE_OPS = new Set<string>(['renumber', 'copy_new', 'copy_slot', 'move_slot', 'continue', 'delete', 'restore'])
+
+/** "game.state7" → "stan #7", "….03.p2s" → "stan #3", "game.state.auto" → "„Kontynuuj”" */
+export function stateName(arc: string): string {
+  if (arc.endsWith('.state.auto')) return '„Kontynuuj”'
+  const m = /\.state(\d*)$/.exec(arc) ?? /\.(\d{2})\.p2s$/i.exec(arc)
+  return m ? `stan #${Number(m[1] || 0)}` : arc
+}
+
+export function stateEditMessage(op: EmuStateEditOp, arc: string, arg?: number): string {
+  switch (op) {
+    case 'renumber':
+      return `Teraz ${stateName(arc)}.`
+    case 'copy_new':
+      return `Skopiowano jako ${stateName(arc)}.`
+    case 'copy_slot':
+      return `Skopiowano do slotu ${arg} (${stateName(arc)}).`
+    case 'move_slot':
+      return `Przeniesiono do slotu ${arg} (${stateName(arc)}).`
+    case 'continue':
+      return 'Ten stan jest teraz „Kontynuuj” — poprzedni dostał nowy numer.'
+    case 'delete':
+      return 'Stan w koszu — przywrócisz go z kosza pod listą stanów.'
+    case 'restore':
+      return `Przywrócono (${stateName(arc)}).`
+  }
+}
+
 export function toOptions(s: Record<string, unknown>, profiles: { id: number; name: string }[]): EmuOptions {
   const b = (k: string, d = false): boolean => (s[k] === undefined ? d : !!s[k])
   const systems = Array.isArray(s.systems) ? (s.systems as Record<string, unknown>[]) : []
@@ -121,7 +149,7 @@ export function registerEmustartIpc(handle: Handle, ctx: Ctx): void {
     // game_options: states in the emulator's folder of this profile (after taking the newest from the
     // server) and the sync status; save_manager: PS2 states of this PC and the phone (server only)
     const [opts, mgr] = await Promise.all([
-      call<{ states?: { path: string; arc?: string; name: string; label?: string; time: number; thumb?: string; resume?: boolean; other_core?: string; detail?: string }[]; sync?: EmuSaveSync & { bundles?: unknown[] } }>(
+      call<{ states?: { path: string; arc?: string; name: string; label?: string; time: number; thumb?: string; resume?: boolean; continue?: boolean; other_core?: string; detail?: string }[]; sync?: EmuSaveSync & { bundles?: unknown[] }; slots?: EmuSaveSlot[] }>(
         'game_options',
         [id],
         90_000
@@ -142,6 +170,7 @@ export function registerEmustartIpc(handle: Handle, ctx: Ctx): void {
         resume: st.resume,
         arc: st.arc || undefined,
         otherCore: st.other_core || undefined,
+        continue: st.continue || undefined,
         detail: st.detail || undefined,
         thumb: st.thumb ? await ctx.engineImage(st.thumb) : undefined
       })
@@ -150,6 +179,7 @@ export function registerEmustartIpc(handle: Handle, ctx: Ctx): void {
     return {
       sync: { state: sync.state, last: sync.last ?? 0, bundles: Array.isArray(sync.bundles) ? sync.bundles.length : 0 },
       states,
+      slots: Array.isArray(opts?.slots) ? opts.slots : [],
       remote: mgr.ok ? { ok: true, here: mgr.here ?? 'windows', states: mgr.states ?? [] } : { ok: false, reason: mgr.reason ?? 'Nie udało się odczytać zapisów.' }
     }
   })
@@ -164,6 +194,35 @@ export function registerEmustartIpc(handle: Handle, ctx: Ctx): void {
     if (!r.ok) return fail(r.reason ?? 'Nie udało się skopiować.')
     if (r.same) return { ok: true, message: 'Ten stan już tam jest.' }
     return { ok: true, message: platform === 'windows' ? (r.local ? 'Skopiowano — stan jest na liście tego komputera.' : 'Skopiowano — pobierze się przy następnej grze.') : 'Skopiowano — telefon pobierze go przy następnym uruchomieniu gry.' }
+  })
+  // save slots and state editing (EmuStart 0.50, saveslots.py): the engine refuses while the game runs
+  handle(IPC.emuSlotSet, async (gameId: string, slot: number): Promise<EmuActionResult> => {
+    const n = Number(slot)
+    const r = await call<{ ok: boolean; reason?: string; sent?: boolean }>('save_slot_set', [await playIdOf(gameId), n], 300_000)
+    if (!r.ok) return fail(r.reason ?? 'Nie udało się zmienić slotu.')
+    return { ok: true, message: r.sent ? `Aktywny slot ${n}.` : `Aktywny slot ${n} — serwer dostanie wybór, gdy wróci połączenie.` }
+  })
+  handle(IPC.emuStateEditInfo, async (gameId: string): Promise<EmuStateEditInfo> => {
+    const r = await call<{ ok: boolean; reason?: string } & Partial<EmuStateEditInfo>>('state_edit_info', [await playIdOf(gameId)], 60_000)
+    if (!r.ok) throw new Error(r.reason ?? 'Nie można edytować tego stanu.')
+    return { numbers: r.numbers ?? [], slots: r.slots ?? [], slot: r.slot ?? 1, retroarch: !!r.retroarch }
+  })
+  handle(IPC.emuStateEdit, async (gameId: string, op: EmuStateEditOp, arc: string, arg?: number): Promise<EmuActionResult> => {
+    if (!STATE_OPS.has(op)) return fail('Nieznana zmiana stanu.')
+    const r = await call<{ ok: boolean; reason?: string; offline?: string; arc?: string; slot?: number }>(
+      'state_edit',
+      [await playIdOf(gameId), op, String(arc), typeof arg === 'number' ? arg : null],
+      300_000
+    )
+    if (!r.ok) return fail(r.reason ?? 'Nie udało się.')
+    return { ok: true, message: stateEditMessage(op, r.arc ?? '', arg) + (r.offline ? ' Na serwer — gdy wróci połączenie.' : '') }
+  })
+  handle(IPC.emuStateTrash, async (gameId: string): Promise<EmuTrashState[]> => {
+    const r = await call<{ ok: boolean; reason?: string; items?: EmuTrashState[] }>('state_trash', [await playIdOf(gameId)], 60_000)
+    if (!r.ok) throw new Error(r.reason ?? 'Nie udało się otworzyć kosza.')
+    const out: EmuTrashState[] = []
+    for (const it of r.items ?? []) out.push({ ...it, thumb: it.thumb ? await ctx.engineImage(it.thumb) : undefined })
+    return out
   })
   handle(IPC.emuSystemInfo, (es: string) => call<EmuSystemInfo>('system_info', [String(es)], 30_000))
   handle(IPC.emuCancelLaunch, () => call('launch_cancel'))
@@ -285,6 +344,7 @@ export function registerEmustartIpc(handle: Handle, ctx: Ctx): void {
         system?: string
         es?: string
         sync?: EmuSaveSync
+        slots?: EmuSaveSlot[]
       }
     }
     const r = await call<Raw>('lumen_game_options', [idOf(gameId)], 90_000)
@@ -311,6 +371,7 @@ export function registerEmustartIpc(handle: Handle, ctx: Ctx): void {
       es: o.es ?? '',
       sync: o.sync ?? { state: 'never', last: 0 },
       states: r.states ?? 0,
+      slots: Array.isArray(o.slots) ? o.slots : [],
       admin: !!r.admin
     }
   })

@@ -271,7 +271,7 @@ class LumenApi(api_mod.Api):
             return {}, 0
         emu = self._effective_emu(g)
         opts = emulators.options_for(systems.info(g["es"]), self._cfg.get("emu_root", ""))
-        states = 0
+        states, slots = 0, []
         if emu["exe"]:
             try:
                 ad = ingame.adapter_for(emu["exe"])
@@ -294,11 +294,18 @@ class LumenApi(api_mod.Api):
                 states = min(states, api_mod.KEEP_LIST)       # jak lista „Wczytaj zapis”
             except Exception:
                 log.exception("stany gry (opcje gry)")
+            else:
+                if bundles:
+                    try:   # sloty zapisów (EmuStart 0.50) — z plików na tym komputerze, bez synchronizacji
+                        from emustart import saveslots, syncclient
+                        slots = saveslots.summary(self._profile, *syncclient.game_ids(g), bundles)
+                    except Exception:
+                        log.exception("sloty zapisów (opcje gry)")
         sc = (self._cfg.get("systems") or {}).get(g["es"]) or {}
         return ({"id": g["id"], "title": g["title"], "emulator": emu, "options": opts, "es": g["es"],
                  "system": systems.info(g["es"])["display"],
                  "retroarch": bool(emu["exe"]) and ingame.adapter_for(emu["exe"]).family == "retroarch",
-                 "shader_off": bool(sc.get("shader_off")), "sync": self._sync_status(g)}, states)
+                 "shader_off": bool(sc.get("shader_off")), "sync": self._sync_status(g), "slots": slots}, states)
 
     def lumen_readiness(self, game_id: int) -> dict:
         """Czego brakuje przed uruchomieniem: emulator (i co z serwera go zainstaluje)."""

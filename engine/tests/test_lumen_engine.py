@@ -208,3 +208,47 @@ def test_game_options_do_not_sync_saves(monkeypatch, tmp_path):
     assert out["ok"] and out["states"] == 2                       # bez miniatury .png
     assert out["options"]["system"] == "PlayStation 2" and out["options"]["emulator"]["label"] == "PCSX2"
     assert "states" not in out["options"]
+
+
+def test_game_options_list_save_slots_from_this_pc(monkeypatch, tmp_path):
+    """Sloty zapisów (EmuStart 0.50) w „Opcjach gry” Lumen: z plików na tym komputerze (aktywny w
+    folderach emulatora, pozostałe w folderze profilu), bez synchronizacji z serwerem."""
+    from emustart import emulators, ingame, launcher, library, profiles, savebundles, saveslots, syncclient, systems
+    monkeypatch.setattr(paths, "DB_PATH", tmp_path / "lib.sqlite")
+    library._local.con = None
+    monkeypatch.setattr(profiles, "LOCAL", tmp_path / "profiles")
+    api = _bare_api()
+    g = {"id": 7, "es": "snes", "title": "Chrono Trigger", "name": "Chrono Trigger (USA)", "rel": "ct.sfc"}
+    monkeypatch.setattr(lumen.library, "game", lambda gid: g if int(gid) == 7 else None)
+    monkeypatch.setattr(lumen.library, "get_resume", lambda pid, gid: None)
+    monkeypatch.setattr(lumen.LumenApi, "game_detail", lambda self, gid: {"id": 7, "variant": 0})
+    monkeypatch.setattr(lumen.LumenApi, "_effective_emu", lambda self, gg: {"exe": "retroarch.exe", "args": "", "label": "RA"})
+    monkeypatch.setattr(lumen.LumenApi, "_sync_status", lambda self, gg: {"state": "synced"})
+    monkeypatch.setattr(lumen.LumenApi, "_is_admin", lambda self: False)
+    monkeypatch.setattr(emulators, "options_for", lambda info, root: [])
+    monkeypatch.setattr(systems, "info", lambda es: {"display": "SNES", "kind": "console"})
+    monkeypatch.setattr(ingame, "adapter_for", lambda exe: type("Ad", (), {"family": "retroarch"})())
+    monkeypatch.setattr(lumen.profiles, "bind", lambda ad, pid: None)
+    monkeypatch.setattr(launcher, "content_guess", lambda cfg, gg, exe: tmp_path / "ct.sfc")
+    monkeypatch.setattr(launcher, "ps2_info", lambda cfg, gg: gg)
+    states = tmp_path / "states"
+    states.mkdir()
+    (states / "Chrono Trigger (USA).state1").write_bytes(b"S1")
+    bundles = [savebundles.Bundle("retroarch", "snes9x", "states", states, "Chrono Trigger (USA)", ["Chrono Trigger (USA)"])]
+    monkeypatch.setattr(savebundles, "for_game", lambda *a, **k: bundles)
+    monkeypatch.setattr(savebundles, "core_id", lambda args: "snes9x")
+    s3 = saveslots.store_bundle(1, *syncclient.game_ids(g), 3, bundles[0])
+    s3.folder.mkdir(parents=True)
+    (s3.folder / "game.state2").write_bytes(b"S3")
+
+    def no_network(*_a, **_k):
+        raise AssertionError("opcje gry nie mogą synchronizować zapisów")
+    monkeypatch.setattr(syncclient, "before", no_network)
+    monkeypatch.setattr(launcher, "wait_post", no_network)
+    try:
+        out = api.lumen_game_options(7)
+    finally:
+        library._local.con = None
+    slots = {s["slot"]: s for s in out["options"]["slots"]}
+    assert out["states"] == 1 and slots[1]["active"] and slots[1]["states"] == 1
+    assert slots[3]["states"] == 1 and not slots[3]["active"] and slots[2]["states"] == 0

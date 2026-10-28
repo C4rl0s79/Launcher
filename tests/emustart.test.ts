@@ -234,3 +234,16 @@ describe('EmuStart settings shared by both layouts', () => {
     expect(o.arcadeClones).toBe(true) // EmuStart's default
   })
 })
+
+describe('save slots — state edit messages', () => {
+  it('names states by number, PS2 slot and „Kontynuuj”', async () => {
+    const { stateName, stateEditMessage } = await import('../src/main/emustart/ipc')
+    expect(stateName('game.state7')).toBe('stan #7')
+    expect(stateName('game.state')).toBe('stan #0')
+    expect(stateName('SLUS-20851 (39B574F0).03.p2s')).toBe('stan #3')
+    expect(stateName('game.state.auto')).toBe('„Kontynuuj”')
+    expect(stateEditMessage('renumber', 'game.state5', 5)).toBe('Teraz stan #5.')
+    expect(stateEditMessage('move_slot', 'game.state1', 3)).toBe('Przeniesiono do slotu 3 (stan #1).')
+    expect(stateEditMessage('restore', 'game.state2')).toBe('Przywrócono (stan #2).')
+  })
+})

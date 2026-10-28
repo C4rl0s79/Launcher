@@ -47,7 +47,8 @@ const when = (unix: number): string => (unix ? new Date(unix * 1000).toLocaleStr
 function syncValue(o: EmuGameOptions): string {
   const s = o.sync
   const st = s.state === 'synced' ? `zsynchronizowane${s.last ? ` · ${formatLastPlayed(s.last) ?? ''}` : ''}` : s.state === 'pending' ? 'czekają na wysłanie' : 'jeszcze nie synchronizowane'
-  return `${o.states ? `${o.states} ${plural(o.states, 'stan', 'stany', 'stanów')} · ` : ''}${st}`
+  const slot = o.slots.find((x) => x.active)
+  return `${slot ? `slot ${slot.slot} · ` : ''}${o.states ? `${o.states} ${plural(o.states, 'stan', 'stany', 'stanów')} · ` : ''}${st}`
 }
 
 export function GameOptions({ game, onClose }: { game: Game; onClose: () => void }) {

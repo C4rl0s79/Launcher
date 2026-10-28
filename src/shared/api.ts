@@ -1,4 +1,4 @@
-import type { EmuSystemLogo, EmuAccountMethod, EmuServerArt, EmuMetaField, EmuSettingsChange, EmuGameOptions, EmuSystemInfo, LbArtOptionsResult, EmuSaves,
+import type { EmuSystemLogo, EmuAccountMethod, EmuServerArt, EmuMetaField, EmuSettingsChange, EmuGameOptions, EmuSystemInfo, LbArtOptionsResult, EmuSaves, EmuStateEditInfo, EmuStateEditOp, EmuTrashState,
   ActionResult,
   ArtKind, ArtLayout,
   GameRatings,
@@ -132,6 +132,14 @@ export interface LumenApi {
     saves(gameId: string): Promise<EmuSaves>
     /** copy a PS2 state to the other platform (or here) */
     copyState(gameId: string, rel: string, platform: string, emu: string): Promise<EmuActionResult>
+    /** the game's active save slot (1–4): the engine swaps the files (not while the game runs) */
+    setSaveSlot(gameId: string, slot: number): Promise<EmuActionResult>
+    /** free state numbers and the other slots (state editing) */
+    stateEditInfo(gameId: string): Promise<EmuStateEditInfo>
+    /** change a state of the active slot (arc from saves(); restore: name in the trash) */
+    stateEdit(gameId: string, op: EmuStateEditOp, arc: string, arg?: number): Promise<EmuActionResult>
+    /** deleted states of the active slot */
+    stateTrash(gameId: string): Promise<EmuTrashState[]>
     /** stop the download of the game being launched */
     cancelLaunch(): Promise<void>
     /** close the finished / failed launch session */
@@ -259,6 +267,10 @@ export const IPC = {
   emuSystemInfo: 'emu:systemInfo',
   emuPlayOtherCore: 'emu:playOtherCore',
   emuCopyState: 'emu:copyState',
+  emuSlotSet: 'emu:slotSet',
+  emuStateEditInfo: 'emu:stateEditInfo',
+  emuStateEdit: 'emu:stateEdit',
+  emuStateTrash: 'emu:stateTrash',
   emuCancelLaunch: 'emu:cancelLaunch',
   emuDismiss: 'emu:dismiss',
   emuResolve: 'emu:resolveConflict',

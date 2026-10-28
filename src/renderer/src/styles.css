@@ -2036,6 +2036,15 @@ p.card__desc[data-nav]:focus {
   flex-wrap: wrap;
   gap: 6px;
 }
+/* save slots (EmuStart 0.50): four playthroughs side by side; the active one marked */
+.saves__slots {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+.saves__slots .saves__row[aria-pressed='true'] {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
 
 /* ---------- "Opcje gry" (EmuStart game options, both layouts) ---------- */
 .gopt__list {

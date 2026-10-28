@@ -39,6 +39,21 @@ Plan najbliższych zmian: [ROADMAP.md](ROADMAP.md).
   Bez profilu — tryb kolejności EmuStart jak dotąd.
 - Od EmuStart 0.48.0 zapisy przy logowaniu / starcie / wylogowaniu i blokada profilu są w EmuStart
   (Lumen nie dokłada już własnych — `lumen_saves.py` usunięty).
+- **Menu w grze (A + Y) działało tylko w samodzielnym EmuStart.** `engine_main.py` startował silnik
+  z `--pady=none`, a przy `none` `hotkey.GameMenu` wyłącza menu w grze. Teraz `--pady=browser`: czytnik
+  pada interfejsu EmuStart (`uipad`) dalej wyłączony (pady w interfejsie czyta Lumen), menu A + Y działa.
+- **Sloty zapisów i edycja stanów (silnik EmuStart 0.50.0) w Lumen** — okno „Zapisy” (oba układy):
+  - na górze **Slot zapisów**: 4 sloty („Slot 2 ✓ · 3 stany · data”), wybór = zamiana slotu (silnik,
+    `save_slot_set` — zamiana w trzech krokach ze sprawdzaną kopią);
+  - stan: A — gra od stanu (jak dotąd); **Y / prawy przycisk myszy — edycja**: Zmień numer, Kopiuj jako
+    nowy numer, Kopiuj / Przenieś do slotu, Ustaw jako „Kontynuuj”, Usuń (do kosza, z potwierdzeniem)
+    — `state_edit`; w Lumen przytrzymania A nie ma (A działa od razu), dlatego Y jak w innych listach;
+  - **Kosz** pod stanami (gdy niepusty): A — przywróć (`state_trash`, `state_edit restore`);
+  - „Opcje gry” (TV) → „Wczytaj zapis” pokazuje aktywny slot; liczba slotów z plików na tym komputerze
+    (`_options_here` — bez synchronizacji, jak liczba stanów).
+  - Kolejność: zmiany slotu / stanu tylko przy zamkniętym emulatorze i po wysyłce zapisów po grze
+    (silnik odmawia inaczej); okno po każdej zmianie czyta stan od nowa z silnika.
+  - **Nie zmienia się:** lista gier, sterowanie poza oknem „Zapisy”, stany PS2 (PC ↔ telefon).
 
 ## [0.50.0] — 2026-10-28
 
