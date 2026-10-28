@@ -225,6 +225,7 @@ oknem „Zapisy” i „Przejmij profil” w trybie pulpitu. **Wymaga EmuStart S
   hasło” (`"existing"`). Nowego konta nie zakłada się w aplikacji — zaproszenie (strona serwera) albo
   panel; usunięte metody silnika `account_request` / `account_requests_poll`, `profile_create` bez
   hasła (tylko profil lokalny bez serwera). **Wymaga EmuStart Server 0.49.0.**
+- **EmuStart 0.49.1** (Lumen 1.0.15, 28.10.2026): poprawka strony serwera („Wyloguj” bez błędu 501); klient bez zmian.
 
 ### 6.1. Rozjazd zapisów między Lumenem, EmuStart i telefonem — diagnoza (20.10.2026)
 
