@@ -740,6 +740,8 @@ export interface EmuSaveSlot {
 
 /** A deleted save state in the active slot's trash (restore puts it back) */
 export interface EmuTrashState {
+  /** another RetroArch core's trash (state from „Wczytaj zapis” → otherCore) */
+  core?: string
   /** name in the trash */
   name: string
   arc: string

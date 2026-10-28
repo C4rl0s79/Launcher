@@ -34,7 +34,7 @@ export function slotDesc(s: EmuSaveSlot): string {
 }
 
 /** A state the player can change: in the active slot's bundle (not another core's, not EmuStart's quicksave) */
-const editable = (st: EmuLocalState, slots: EmuSaveSlot[]): boolean => !!st.arc && !st.otherCore && !st.resume && slots.length > 0
+const editable = (st: EmuLocalState, slots: EmuSaveSlot[]): boolean => !!st.arc && !st.resume && (!!st.otherCore || slots.length > 0)
 
 function syncText(s: Saves['sync']): string {
   if (s.state === 'synced') return `Zsynchronizowane z serwerem${s.last ? ` · ${formatLastPlayed(s.last) ?? ''}` : ''}`
@@ -75,13 +75,15 @@ export function EmuSaves({ game, onClose }: { game: Game; onClose: () => void })
   }
 
   const openTrash = async (): Promise<void> => {
-    const r = await attempt(api().emustart.stateTrash(game.id))
-    if (r) setTrash(r)
+    // trash of the active slot + trashes of the other RetroArch cores on the list
+    const cores = [...new Set((data?.states ?? []).map((x) => x.otherCore).filter((c): c is string => !!c))]
+    const parts = await Promise.all([active && active.trash > 0 ? attempt(api().emustart.stateTrash(game.id)) : [], ...cores.map((c) => attempt(api().emustart.stateTrash(game.id, c)))])
+    setTrash(parts.flatMap((x) => x ?? []))
   }
 
   const restore = async (it: EmuTrashState): Promise<void> => {
     setBusy(true)
-    const r = await attempt(api().emustart.stateEdit(game.id, 'restore', it.name))
+    const r = await attempt(api().emustart.stateEdit(game.id, 'restore', it.name, undefined, it.core))
     setBusy(false)
     if (!r) return
     toast(r.ok ? (r.message ?? 'Przywrócono.') : (r.error ?? 'Nie udało się przywrócić.'), r.ok ? 'info' : 'error')
@@ -209,10 +211,10 @@ export function EmuSaves({ game, onClose }: { game: Game; onClose: () => void })
             ))}
           </div>
 
-          {active && active.trash > 0 && !trash && (
+          {((active && active.trash > 0) || data.states.some((x) => x.otherCore)) && !trash && (
             <div className="modal__row">
               <button className="btn" data-nav disabled={busy} onClick={() => void openTrash()}>
-                Kosz ({active.trash} {plural(active.trash, 'usunięty', 'usunięte', 'usuniętych')})
+                {active && active.trash > 0 ? `Kosz (${active.trash} ${plural(active.trash, 'usunięty', 'usunięte', 'usuniętych')})` : 'Kosz'}
               </button>
             </div>
           )}
@@ -314,12 +316,14 @@ function StateEdit({
   }, [page, info])
 
   useEffect(() => {
-    void attempt(api().emustart.stateEditInfo(game.id)).then((r) => (r ? setInfo(r) : onClose()))
+    // another core's state: only delete (no numbers / slots of this core)
+    if (st.otherCore) setInfo({ numbers: [], slots: [], slot: 0, retroarch: true } as unknown as EmuStateEditInfo)
+    else void attempt(api().emustart.stateEditInfo(game.id)).then((r) => (r ? setInfo(r) : onClose()))
   }, [game.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const run = async (op: EmuStateEditOp, arg?: number): Promise<void> => {
     setBusy(true)
-    const r = await attempt(api().emustart.stateEdit(game.id, op, arc, arg))
+    const r = await attempt(api().emustart.stateEdit(game.id, op, arc, arg, st.otherCore))
     setBusy(false)
     if (!r) return
     toast(r.ok ? (r.message ?? 'Gotowe.') : (r.error ?? 'Nie udało się.'), r.ok ? 'info' : 'error')
@@ -329,7 +333,10 @@ function StateEdit({
   const back = (): void => (page === 'main' ? onClose() : setPage('main'))
   const rows: { key: string; label: string; value?: string; act: () => void }[] = []
   if (!info) rows.push({ key: 'wait', label: 'Wczytuję…', act: () => undefined })
-  else if (page === 'main') {
+  else if (page === 'main' && st.otherCore) {
+    rows.push({ key: 'play', label: 'Wczytaj', value: `graj od tego stanu (rdzeń ${st.otherCore})`, act: onPlay })
+    rows.push({ key: 'delete', label: 'Usuń', value: 'do kosza (można przywrócić)', act: () => setPage('delete') })
+  } else if (page === 'main') {
     rows.push({ key: 'play', label: 'Wczytaj', value: 'graj od tego stanu', act: onPlay })
     if (!st.continue) rows.push({ key: 'num', label: 'Zmień numer', act: () => setPage('num') })
     rows.push({ key: 'copy_new', label: 'Kopiuj jako nowy numer', act: () => void run('copy_new') })

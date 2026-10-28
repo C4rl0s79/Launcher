@@ -137,9 +137,9 @@ export interface LumenApi {
     /** free state numbers and the other slots (state editing) */
     stateEditInfo(gameId: string): Promise<EmuStateEditInfo>
     /** change a state of the active slot (arc from saves(); restore: name in the trash) */
-    stateEdit(gameId: string, op: EmuStateEditOp, arc: string, arg?: number): Promise<EmuActionResult>
+    stateEdit(gameId: string, op: EmuStateEditOp, arc: string, arg?: number, core?: string): Promise<EmuActionResult>
     /** deleted states of the active slot */
-    stateTrash(gameId: string): Promise<EmuTrashState[]>
+    stateTrash(gameId: string, core?: string): Promise<EmuTrashState[]>
     /** stop the download of the game being launched */
     cancelLaunch(): Promise<void>
     /** close the finished / failed launch session */

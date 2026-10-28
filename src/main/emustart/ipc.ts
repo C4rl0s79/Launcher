@@ -207,21 +207,21 @@ export function registerEmustartIpc(handle: Handle, ctx: Ctx): void {
     if (!r.ok) throw new Error(r.reason ?? 'Nie można edytować tego stanu.')
     return { numbers: r.numbers ?? [], slots: r.slots ?? [], slot: r.slot ?? 1, retroarch: !!r.retroarch }
   })
-  handle(IPC.emuStateEdit, async (gameId: string, op: EmuStateEditOp, arc: string, arg?: number): Promise<EmuActionResult> => {
+  handle(IPC.emuStateEdit, async (gameId: string, op: EmuStateEditOp, arc: string, arg?: number, core?: string): Promise<EmuActionResult> => {
     if (!STATE_OPS.has(op)) return fail('Nieznana zmiana stanu.')
     const r = await call<{ ok: boolean; reason?: string; offline?: string; arc?: string; slot?: number }>(
       'state_edit',
-      [await playIdOf(gameId), op, String(arc), typeof arg === 'number' ? arg : null],
+      [await playIdOf(gameId), op, String(arc), typeof arg === 'number' ? arg : null, core ? String(core) : ''],
       300_000
     )
     if (!r.ok) return fail(r.reason ?? 'Nie udało się.')
     return { ok: true, message: stateEditMessage(op, r.arc ?? '', arg) + (r.offline ? ' Na serwer — gdy wróci połączenie.' : '') }
   })
-  handle(IPC.emuStateTrash, async (gameId: string): Promise<EmuTrashState[]> => {
-    const r = await call<{ ok: boolean; reason?: string; items?: EmuTrashState[] }>('state_trash', [await playIdOf(gameId)], 60_000)
+  handle(IPC.emuStateTrash, async (gameId: string, core?: string): Promise<EmuTrashState[]> => {
+    const r = await call<{ ok: boolean; reason?: string; items?: EmuTrashState[] }>('state_trash', [await playIdOf(gameId), core ? String(core) : ''], 300_000)
     if (!r.ok) throw new Error(r.reason ?? 'Nie udało się otworzyć kosza.')
     const out: EmuTrashState[] = []
-    for (const it of r.items ?? []) out.push({ ...it, thumb: it.thumb ? await ctx.engineImage(it.thumb) : undefined })
+    for (const it of r.items ?? []) out.push({ ...it, core: core || undefined, thumb: it.thumb ? await ctx.engineImage(it.thumb) : undefined })
     return out
   })
   handle(IPC.emuSystemInfo, (es: string) => call<EmuSystemInfo>('system_info', [String(es)], 30_000))
