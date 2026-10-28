@@ -1,6 +1,7 @@
 """EmuStart jako silnik Lumen — bez okna, sterowany przez proces Lumen.
 
     python engine_main.py
+    python engine_main.py --diag-controllers [--json] [--no-sdl] [--profile=game:ID|emu:RODZINA|default] [--home=KATALOG]
 
 Zmienne środowiskowe (ustawia Lumen):
     EMUSTART_HOME        katalog danych (config.json, data, cache, profile, logi)
@@ -16,8 +17,20 @@ from __future__ import annotations
 import json
 import logging
 import os
+from pathlib import Path
 import sys
 import threading
+
+DIAG = "--diag-controllers" in sys.argv
+if DIAG and not os.environ.get("EMUSTART_HOME"):
+    # dane Lumen (etykiety kontrolerów, emulatory): --home=…, a w paczce Lumen
+    # <Lumen>\resources\engine\EmuStartEngine\EmuStartEngine.exe → <Lumen>\LumenData\emustart
+    _home = next((a.split("=", 1)[1] for a in sys.argv if a.startswith("--home=")), "")
+    if not _home and getattr(sys, "frozen", False):
+        _guess = Path(sys.executable).resolve().parents[3] / "LumenData" / "emustart"
+        _home = str(_guess) if _guess.is_dir() else ""
+    if _home:
+        os.environ["EMUSTART_HOME"] = _home
 
 # pady w interfejsie obsługuje Lumen (XInput w procesie głównym); menu w grze (A+Y) — nadal EmuStart
 if not any(a.startswith("--pady=") for a in sys.argv):
@@ -30,7 +43,26 @@ _UNBLOCKED = boot.unblock_self()
 from emustart import __version__, lumen, paths, server  # noqa: E402
 
 
+def diag_controllers() -> None:
+    """Kontrolery: indeks SDL, stabilny klucz, widoczność, slot (Gracz) — tylko odczyt, bez zapisu."""
+    from emustart import config, lumen_pads
+    logging.basicConfig(level=logging.WARNING)
+    if not sys.stdout.isatty():
+        sys.stdout.reconfigure(encoding="utf-8")       # przekierowanie do pliku / potoku: UTF-8
+    cfg = config.load()
+    prof = next((a.split("=", 1)[1] for a in sys.argv if a.startswith("--profile=")), None)
+    r = lumen_pads.diag(cfg, with_sdl="--no-sdl" not in sys.argv, profile_key=prof)
+    if "--json" in sys.argv:
+        sys.stdout.write(json.dumps(r, ensure_ascii=False, indent=2) + "\n")
+    else:
+        sys.stdout.write(f"Dane: {paths.APP}\n" + lumen_pads.format_diag(r) + "\n")
+    sys.stdout.flush()
+
+
 def main() -> None:
+    if DIAG:
+        diag_controllers()
+        return
     boot.setup_logging("emustart.log", _UNBLOCKED)
     boot.log_versions()
     log = logging.getLogger("emustart")

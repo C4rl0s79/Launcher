@@ -16,6 +16,7 @@ import { Dialogs } from './components/Dialogs'
 import { Profiles } from './components/Profiles'
 import { InGameMenu } from './components/InGameMenu'
 import { PadsOrder } from './components/PadsOrder'
+import { Controllers } from './components/Controllers'
 import { enrollCheck, enrollResume } from './lib/account'
 
 /** Start, the pinned groups (in their order), Settings. */
@@ -35,6 +36,7 @@ export function App() {
   const tabs = useTabs()
   const tvLayout = useStore((s) => s.uiMode === 'fullscreen')
   const pads = useStore((s) => s.pads)
+  const controllers = useStore((s) => s.controllers)
   const rootRef = useRef<HTMLDivElement>(null)
   // group screens are mounted on first visit and then kept, so scroll position and focus survive tab switches
   const [visited, setVisited] = useState<Set<string>>(() => new Set([tab]))
@@ -183,6 +185,7 @@ export function App() {
         <PathPicker />
         <Profiles />
         {pads && <PadsOrder onClose={() => useStore.getState().setPads(false)} />}
+        {controllers && <Controllers onClose={() => useStore.getState().setControllers(false)} />}
         <Dialogs />
         <InGameMenu />
         <Toasts />
@@ -216,6 +219,7 @@ export function App() {
       <PathPicker />
       <Profiles />
       {pads && <PadsOrder onClose={() => useStore.getState().setPads(false)} />}
+      {controllers && <Controllers onClose={() => useStore.getState().setControllers(false)} />}
       <Dialogs />
       <InGameMenu />
       <HintsBar />

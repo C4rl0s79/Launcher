@@ -657,6 +657,11 @@ function EmustartSection() {
             Kolejność padów
           </button>
         )}
+        {emu?.engine === 'ready' && (
+          <button className="btn" data-nav onClick={() => useStore.getState().setControllers(true)}>
+            Kontrolery (nazwy, profile gier)
+          </button>
+        )}
       </div>
       {emu?.engine === 'ready' && (
         <div className="modal__row">

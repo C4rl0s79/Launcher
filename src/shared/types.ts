@@ -530,6 +530,10 @@ export type EmuAccountMethod =
   | 'ingame_action'
   | 'pads_state'
   | 'pads_set'
+  | 'lumen_controllers'
+  | 'lumen_controller_label'
+  | 'lumen_controller_profile'
+  | 'lumen_controller_profile_set'
   | 'autodetect'
   | 'install_missing'
   | 'art_keys_push'
@@ -579,6 +583,48 @@ export interface EmuPadsState {
   order: number[]
   mode: 'windows' | 'wireless_first' | 'manual'
   manual: number[]
+}
+
+/** A game controller seen by Lumen (lumen_pads.py) — also non-XInput ones (wheels, PS pads) */
+export interface LumenController {
+  /** stable key: vid:pid:sn:<serial> | vid:pid:bt:<mac> | vid:pid:hid:<hash> */
+  key: string
+  /** short ID for the screen: "vid:pid·tail" */
+  short: string
+  label: string
+  name?: string
+  bus: string
+  bus_label: string
+  xinput_slot?: number | null
+}
+
+export interface LumenControllers {
+  devices: LumenController[]
+  /** registered, not connected now */
+  missing: LumenController[]
+  /** keys of saved profiles: default | emu:<family> | game:<id> */
+  profiles: string[]
+}
+
+/** Controller profile: player order (stable keys), hidden devices, devices outside the profile */
+export interface LumenPadProfile {
+  order: string[]
+  hidden: string[]
+  unknown: 'passthrough' | 'ignore' | 'hide'
+}
+
+export interface LumenPadProfileState extends LumenControllers {
+  key: string
+  /** emulator family of the key ('' = unknown, e.g. a game without an emulator) */
+  family: string
+  family_label: string
+  /** this key's own profile (null = none) */
+  profile: LumenPadProfile | null
+  /** the profile that applies: game → emulator → default (null = EmuStart's controller order) */
+  effective: string | null
+  effective_profile: LumenPadProfile | null
+  ok?: boolean
+  reason?: string
 }
 
 /** A profile on this device (profiles_list) */

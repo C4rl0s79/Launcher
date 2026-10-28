@@ -86,6 +86,7 @@ const api: LumenApi = {
     toggleKeep: (id) => invoke(IPC.emuToggleKeep, id),
     removeLocal: (id) => invoke(IPC.emuRemoveLocal, id),
     readiness: (id) => invoke(IPC.emuReadiness, id),
+    controllerKey: (id) => invoke(IPC.emuControllerKey, id),
     installEmulators: (systems) => invoke(IPC.emuInstall, systems),
     settings: () => invoke(IPC.emuSettings),
     setFolder: (key, folder) => invoke(IPC.emuSetFolder, key, folder),

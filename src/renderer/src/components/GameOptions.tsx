@@ -8,6 +8,7 @@ import { Modal } from './Modal'
 import { EmuSaves } from './EmuSaves'
 import { OnScreenKeyboard } from './TextField'
 import { ArtPicker } from '../modals/ArtPicker'
+import { Controllers } from './Controllers'
 
 // "Opcje gry" of an EmuStart game — one implementation for both layouts (TV: X on the list,
 // desktop: the details' "Opcje gry"), with EmuStart's pages: version (translation), emulator,
@@ -55,7 +56,7 @@ export function GameOptions({ game, onClose }: { game: Game; onClose: () => void
   const [page, setPage] = useState<Page>('main')
   const [hist, setHist] = useState<EmuSettingsChange[] | null>(null)
   const [confirm, setConfirm] = useState<string | null>(null)
-  const [sub, setSub] = useState<'saves' | 'art' | null>(null)
+  const [sub, setSub] = useState<'saves' | 'art' | 'pads' | null>(null)
   const [edit, setEdit] = useState<EmuMetaField | null>(null)
   const [readDesc, setReadDesc] = useState(false)
   const isFav = useStore((s) => !!s.prefs?.favorites.includes(game.id))
@@ -121,6 +122,7 @@ export function GameOptions({ game, onClose }: { game: Game; onClose: () => void
         { label: 'Emulator', value: (o.emulator.label || 'nie wybrano') + (o.emulator.own ? '  (tylko ta gra)' : ''), act: () => setPage('emus') },
         { label: 'Ustawienia emulatora', value: 'obraz, dźwięk, sterowanie — w Twoim profilu', act: openEmuSet },
         { label: 'Wczytaj zapis', value: syncValue(o), act: () => setSub('saves') },
+        { label: 'Kontrolery', value: 'kolejność graczy, ukryte w tej grze', act: () => setSub('pads') },
         { label: 'Metadane i opis', value: [o.meta.developer, o.meta.year].filter(Boolean).join(' · '), act: () => setPage('meta') },
         { label: 'Grafiki', value: o.admin ? 'plakat, tło, logo · serwer EmuStart' : 'plakat, tło, logo', act: () => setSub('art') },
         { label: isFav ? '★ W ulubionych' : '☆ Do ulubionych', act: () => void attempt(api().prefs.toggleFavorite(game.id)) },
@@ -269,6 +271,7 @@ export function GameOptions({ game, onClose }: { game: Game; onClose: () => void
       </Modal>
       {sub === 'saves' && <EmuSaves game={game} onClose={() => (setSub(null), load())} />}
       {sub === 'art' && <ArtPicker game={game} admin={!!o?.admin} onClose={() => setSub(null)} />}
+      {sub === 'pads' && <Controllers game={{ id: game.id, name: game.name }} onClose={() => setSub(null)} />}
       {edit && o && (
         <OnScreenKeyboard
           label={META.find(([k]) => k === edit)![1]}

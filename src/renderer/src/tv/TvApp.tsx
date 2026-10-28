@@ -183,6 +183,13 @@ function TvMenu({ onClose, onSettings, onLook }: { onClose: () => void; onSettin
       }
     ],
     [
+      'Kontrolery',
+      () => {
+        onClose()
+        useStore.getState().setControllers(true)
+      }
+    ],
+    [
       loggedIn ? 'Wyloguj z serwera' : 'Zaloguj do serwera',
       () => {
         onClose()

@@ -52,6 +52,9 @@ interface State {
   /** controller order window open (components/PadsOrder.tsx) */
   pads: boolean
   setPads(open: boolean): void
+  /** controllers window open (components/Controllers.tsx): labels, controller profiles */
+  controllers: boolean
+  setControllers(open: boolean): void
   setEnroll(e: { code: string; account: string; mode: string } | null): void
   setUiMode(mode: UiMode, selection?: string | null): void
   setSnapshot(s: LibrarySnapshot): void
@@ -105,6 +108,8 @@ export const useStore = create<State>((set) => ({
   setEnroll: (enroll) => set({ enroll }),
   pads: false,
   setPads: (pads) => set({ pads }),
+  controllers: false,
+  setControllers: (controllers) => set({ controllers }),
   setUiMode: (uiMode, uiSelection = null) => set({ uiMode, uiSelection }),
   setSnapshot: (snapshot) => set({ snapshot }),
   setJobs: (jobs) => set({ jobs }),

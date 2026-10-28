@@ -142,6 +142,8 @@ export interface LumenApi {
     toggleKeep(gameId: string): Promise<EmuActionResult>
     removeLocal(gameId: string): Promise<EmuActionResult>
     readiness(gameId: string): Promise<EmuReadiness>
+    /** controller profile key of the game ("game:<id>" of the version that plays) */
+    controllerKey(gameId: string): Promise<string>
     installEmulators(systems: string[]): Promise<EmuActionResult>
     settings(): Promise<EmuSettings>
     /** folder chosen in the in-app picker */
@@ -263,6 +265,7 @@ export const IPC = {
   emuToggleKeep: 'emu:toggleKeep',
   emuRemoveLocal: 'emu:removeLocal',
   emuReadiness: 'emu:readiness',
+  emuControllerKey: 'emu:controllerKey',
   emuInstall: 'emu:install',
   emuSettings: 'emu:settings',
   emuSetFolder: 'emu:setFolder',

@@ -184,6 +184,8 @@ export function registerEmustartIpc(handle: Handle, ctx: Ctx): void {
     return r.ok ? { ok: true, message: 'Usunięto lokalną kopię. Gra zostaje na serwerze.' } : fail(r.reason ?? 'Nie udało się usunąć.')
   })
   handle(IPC.emuReadiness, async (gameId: string) => call<EmuReadiness>('lumen_readiness', [await playIdOf(gameId)], 30_000))
+  // per-game controller profile: the engine applies it to the version that plays (Session._play)
+  handle(IPC.emuControllerKey, async (gameId: string) => `game:${await playIdOf(gameId)}`)
 
   // ---- account, login, profiles (both layouts; EmuStart's app.js / options.js flows) ----
   const ACCOUNT: Record<string, { timeout: number; changes?: boolean }> = {
@@ -217,6 +219,11 @@ export function registerEmustartIpc(handle: Handle, ctx: Ctx): void {
     ingame_action: { timeout: 15_000 },
     pads_state: { timeout: 10_000 },
     pads_set: { timeout: 10_000 },
+    // controllers (Lumen: lumen_pads.py) — device labels and per-game / emulator profiles
+    lumen_controllers: { timeout: 15_000 },
+    lumen_controller_label: { timeout: 15_000 },
+    lumen_controller_profile: { timeout: 15_000 },
+    lumen_controller_profile_set: { timeout: 15_000 },
     // settings: emulators, platform options (the name / logo on the server — administrator)
     autodetect: { timeout: 120_000, changes: true },
     install_missing: { timeout: 60_000 },

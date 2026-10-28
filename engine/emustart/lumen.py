@@ -20,7 +20,8 @@ import sys
 import threading
 import time
 
-from emustart import api as api_mod, cache, catalog, libsync, library, lumen_discs, netsrc, profiles, savesync
+from emustart import (api as api_mod, cache, catalog, config, libsync, library, lumen_discs, lumen_pads, netsrc,
+                      profiles, savesync)
 
 log = logging.getLogger("emustart.lumen")
 
@@ -162,6 +163,8 @@ class LumenApi(api_mod.Api):
         install_device_identity(netsrc)
         from emustart import savemgr
         install_device_name(profiles, api_mod, savemgr)
+        from emustart import ingame, launcher, pads
+        lumen_pads.install(launcher, pads, ingame)      # profile kontrolerów per gra/emulator
         try:
             lumen_discs.merge(library.db())
         except Exception:
@@ -316,6 +319,57 @@ class LumenApi(api_mod.Api):
     def lumen_conflicts_clear(self) -> None:
         with self._conflicts_lock:
             self._conflicts = []
+
+    # ── kontrolery (lumen_pads): rejestr urządzeń obok trybu kolejności EmuStart ──
+    def pads_set(self, mode: str, manual: list | None = None) -> dict:
+        # EmuStart zapisuje `pad_order` od nowa (tryb + sloty) — wpisy Lumen (rejestr) zostają
+        keep = {k: v for k, v in (self._cfg.get("pad_order") or {}).items() if k not in ("mode", "manual")}
+        st = super().pads_set(mode, manual)
+        if keep:
+            self._cfg["pad_order"].update(keep)
+            config.save(self._cfg)
+        return st
+
+    def lumen_controllers(self) -> dict:
+        """Podłączone kontrolery gier (także nie-XInput) z etykietą i slotem XInput."""
+        devs = lumen_pads.current(self._cfg, save=config.save)
+        present = {d["key"] for d in devs}
+        return {"devices": [lumen_pads.public(d) for d in devs],
+                "missing": [{"key": k, "short": lumen_pads.short_id(k), "label": e.get("label", ""),
+                             "bus": e.get("bus", ""), "bus_label": lumen_pads.BUS_LABEL.get(e.get("bus", ""), "")}
+                            for k, e in lumen_pads.registry(self._cfg).items() if k not in present],
+                "profiles": sorted(lumen_pads.profiles(self._cfg))}
+
+    def lumen_controller_label(self, key: str, label: str) -> dict:
+        if lumen_pads.set_label(self._cfg, str(key), str(label)):
+            config.save(self._cfg)
+        return self.lumen_controllers()
+
+    def lumen_controller_profile(self, key: str) -> dict:
+        """Profil `game:<id>` / `emu:<rodzina>` / `default` i ten, który faktycznie obowiązuje
+        (gra → emulator → default), z kontrolerami do edytora kolejności."""
+        game_id, family = None, ""
+        if str(key).startswith("game:"):
+            g = library.game(int(str(key)[5:]))
+            game_id = g["id"] if g else None
+            emu = self._effective_emu(g) if g else {}
+            if emu.get("exe"):
+                from emustart import ingame
+                family = ingame.adapter_for(emu["exe"]).family
+        elif str(key).startswith("emu:"):
+            family = str(key)[4:]
+        own = (lumen_pads.profiles(self._cfg)).get(str(key))
+        eff_key, eff = lumen_pads.profile_for(self._cfg, game_id, family)
+        return {"key": str(key), "family": family, "family_label": lumen_pads.FAMILY_LABEL.get(family, family),
+                "profile": lumen_pads.clean_profile(own) if isinstance(own, dict) else None,
+                "effective": eff_key, "effective_profile": eff, **self.lumen_controllers()}
+
+    def lumen_controller_profile_set(self, key: str, profile: dict | None) -> dict:
+        """Zapis od razu (edytor nie ma przycisku „Zapisz”); `None` = reset (profil usunięty)."""
+        if not lumen_pads.set_profile(self._cfg, str(key), profile if isinstance(profile, dict) else None):
+            return {"ok": False, "reason": "Nieznany profil kontrolerów."}
+        config.save(self._cfg)
+        return dict(self.lumen_controller_profile(str(key)), ok=True)
 
 
 def engine_title() -> str:
