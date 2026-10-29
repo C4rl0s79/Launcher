@@ -45,9 +45,9 @@ export function detectFlavor(o: { packaged: boolean; exeDir: string; portableFil
 }
 
 export const ASSET_RE: Record<Exclude<UpdateFlavor, 'dev'>, RegExp> = {
-  zip: /^Lumen-[\d.]+-win64\.zip$/,
+  zip: /^Lumen-[\d.]+-(portable|win64)\.zip$/, // „-portable.zip” od 1.0.20
   installed: /^Lumen-[\d.]+-setup\.exe$/,
-  portable: /^Lumen-[\d.]+-portable\.exe$/
+  portable: /^Lumen-[\d.]+-portable\.exe$/ // do 1.0.19 — potem bez pliku (przejście na ZIP ręcznie)
 }
 
 interface GhAsset {

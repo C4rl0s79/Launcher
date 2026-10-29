@@ -68,9 +68,8 @@ Wynik w katalogu `release/`:
 
 | Plik | Opis |
 | --- | --- |
-| `Lumen-<wersja>-win64.zip` | **wersja folderowa (zalecana jako przenośna)**: rozpakuj gdziekolwiek — program i wszystkie dane zostają w tym jednym folderze |
+| `Lumen-<wersja>-portable.zip` | **wersja przenośna (folder)**: rozpakuj gdziekolwiek — program i wszystkie dane zostają w tym jednym folderze |
 | `Lumen-<wersja>-setup.exe` | instalator (wybór katalogu, skróty w menu Start i na pulpicie); dane w `LumenData\` obok programu, odinstalowanie i aktualizacja ich nie usuwają |
-| `Lumen-<wersja>-portable.exe` | pojedynczy plik bez instalacji; dane w `LumenData\` obok pliku, ale sam program rozpakowuje się przy każdym starcie do `%TEMP%` |
 | `win-unpacked/Lumen.exe` | rozpakowana aplikacja (szybki podgląd: `npm run dist:dir`) |
 
 Pliki nie są podpisane certyfikatem, więc Windows SmartScreen może przy pierwszym uruchomieniu pokazać ostrzeżenie.
@@ -87,9 +86,8 @@ usuwane po pracy): kopia zapasowa, podmiana, przy błędzie powrót do poprzedni
 
 | Wersja | Co jest pobierane | Podmiana |
 | --- | --- | --- |
-| ZIP (folder) | `Lumen-<w>-win64.zip` | pliki programu w folderze (kopia w `LumenData\update\backup`) |
+| ZIP (folder) | `Lumen-<w>-portable.zip` (do 1.0.19: `-win64.zip`) | pliki programu w folderze (kopia w `LumenData\update\backup`) |
 | instalator | `Lumen-<w>-setup.exe` | instalator uruchamiany po cichu (`/S`) |
-| portable | `Lumen-<w>-portable.exe` | podmiana pliku `.exe` w miejscu (ta sama nazwa i ścieżka) |
 
 Wersje do 0.3.4 nie mają aktualizatora — 0.4.0 trzeba raz pobrać ręcznie.
 
@@ -100,7 +98,7 @@ npm run dist
 ```
 
 ```bash
-node scripts/sign-release.mjs release/Lumen-<w>-win64.zip release/Lumen-<w>-setup.exe release/Lumen-<w>-portable.exe
+node scripts/sign-release.mjs release/Lumen-<w>-portable.zip release/Lumen-<w>-setup.exe
 ```
 
 Klucz prywatny wydań: `D:\GIT\_klucze\launcher-release-ed25519.pem` (albo `LUMEN_SIGNING_KEY_FILE`) — nigdy
@@ -153,7 +151,7 @@ Gry Steam synchronizuje Steam Cloud.
 
 ### Gdzie są dane
 
-Wszystkie wersje (instalator, ZIP, portable): folder **`LumenData\` obok programu** — ustawienia, cache,
+Wszystkie wersje (instalator, ZIP): folder **`LumenData\` obok programu** — ustawienia, cache,
 baza LaunchBox, a w `LumenData\emustart\` pobrane gry (`cache\`), emulatory (`emulators\`, razem
 z BIOS-ami z serwera w folderze `system` RetroArcha), profile i logi EmuStart; pliki tymczasowe (rozpakowane
 gry, Chromium) w `LumenData\tmp\` zamiast `%TEMP%`. Poza folderem programu nic nie jest zapisywane

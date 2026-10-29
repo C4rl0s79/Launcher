@@ -1,5 +1,5 @@
 // Signs release files for Lumen's updater: writes <file>.sig next to each file.
-//   node scripts/sign-release.mjs release/Lumen-1.2.3-win64.zip release/Lumen-1.2.3-setup.exe …
+//   node scripts/sign-release.mjs release/Lumen-1.2.3-portable.zip release/Lumen-1.2.3-setup.exe …
 // Private key (Ed25519, PKCS#8 PEM): LUMEN_SIGNING_KEY_FILE, default D:\GIT\_klucze\launcher-release-ed25519.pem.
 // Never commit the private key. The public key is in src/main/releaseSigning.ts (RELEASE_PUBKEY).
 import { createHash, createPrivateKey, createPublicKey, sign, verify } from 'node:crypto'

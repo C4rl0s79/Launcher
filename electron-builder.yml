@@ -16,12 +16,10 @@ extraResources:
     to: engine/web
 win:
   icon: resources/icon.png
-  # name of the zip (folder version); nsis and portable set their own below
-  artifactName: ${productName}-${version}-win64.${ext}
+  # folder version = „portable”: rozpakuj gdziekolwiek, dane obok (bez AppData i Temp)
+  artifactName: ${productName}-${version}-portable.${ext}
   target:
     - target: nsis
-      arch: [x64]
-    - target: portable
       arch: [x64]
     # folder version: unpack anywhere — program and LumenData stay in that one folder
     - target: zip
@@ -36,5 +34,3 @@ nsis:
   createStartMenuShortcut: true
   shortcutName: Lumen
   artifactName: ${productName}-${version}-setup.${ext}
-portable:
-  artifactName: ${productName}-${version}-portable.exe
