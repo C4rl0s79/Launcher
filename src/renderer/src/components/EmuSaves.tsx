@@ -45,6 +45,38 @@ function syncText(s: Saves['sync']): string {
   return s.state
 }
 
+/** „Synchronizuję…” with a bar: MB sent / received and the time left (engine: sync_progress). */
+function SyncProgress() {
+  const [p, setP] = useState<{ active: boolean; op?: string; done?: number; total?: number; eta?: number }>({ active: false })
+  useEffect(() => {
+    let on = true
+    const tick = (): void => void api().emustart.syncProgress().then((x) => on && setP(x)).catch(() => undefined)
+    tick()
+    const t = setInterval(tick, 1000)
+    return () => {
+      on = false
+      clearInterval(t)
+    }
+  }, [])
+  const mb = (n = 0): string => (n / 1048576).toFixed(n >= 10 * 1048576 ? 0 : 1)
+  const eta = p.eta ?? -1
+  const left = eta < 0 ? '' : eta < 60 ? ` · ok. ${eta} s` : ` · ok. ${Math.round(eta / 60)} min`
+  return (
+    <>
+      <p className="details__loading">
+        {p.active
+          ? `${p.op === 'send' ? 'Wysyłam zapisy na serwer' : 'Pobieram zapisy z serwera'}: ${mb(p.done)} / ${mb(p.total)} MB${left}`
+          : 'Synchronizuję zapisy tej gry z serwerem…'}
+      </p>
+      {p.active && p.total ? (
+        <div className="download__bar">
+          <i style={{ width: `${Math.min(100, Math.round(((p.done ?? 0) / p.total) * 100))}%` }} />
+        </div>
+      ) : null}
+    </>
+  )
+}
+
 export function EmuSaves({ game, onClose }: { game: Game; onClose: () => void }) {
   const [data, setData] = useState<Saves | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -141,7 +173,7 @@ export function EmuSaves({ game, onClose }: { game: Game; onClose: () => void })
         { action: 'back', label: 'Zamknij' }
       ]}
     >
-      {!data && !error && <p className="details__loading">Synchronizuję zapisy tej gry z serwerem…</p>}
+      {!data && !error && <SyncProgress />}
       {error && (
         <div className="modal__row">
           <p className="details__muted">{error}</p>

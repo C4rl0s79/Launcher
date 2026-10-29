@@ -140,6 +140,8 @@ export interface LumenApi {
     stateEdit(gameId: string, op: EmuStateEditOp, arc: string, arg?: number, core?: string): Promise<EmuActionResult>
     /** deleted states of the active slot */
     stateTrash(gameId: string, core?: string): Promise<EmuTrashState[]>
+    /** progress of a save upload / download running in the engine (big GameCube states) */
+    syncProgress(): Promise<{ active: boolean; op?: 'send' | 'get'; done?: number; total?: number; eta?: number }>
     /** stop the download of the game being launched */
     cancelLaunch(): Promise<void>
     /** close the finished / failed launch session */
@@ -271,6 +273,7 @@ export const IPC = {
   emuStateEditInfo: 'emu:stateEditInfo',
   emuStateEdit: 'emu:stateEdit',
   emuStateTrash: 'emu:stateTrash',
+  emuSyncProgress: 'emu:syncProgress',
   emuCancelLaunch: 'emu:cancelLaunch',
   emuDismiss: 'emu:dismiss',
   emuResolve: 'emu:resolveConflict',

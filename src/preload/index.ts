@@ -84,6 +84,7 @@ const api: LumenApi = {
     stateEditInfo: (id) => invoke(IPC.emuStateEditInfo, id),
     stateEdit: (id, op, arc, arg, core) => invoke(IPC.emuStateEdit, id, op, arc, arg, core),
     stateTrash: (id, core) => invoke(IPC.emuStateTrash, id, core),
+    syncProgress: () => invoke(IPC.emuSyncProgress),
     cancelLaunch: () => invoke(IPC.emuCancelLaunch),
     dismiss: () => invoke(IPC.emuDismiss),
     resolveConflict: (choice) => invoke(IPC.emuResolve, choice),

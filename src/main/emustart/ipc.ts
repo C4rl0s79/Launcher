@@ -152,7 +152,8 @@ export function registerEmustartIpc(handle: Handle, ctx: Ctx): void {
       call<{ states?: { path: string; arc?: string; name: string; label?: string; time: number; thumb?: string; resume?: boolean; continue?: boolean; other_core?: string; detail?: string }[]; sync?: EmuSaveSync & { bundles?: unknown[] }; slots?: EmuSaveSlot[] }>(
         'game_options',
         [id],
-        90_000
+        // the first sync of big states (GameCube ~70 MB each) takes minutes — the window shows progress
+        30 * 60_000
       ),
       // the save manager lists PS2 states only — for other systems it has nothing to show
       provider.row(gameId)?.es !== 'ps2'
@@ -217,6 +218,11 @@ export function registerEmustartIpc(handle: Handle, ctx: Ctx): void {
     if (!r.ok) return fail(r.reason ?? 'Nie udało się.')
     return { ok: true, message: stateEditMessage(op, r.arc ?? '', arg) + (r.offline ? ' Na serwer — gdy wróci połączenie.' : '') }
   })
+  handle(IPC.emuSyncProgress, async () =>
+    call<{ active: boolean; op?: 'send' | 'get'; done?: number; total?: number; eta?: number }>('sync_progress', [], 5_000).catch(
+      () => ({ active: false })
+    )
+  )
   handle(IPC.emuStateTrash, async (gameId: string, core?: string): Promise<EmuTrashState[]> => {
     const r = await call<{ ok: boolean; reason?: string; items?: EmuTrashState[] }>('state_trash', [await playIdOf(gameId), core ? String(core) : ''], 300_000)
     if (!r.ok) throw new Error(r.reason ?? 'Nie udało się otworzyć kosza.')
