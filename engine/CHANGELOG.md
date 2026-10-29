@@ -55,6 +55,16 @@ Plan najbliższych zmian: [ROADMAP.md](ROADMAP.md).
     (silnik odmawia inaczej); okno po każdej zmianie czyta stan od nowa z silnika.
   - **Nie zmienia się:** lista gier, sterowanie poza oknem „Zapisy”, stany PS2 (PC ↔ telefon).
 
+## [0.52.1] — 2026-10-29
+
+Zakres: klient (`syncclient.py`, `api.py`, `launcher.py`). Serwer i APK bez zmian.
+
+### Dodane
+- **Postęp wysyłki i pobierania zapisów:** ile MB wysłano / pobrano z ilu i ile zostało czasu
+  (`sync_progress`; w oknie uruchamiania gry — w komunikacie „Synchronizuję zapisy…”). Pierwsza
+  synchronizacja dużych stanów (GameCube ~70 MB na stan) trwa minuty — wcześniej bez żadnej
+  informacji, a Lumen po 90 s pokazywał „EmuStart nie odpowiada”.
+
 ## [0.52.0] — 2026-10-29
 
 Zakres: klient Windows (`hotkey.py`, `ingame.py`, `xinput.py`, `emupolicy.py`), dokumentacja.
