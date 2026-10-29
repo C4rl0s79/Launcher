@@ -297,6 +297,7 @@ function createPadProcessor(): (active: Set<Action>, t: number) => void {
   const held = new Map<Action, { since: number; last: number }>()
   const suppressed = new Set<Action>()
   let hadFocus = document.hasFocus()
+  let baselineUntil = 0
   return (active, t) => {
     const focused = document.hasFocus() && !document.hidden
     if (!focused) {
@@ -306,8 +307,12 @@ function createPadProcessor(): (active: Set<Action>, t: number) => void {
     }
     if (!hadFocus) {
       hadFocus = true
-      active.forEach((a) => suppressed.add(a))
+      // the pad state after regaining focus may arrive a moment later (the main process sends it only
+      // while Lumen is in front): buttons held then — e.g. A + Y that opened the in-game menu — are
+      // not presses (A would pick „Wróć do gry” and close the menu at once)
+      baselineUntil = t + 300
     }
+    if (t < baselineUntil) active.forEach((a) => suppressed.add(a))
     for (const a of [...suppressed]) if (!active.has(a)) suppressed.delete(a)
     for (const a of [...held.keys()]) if (!active.has(a)) held.delete(a)
     for (const a of active) {
