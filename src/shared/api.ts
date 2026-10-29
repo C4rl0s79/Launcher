@@ -141,7 +141,7 @@ export interface LumenApi {
     /** deleted states of the active slot */
     stateTrash(gameId: string, core?: string): Promise<EmuTrashState[]>
     /** progress of a save upload / download running in the engine (big GameCube states) */
-    syncProgress(): Promise<{ active: boolean; op?: 'send' | 'get'; done?: number; total?: number; eta?: number }>
+    syncProgress(): Promise<{ active: boolean; op?: 'send' | 'get' | 'pack'; done?: number; total?: number; eta?: number }>
     /** stop the download of the game being launched */
     cancelLaunch(): Promise<void>
     /** close the finished / failed launch session */

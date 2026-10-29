@@ -65,7 +65,7 @@ function SyncProgress() {
     <>
       <p className="details__loading">
         {p.active
-          ? `${p.op === 'send' ? 'Wysyłam zapisy na serwer' : 'Pobieram zapisy z serwera'}: ${mb(p.done)} / ${mb(p.total)} MB${left}`
+          ? `${p.op === 'send' ? 'Wysyłam zapisy na serwer' : p.op === 'pack' ? 'Pakuję zapisy do wysłania' : 'Pobieram zapisy z serwera'}: ${mb(p.done)} / ${mb(p.total)} MB${left}`
           : 'Synchronizuję zapisy tej gry z serwerem…'}
       </p>
       {p.active && p.total ? (

@@ -219,7 +219,7 @@ export function registerEmustartIpc(handle: Handle, ctx: Ctx): void {
     return { ok: true, message: stateEditMessage(op, r.arc ?? '', arg) + (r.offline ? ' Na serwer — gdy wróci połączenie.' : '') }
   })
   handle(IPC.emuSyncProgress, async () =>
-    call<{ active: boolean; op?: 'send' | 'get'; done?: number; total?: number; eta?: number }>('sync_progress', [], 5_000).catch(
+    call<{ active: boolean; op?: 'send' | 'get' | 'pack'; done?: number; total?: number; eta?: number }>('sync_progress', [], 5_000).catch(
       () => ({ active: false })
     )
   )
