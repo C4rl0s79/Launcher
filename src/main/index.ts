@@ -18,6 +18,7 @@ import { DRY_RUN, openSteam, openSteamUri, shortcutRunUri } from './steam/action
 import { pickBestMatch, pickExactMatch, SgdbAuthError, SgdbClient } from './art/sgdb'
 import { LaunchBoxService } from './launchbox/service'
 import { XInputPoller } from './input/xinput'
+import { foreground } from './input/foreground'
 import { platformForEs, platformForTags } from './launchbox/match'
 import { IMAGE_BASE, LB_TYPES, PICKER_TYPES, regionsOfTags, type LbImage } from './launchbox/images'
 import { ArtworkService } from './art/artwork'
@@ -188,7 +189,15 @@ function createWindow(): void {
   })
   win.on('minimize', () => log.info('window', 'minimized'))
   win.on('restore', () => log.info('window', 'restored'))
-  win.on('blur', () => send(IPC.appFocus, false))
+  win.on('blur', () => {
+    send(IPC.appFocus, false)
+    // who took the focus (diagnosis: pad silent although Lumen stays on top)
+    setTimeout(() => {
+      if (!win || win.isDestroyed() || win.isFocused()) return
+      const fg = foreground(ownHandle())
+      if (fg) log.info('window', `focus lost to: ${fg.desc}${fg.other ? '' : ' — pad stays on'}`)
+    }, 300)
+  })
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   win.webContents.on('will-navigate', (e, url) => {
     if (!url.startsWith(process.env.ELECTRON_RENDERER_URL ?? 'file:')) e.preventDefault()
@@ -234,6 +243,31 @@ function activateWindow(w: BrowserWindow): void {
     w.focus()
     log.info('window', `focus at start: ${w.isFocused() ? 'yes' : 'no (click the window)'}`)
   }, 300)
+}
+
+function ownHandle(): bigint {
+  const b = win && !win.isDestroyed() ? win.getNativeWindowHandle() : null
+  return b ? (b.length >= 8 ? b.readBigUInt64LE(0) : BigInt(b.readUInt32LE(0))) : 0n
+}
+
+// pad without focus: Lumen visible and no other application's real window in front (checked at most every 250 ms)
+let fgAt = 0
+let fgOk = false
+function padWithoutFocus(): boolean {
+  const now = Date.now()
+  if (now - fgAt > 250) {
+    fgAt = now
+    const fg = win && win.isVisible() ? foreground(ownHandle()) : null
+    fgOk = !!fg && !fg.other
+  }
+  return fgOk
+}
+
+let refocusAt = 0
+function refocus(): void {
+  if (!win || Date.now() - refocusAt < 2000) return
+  refocusAt = Date.now()
+  activateWindow(win)
 }
 
 function restoreWindow(): void {
@@ -1004,9 +1038,12 @@ app.whenReady().then(async () => {
       settings.get().gamepadBackend === 'xinput' &&
       !!win &&
       !win.isDestroyed() &&
-      win.isFocused() &&
-      !win.isMinimized(),
+      !win.isMinimized() &&
+      (win.isFocused() || padWithoutFocus()),
     (state) => {
+      // focus taken by something invisible (Lumen still on top): the pad brings it back
+      if (win && !win.isFocused() && state.some((p) => p.buttons || Math.abs(p.lx) > 16000 || Math.abs(p.ly) > 16000))
+        refocus()
       // View + Start: switch between the desktop and fullscreen interfaces
       const nowCombo = state.some(isModeCombo)
       if (nowCombo && !combo) modes?.toggle()

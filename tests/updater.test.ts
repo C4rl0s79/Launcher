@@ -115,7 +115,7 @@ describe('updater', () => {
     expect(zip).toContain('Wait-Process -Id 42')
     expect(zip.match(/robocopy [^\n]*\/MIR \/XD LumenData/g)).toHaveLength(3) // backup, swap, restore
     expect(zip).toContain('przywracam poprzednią wersję')
-    expect(zip).toContain("schtasks /Delete /TN 'Lumen Update'")
+    expect(zip).toContain("schtasks.exe') /Delete /TN 'Lumen Update'")
     const withEnv = applyScript({ ...base, flavor: 'zip', env: { LUMEN_USER_DATA: "D:\\it's", PATH: 'x' } })
     expect(withEnv).toContain("$env:LUMEN_USER_DATA = 'D:\\it''s'")
     expect(withEnv).not.toContain('$env:PATH')
