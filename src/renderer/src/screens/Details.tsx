@@ -372,6 +372,8 @@ function syncLabel(state: string, last: number): string {
   if (state === 'synced') return `zsynchronizowane${last ? ` · ${formatLastPlayed(last) ?? ''}` : ''}`
   if (state === 'pending') return 'czekają na wysłanie (brak połączenia z serwerem)'
   if (state === 'never') return 'jeszcze nie synchronizowane'
+  if (state === 'folder') return 'cały folder zapisów z serwerem (przed grą i po niej)'
+  if (state === 'none') return 'bez synchronizacji — tylko na tym urządzeniu'
   return state
 }
 

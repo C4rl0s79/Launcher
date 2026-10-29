@@ -40,6 +40,8 @@ function syncText(s: Saves['sync']): string {
   if (s.state === 'synced') return `Zsynchronizowane z serwerem${s.last ? ` · ${formatLastPlayed(s.last) ?? ''}` : ''}`
   if (s.state === 'pending') return 'Czekają na wysłanie — wyślą się, gdy serwer będzie dostępny'
   if (s.state === 'never') return 'Jeszcze nie synchronizowane — zapisy wyślą się po pierwszej grze'
+  if (s.state === 'folder') return 'Ten emulator synchronizuje cały folder zapisów z serwerem przed grą i po niej (bez slotów i kosza)'
+  if (s.state === 'none') return 'Ten emulator nie synchronizuje zapisów — zostają na tym urządzeniu'
   return s.state
 }
 

@@ -305,7 +305,7 @@ class LumenApi(api_mod.Api):
         return ({"id": g["id"], "title": g["title"], "emulator": emu, "options": opts, "es": g["es"],
                  "system": systems.info(g["es"])["display"],
                  "retroarch": bool(emu["exe"]) and ingame.adapter_for(emu["exe"]).family == "retroarch",
-                 "shader_off": bool(sc.get("shader_off")), "sync": self._sync_status(g), "slots": slots}, states)
+                 "shader_off": bool(sc.get("shader_off")), "sync": self._sync_kind(g, emu), "slots": slots}, states)
 
     def lumen_readiness(self, game_id: int) -> dict:
         """Czego brakuje przed uruchomieniem: emulator (i co z serwera go zainstaluje)."""
@@ -318,7 +318,7 @@ class LumenApi(api_mod.Api):
         emu = self._effective_emu(g)
         info = systems.info(g["es"])
         out = {"ok": True, "emulator": emu.get("label", ""), "system": info["display"], "missing": [],
-               "sync": self._sync_status(g)}           # zapisy gry na serwerze (syncclient)
+               "sync": self._sync_kind(g, emu)}           # zapisy gry na serwerze (syncclient)
         if not emu["exe"] or not Path(emu["exe"]).is_file():
             steps = installer.plan_for(g["es"], self._cfg.get("emu_root", ""))
             out["missing"].append({"kind": "emulator", "es": g["es"], "system": info["display"],
