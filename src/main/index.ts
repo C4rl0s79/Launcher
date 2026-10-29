@@ -265,7 +265,7 @@ function padWithoutFocus(): boolean {
 
 let refocusAt = 0
 function refocus(): void {
-  if (!win || Date.now() - refocusAt < 2000) return
+  if (!win || win.isDestroyed() || Date.now() - refocusAt < 2000) return
   refocusAt = Date.now()
   activateWindow(win)
 }
@@ -1042,7 +1042,7 @@ app.whenReady().then(async () => {
       (win.isFocused() || padWithoutFocus()),
     (state) => {
       // focus taken by something invisible (Lumen still on top): the pad brings it back
-      if (win && !win.isFocused() && state.some((p) => p.buttons || Math.abs(p.lx) > 16000 || Math.abs(p.ly) > 16000))
+      if (win && !win.isDestroyed() && !win.isFocused() && state.some((p) => p.buttons || Math.abs(p.lx) > 16000 || Math.abs(p.ly) > 16000))
         refocus()
       // View + Start: switch between the desktop and fullscreen interfaces
       const nowCombo = state.some(isModeCombo)
