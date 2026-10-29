@@ -164,7 +164,7 @@ for ($i = 0; $i -lt 120; $i++) {
 ${env}
 Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe)
 L 'Lumen uruchomiony ponownie'
-schtasks /Delete /TN ${ps(UPDATE_TASK)} /F 2>$null | Out-Null
+& (Join-Path $env:SystemRoot 'System32\\schtasks.exe') /Delete /TN ${ps(UPDATE_TASK)} /F 2>$null | Out-Null
 `
   if (o.flavor === 'zip') {
     return (
@@ -213,16 +213,21 @@ $exe = $target` +
  * runs in the user's session, independent of Lumen (the script deletes it). Fallback: a hidden child
  * process (not DETACHED_PROCESS — PowerShell without a console exits at once, see EmuStart).
  */
+// full paths: Lumen can run with a PATH without System32 (then `schtasks` → ENOENT and the fallback
+// child process dies with Lumen — the update never happened)
+const SYS32 = path.join(process.env.SystemRoot || process.env.windir || 'C:\\Windows', 'System32')
+const POWERSHELL = path.join(SYS32, 'WindowsPowerShell', 'v1.0', 'powershell.exe')
+
 function startScript(script: string, cwd: string): Promise<string> {
-  const tr = `powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "${script}"`
+  const tr = `"${POWERSHELL}" -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "${script}"`
   const run = (args: string[]): Promise<void> =>
-    new Promise((resolve, reject) => execFile('schtasks', args, { windowsHide: true, timeout: 15000 }, (e) => (e ? reject(e) : resolve())))
+    new Promise((resolve, reject) => execFile(path.join(SYS32, 'schtasks.exe'), args, { windowsHide: true, timeout: 15000 }, (e) => (e ? reject(e) : resolve())))
   return run(['/Create', '/F', '/TN', UPDATE_TASK, '/SC', 'ONCE', '/ST', '00:00', '/IT', '/TR', tr])
     .then(() => run(['/Run', '/TN', UPDATE_TASK]))
     .then(() => 'zadanie Harmonogramu')
     .catch((e) => {
       log.warn('update', `scheduled task: ${(e as Error).message} — starting the script directly`)
-      spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script], { stdio: 'ignore', windowsHide: true, cwd }).unref()
+      spawn(POWERSHELL, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script], { stdio: 'ignore', windowsHide: true, cwd }).unref()
       return 'proces'
     })
 }
