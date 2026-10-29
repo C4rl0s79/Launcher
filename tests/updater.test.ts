@@ -113,7 +113,9 @@ describe('updater', () => {
     const base = { pid: 42, appDir: 'D:\\Lumen', exe: 'D:\\Lumen\\Lumen.exe', updateDir: 'D:\\Lumen\\LumenData\\update', logFile: 'D:\\Lumen\\LumenData\\logs\\update.log', file: 'x' }
     const zip = applyScript({ ...base, flavor: 'zip' })
     expect(zip).toContain('Wait-Process -Id 42')
-    expect(zip.match(/robocopy [^\n]*\/MIR \/XD LumenData/g)).toHaveLength(3) // backup, swap, restore
+    expect(zip.match(/\$robo [^\n]*\/MIR \/XD LumenData/g)).toHaveLength(3) // backup, swap, restore
+    expect(zip).toContain("$robo = Join-Path $sys 'robocopy.exe'") // pełna ścieżka (PATH bez System32)
+    expect(zip).toContain('$null -eq $rc -or $rc -ge 8') // brak robocopy = błąd, nie sukces
     expect(zip).toContain('przywracam poprzednią wersję')
     expect(zip).toContain("schtasks.exe') /Delete /TN 'Lumen Update'")
     const withEnv = applyScript({ ...base, flavor: 'zip', env: { LUMEN_USER_DATA: "D:\\it's", PATH: 'x' } })

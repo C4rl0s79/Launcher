@@ -151,6 +151,8 @@ export function applyScript(o: {
   const head = `$ErrorActionPreference = 'Continue'
 $app = ${ps(o.appDir)}; $exe = ${ps(o.exe)}; $upd = ${ps(o.updateDir)}; $log = ${ps(o.logFile)}
 New-Item -ItemType Directory -Force -Path (Split-Path $log) | Out-Null
+# pełne ścieżki: Lumen bywa uruchomiony z PATH bez System32 (wtedy „robocopy” nie istniał, a pusty kod uznany był za sukces)
+$sys = [Environment]::SystemDirectory; $robo = Join-Path $sys 'robocopy.exe'
 function L($m) { Add-Content -LiteralPath $log -Encoding UTF8 -Value ("{0:yyyy-MM-dd HH:mm:ss} {1}" -f (Get-Date), $m) }
 L 'aktualizacja Lumen: czekam na zamknięcie (PID ${o.pid})'
 Wait-Process -Id ${o.pid} -Timeout 90 -ErrorAction SilentlyContinue
@@ -171,13 +173,13 @@ L 'Lumen uruchomiony ponownie'
       head +
       `$new = Join-Path $upd 'new'; $bak = Join-Path $upd 'backup'
 L 'kopia zapasowa programu (bez LumenData)'
-robocopy $app $bak /MIR /XD LumenData /R:5 /W:2 /NFL /NDL /NJH /NJS /NP | Out-Null
+& $robo $app $bak /MIR /XD LumenData /R:5 /W:2 /NFL /NDL /NJH /NJS /NP | Out-Null
 L 'podmiana plików'
-robocopy $new $app /MIR /XD LumenData /R:30 /W:2 /NFL /NDL /NJH /NJS /NP | Out-Null
+& $robo $new $app /MIR /XD LumenData /R:30 /W:2 /NFL /NDL /NJH /NJS /NP | Out-Null
 $rc = $LASTEXITCODE
-if ($rc -ge 8) {
+if ($null -eq $rc -or $rc -ge 8) {
   L "BŁĄD podmiany (robocopy $rc) — przywracam poprzednią wersję"
-  robocopy $bak $app /MIR /XD LumenData /R:30 /W:2 /NFL /NDL /NJH /NJS /NP | Out-Null
+  & $robo $bak $app /MIR /XD LumenData /R:30 /W:2 /NFL /NDL /NJH /NJS /NP | Out-Null
 } else {
   L "podmiana zakończona (robocopy $rc)"
   Remove-Item -LiteralPath $new -Recurse -Force -ErrorAction SilentlyContinue
