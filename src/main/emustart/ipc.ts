@@ -273,7 +273,7 @@ export function registerEmustartIpc(handle: Handle, ctx: Ctx): void {
     ra_logout: { timeout: 30_000 },
     ra_hardcore: { timeout: 30_000 },
     ra_import: { timeout: 30_000 },
-    // in-game menu (A + Y) and controller order — also EmuStart's, used by both layouts
+    // in-game menu (LB + A) and controller order — also EmuStart's, used by both layouts
     ingame_poll: { timeout: 5_000 },
     ingame_action: { timeout: 15_000 },
     pads_state: { timeout: 10_000 },

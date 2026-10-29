@@ -5,7 +5,7 @@ import { api, useStore } from '../store'
 import { useActions } from '../nav/input'
 import { HintsBar } from './Hints'
 
-// In-game menu (A + Y over the emulator) for both layouts — EmuStart's menu: back to the game,
+// In-game menu (LB + A over the emulator) for both layouts — EmuStart's menu: back to the game,
 // save / load state, reset, quicksave and quit, shader, quit the game. The engine detects the
 // combo, brings Lumen's window to the front and opens the menu (ingame_poll); this only shows it.
 // Input: with Lumen focused — its own controller / keyboard input; when Windows did not hand the

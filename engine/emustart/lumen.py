@@ -7,7 +7,7 @@ jedna: ta z `emustart/api.py`; tu tylko zestawienia dla biblioteki, kolejki zada
 gry (`lumen_*`) oraz to, czym Lumen różni się od samodzielnego EmuStart (urządzenie na
 serwerze, łączenie płyt). Interfejs EmuStart (`web/`) nie jest używany ani pakowany.
 
-Okno: Lumen podaje tytuł swojego okna (`LUMEN_WINDOW_TITLE`), żeby menu w grze (A+Y)
+Okno: Lumen podaje tytuł swojego okna (`LUMEN_WINDOW_TITLE`), żeby menu w grze (LB + A)
 i powrót po grze wyciągały na wierzch okno Lumen, jak dotąd okno EmuStart.
 """
 

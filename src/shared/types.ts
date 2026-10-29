@@ -568,7 +568,7 @@ export interface EmuSystemLogo {
   label?: string
 }
 
-/** In-game menu (A + Y over the emulator) as the engine shows it (ingame_poll) */
+/** In-game menu (LB + A over the emulator) as the engine shows it (ingame_poll) */
 export interface EmuInGameMenu {
   open: boolean
   items: { id: string; label: string; on: boolean; hint?: string }[]

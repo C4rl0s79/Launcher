@@ -32,7 +32,7 @@ if DIAG and not os.environ.get("EMUSTART_HOME"):
     if _home:
         os.environ["EMUSTART_HOME"] = _home
 
-# pady w interfejsie obsługuje Lumen (XInput w procesie głównym); menu w grze (A+Y) — nadal EmuStart:
+# pady w interfejsie obsługuje Lumen (XInput w procesie głównym); menu w grze (LB + A) — nadal EmuStart:
 # „browser”, nie „none” — przy „none” hotkey.GameMenu wyłącza menu w grze
 if not any(a.startswith("--pady=") for a in sys.argv):
     sys.argv.append("--pady=browser")

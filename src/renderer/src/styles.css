@@ -2178,7 +2178,7 @@ p.card__desc[data-nav]:focus {
   font-variant-numeric: tabular-nums;
 }
 
-/* ---------- in-game menu (A + Y over the emulator; EmuStart look, both layouts) ---------- */
+/* ---------- in-game menu (LB + A over the emulator; EmuStart look, both layouts) ---------- */
 .ingame {
   position: fixed;
   inset: 0;

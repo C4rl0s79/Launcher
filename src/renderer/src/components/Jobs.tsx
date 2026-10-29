@@ -208,7 +208,7 @@ export function EmuLaunchOverlay() {
         )}
         {job.message && <p className="launch__msg">{job.message}</p>}
         {conflict.length > 0 && <SaveConflictChoice conflict={conflict} onChoose={choose} />}
-        {job.state === 'running' && !job.message && <p className="launch__msg">Miłej gry! Menu w grze: przytrzymaj A + Y.</p>}
+        {job.state === 'running' && !job.message && <p className="launch__msg">Miłej gry! Menu w grze: LB + A.</p>}
         <div className="launch__actions">
           {job.cancellable && (
             <button className="btn btn--danger" data-nav data-autofocus onClick={() => void api().emustart.cancelLaunch()}>

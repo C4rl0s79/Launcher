@@ -308,7 +308,7 @@ function createPadProcessor(): (active: Set<Action>, t: number) => void {
     if (!hadFocus) {
       hadFocus = true
       // the pad state after regaining focus may arrive a moment later (the main process sends it only
-      // while Lumen is in front): buttons held then — e.g. A + Y that opened the in-game menu — are
+      // while Lumen is in front): buttons held then — e.g. LB + A that opened the in-game menu — are
       // not presses (A would pick „Wróć do gry” and close the menu at once)
       baselineUntil = t + 300
     }
