@@ -18,6 +18,7 @@ import { DRY_RUN, openSteam, openSteamUri, shortcutRunUri } from './steam/action
 import { pickBestMatch, pickExactMatch, SgdbAuthError, SgdbClient } from './art/sgdb'
 import { LaunchBoxService } from './launchbox/service'
 import { XInputPoller } from './input/xinput'
+import { RawHidPads } from './input/rawhid'
 import { foreground } from './input/foreground'
 import { platformForEs, platformForTags } from './launchbox/match'
 import { IMAGE_BASE, LB_TYPES, PICKER_TYPES, regionsOfTags, type LbImage } from './launchbox/images'
@@ -114,7 +115,8 @@ const updater = new Updater({
 })
 const meta = new StoreMetadataProvider(paths.metaCache, () => settings.get().language)
 const launchbox = new LaunchBoxService(paths.launchbox)
-const pads = new XInputPoller()
+const hidPads = new RawHidPads()
+const pads = new XInputPoller(() => hidPads.pads())
 const sgdb = new SgdbClient(() => settings.getSecret('sgdbApiKey'))
 const artwork = new ArtworkService({
   cacheDir: paths.artCache,
@@ -767,6 +769,11 @@ function registerIpc(): void {
       if (before.steamIdOverride !== after.steamIdOverride) void library.refreshAccount(true)
     }
     if (before.regionOrder !== after.regionOrder) emu.regroup()
+    if (before.gamepadBackend !== after.gamepadBackend) {
+      // the Gamepad API backend registers the same Raw Input devices for Chromium
+      if (after.gamepadBackend === 'xinput' && win && process.env.LUMEN_NO_PAD !== '1') hidPads.attach(win)
+      else hidPads.detach()
+    }
     if (before.emustartEnabled !== after.emustartEnabled || before.emustartHome !== after.emustartHome || before.pythonPath !== after.pythonPath) {
       if (after.emustartEnabled) void engine.restart()
       else void engine.stop()
@@ -1030,6 +1037,8 @@ app.whenReady().then(async () => {
   createWindow()
   // controller: passive XInput polling, only while Lumen has focus (never while a game runs)
   settings.setRuntimeInfo({ xinputAvailable: pads.available })
+  // pads that are not XInput devices (PlayStation, Nintendo, Bluetooth HID): passive Raw Input on the same window
+  if (win && process.env.LUMEN_NO_PAD !== '1' && settings.get().gamepadBackend === 'xinput') hidPads.attach(win)
   let combo = false
   pads.start(
     () =>

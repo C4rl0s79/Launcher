@@ -54,6 +54,9 @@ function loadXInput(): GetState | null {
 }
 
 export class XInputPoller {
+  /** `extra`: pads read some other way (HID pads through Raw Input), reported together with the XInput ones */
+  constructor(private extra: () => PadState[] = () => []) {}
+
   private getState: GetState | null = loadXInput()
   private timer: NodeJS.Timeout | undefined
   private lastSent = ''
@@ -99,6 +102,6 @@ export class XInputPoller {
       const g = s.Gamepad
       out.push({ index: i, buttons: g.wButtons, lt: g.bLeftTrigger, rt: g.bRightTrigger, lx: g.sThumbLX, ly: g.sThumbLY })
     }
-    return out
+    return out.concat(this.extra())
   }
 }

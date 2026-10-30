@@ -29,15 +29,16 @@ function load(): Probe | null {
     const visible = u.func('__stdcall', 'IsWindowVisible', 'int32', ['intptr'])
     const iconic = u.func('__stdcall', 'IsIconic', 'int32', ['intptr'])
     const rect = u.func('__stdcall', 'GetWindowRect', 'int32', ['intptr', koffi.out(koffi.pointer(RECT))])
-    const cls = u.func('__stdcall', 'GetClassNameW', 'int32', ['intptr', koffi.out(koffi.pointer('uint16', 256)), 'int32'])
+    // class name into a plain buffer (koffi.pointer's second argument is the pointer depth, not a length)
+    const cls = u.func('__stdcall', 'GetClassNameW', 'int32', ['intptr', 'void *', 'int32'])
     const pidOf = u.func('__stdcall', 'GetWindowThreadProcessId', 'uint32', ['intptr', koffi.out(koffi.pointer('uint32'))])
     return (own) => {
       const h = BigInt(getFg() as number | bigint)
       if (h === 0n) return { other: false, desc: 'brak okna' }
       if (h === own) return { other: false, desc: 'Lumen' }
-      const buf = new Array<number>(256).fill(0)
+      const buf = Buffer.alloc(512)
       const n = cls(h, buf, 256) as number
-      const name = String.fromCharCode(...buf.slice(0, Math.max(0, n)))
+      const name = buf.toString('utf16le', 0, Math.max(0, n) * 2)
       const pid = [0]
       pidOf(h, pid)
       const r = { left: 0, top: 0, right: 0, bottom: 0 }
