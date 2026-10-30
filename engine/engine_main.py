@@ -21,6 +21,13 @@ from pathlib import Path
 import sys
 import threading
 
+_PROBE = next((a.split("=", 1)[1] for a in sys.argv if a.startswith("--sdl-probe=")), "")
+if _PROBE:
+    # numery padów SDL emulatora (emustart/sdlpads.py uruchamia sys.executable — w paczce Lumen to
+    # EmuStartEngine.exe, nie main.py) — krótki proces pomocniczy
+    from emustart import sdlpads
+    sys.exit(sdlpads.probe_main(_PROBE, next((a.split("=", 1)[1] for a in sys.argv if a.startswith("--sdl-out=")), "")))
+
 DIAG = "--diag-controllers" in sys.argv
 if DIAG and not os.environ.get("EMUSTART_HOME"):
     # dane Lumen (etykiety kontrolerów, emulatory): --home=…, a w paczce Lumen
